@@ -24,7 +24,7 @@ export default function Sidebar() {
       <aside className="ios-sidebar">
         <div className="ios-sidebar-logo">
           <Store size={26} color="var(--accent-color)" />
-          <span>Global Sales</span>
+          <span>Diablito 😈</span>
         </div>
         
         <nav style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
