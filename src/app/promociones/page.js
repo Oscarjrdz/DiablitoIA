@@ -18,6 +18,7 @@ export default function PromocionesPage() {
     image: '',
     visitTriggers: '',
     spendTriggers: '',
+    inactivityDays: '',
     itemName: 'Burger Gratis',
     isWelcomePromo: false,
     validFrom: 'hoy',
@@ -93,7 +94,7 @@ export default function PromocionesPage() {
 
   const openCreateModal = () => {
     setEditingPromo(null);
-    setFormData({ text: '', image: '', visitTriggers: '', spendTriggers: '', itemName: 'Burger Gratis', isWelcomePromo: false });
+    setFormData({ text: '', image: '', visitTriggers: '', spendTriggers: '', inactivityDays: '', itemName: 'Burger Gratis', isWelcomePromo: false, validFrom: 'hoy', validityDuration: '1' });
     setShowModal(true);
   };
 
@@ -104,6 +105,7 @@ export default function PromocionesPage() {
       image: promo.image || '',
       visitTriggers: promo.visitTriggers || '',
       spendTriggers: promo.spendTriggers || '',
+      inactivityDays: promo.inactivityDays || '',
       itemName: promo.itemName || 'Burger Gratis',
       isWelcomePromo: promo.isWelcomePromo || false,
       validFrom: promo.validFrom || 'hoy',
@@ -230,10 +232,11 @@ export default function PromocionesPage() {
                 <div style={{ marginTop: '12px', padding: '10px', background: '#eef2ff', borderRadius: '8px', fontSize: '0.8rem', color: '#4338ca' }}>
                     <strong>Vigencia:</strong> a partir de <strong>{promo.validFrom || 'hoy'}</strong> por <strong>{promo.validityDuration || 1}</strong> día(s)
                   </div>
-                {(promo.visitTriggers || promo.spendTriggers) && (
+                {(promo.visitTriggers || promo.spendTriggers || promo.inactivityDays) && (
                   <div style={{ marginTop: '12px', padding: '10px', background: '#f8fafc', borderRadius: '8px', fontSize: '0.8rem', color: '#475569' }}>
                     {promo.visitTriggers && <div><strong>Disparo en Visitas:</strong> {promo.visitTriggers}</div>}
                     {promo.spendTriggers && <div><strong>Disparo en Gastos acumulados:</strong> ${promo.spendTriggers}</div>}
+                    {promo.inactivityDays && <div>💤 <strong>Disparo por Inactividad:</strong> {promo.inactivityDays} días sin visitar</div>}
                   </div>
                 )}
                 
@@ -400,7 +403,7 @@ export default function PromocionesPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '15px', alignItems: 'end' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginTop: '15px', alignItems: 'end' }}>
                 <div className={styles.formGroup} style={{ margin: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}>
                   <label>Número de Visita (ej. 2,5,7)</label>
                   <input 
@@ -413,13 +416,24 @@ export default function PromocionesPage() {
                   />
                 </div>
                 <div className={styles.formGroup} style={{ margin: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}>
-                  <label>Monto de Compra Acumulado (ej. 300,1000)</label>
+                  <label>Monto Acumulado (ej. 300,1000)</label>
                   <input 
                     type="text" 
                     name="spendTriggers" 
                     value={formData.spendTriggers} 
                     onChange={handleInputChange} 
                     placeholder="500, 1000"
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div className={styles.formGroup} style={{ margin: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}>
+                  <label>💤 Días sin Visitar (ej. 15,30)</label>
+                  <input 
+                    type="text" 
+                    name="inactivityDays" 
+                    value={formData.inactivityDays} 
+                    onChange={handleInputChange} 
+                    placeholder="15, 30"
                     style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' }}
                   />
                 </div>

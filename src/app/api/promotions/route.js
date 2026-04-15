@@ -48,6 +48,7 @@ export async function POST(req) {
       isWelcomePromo: body.isWelcomePromo || false,
       visitTriggers: body.visitTriggers || '',
       spendTriggers: body.spendTriggers || '',
+      inactivityDays: body.inactivityDays || '',
       itemName: body.itemName || 'Burger Gratis',
       validFrom: body.validFrom || 'hoy',
       validityDuration: body.validityDuration || '1',
