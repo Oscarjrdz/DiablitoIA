@@ -115,13 +115,17 @@ export default function ClientsPage() {
       case 'visitas': return Number(client.total_visits || 0);
       case 'gasto': return Number(client.total_spent || 0);
       case 'puntos': return Number(client.total_points || client.points_balance || 0);
+      case 'ultimaVisita': {
+        const d = client.updated_at || client.last_visit;
+        return d ? new Date(d).getTime() : 0;
+      }
       default: return '';
     }
   };
 
   const sortedClients = React.useMemo(() => {
     if (!sortKey) return clients;
-    const numericKeys = ['visitas', 'gasto', 'puntos', 'fecha'];
+    const numericKeys = ['visitas', 'gasto', 'puntos', 'fecha', 'ultimaVisita'];
     const isNumeric = numericKeys.includes(sortKey);
 
     return [...clients].sort((a, b) => {
@@ -314,6 +318,7 @@ export default function ClientsPage() {
                 <SortHeader label="Calle" sortId="calle" />
                 <SortHeader label="Municipio" sortId="municipio" />
                 <SortHeader label="Visitas" sortId="visitas" />
+                <SortHeader label="Última Visita" sortId="ultimaVisita" />
                 <SortHeader label="Gasto Total" sortId="gasto" />
                 <SortHeader label="Puntos" sortId="puntos" />
                 <th>Acciones</th>
@@ -345,6 +350,20 @@ export default function ClientsPage() {
                     <td>{toTitleCase(calle)}</td>
                     <td>{toTitleCase(client.city)}</td>
                     <td>{client.total_visits || 0}</td>
+                    <td className={styles.nowrap}>
+                      {(() => {
+                        const lastDate = client.updated_at || client.last_visit;
+                        if (!lastDate || !client.total_visits) return <span style={{color:'#999'}}>—</span>;
+                        const now = new Date();
+                        const then = new Date(lastDate);
+                        const diffDays = Math.floor((now - then) / 86400000);
+                        let color = '#22c55e';
+                        if (diffDays > 30) color = '#ef4444';
+                        else if (diffDays > 7) color = '#f97316';
+                        const label = diffDays === 0 ? 'Hoy' : diffDays === 1 ? 'Ayer' : `${diffDays}d`;
+                        return <span style={{color, fontWeight: 600, fontSize:'0.85rem'}}>{label}</span>;
+                      })()}
+                    </td>
                     <td className={styles.nowrap}>${Number(client.total_spent || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                     <td>{client.total_points || client.points_balance || 0}</td>
                     <td>
@@ -358,7 +377,7 @@ export default function ClientsPage() {
               })}
               {clients.length === 0 && (
                 <tr>
-                  <td colSpan="12" style={{textAlign: 'center', padding: '1rem'}}>
+                  <td colSpan="13" style={{textAlign: 'center', padding: '1rem'}}>
                     No hay clientes.
                   </td>
                 </tr>
