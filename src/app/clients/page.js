@@ -1,0 +1,434 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import styles from './page.module.css';
+
+// ── Helpers de normalización visual ──
+const toTitleCase = (str) => {
+  if (!str) return '';
+  return str.toLowerCase().replace(/(?:^|\s|\/)\S/g, c => c.toUpperCase());
+};
+
+const formatPhone10 = (raw) => {
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  return digits.length > 10 ? digits.slice(-10) : digits;
+};
+
+export default function ClientsPage() {
+  const [clients, setClients] = useState([]);
+  const [stores, setStores] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [editingClient, setEditingClient] = useState(null);
+  const [extracting, setExtracting] = useState(false);
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
+  const [formData, setFormData] = useState({
+    nombre: '',
+    whatsapp: '',
+    calle: '',
+    numero_casa: '',
+    colonia: '',
+    municipio: '',
+    tienda: ''
+  });
+
+  const fetchClients = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('loyverse_api_token');
+      if (!token) return;
+
+      const res = await fetch('/api/loyverse/clients', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setClients(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchStores = async () => {
+    try {
+      const token = localStorage.getItem('loyverse_api_token');
+      if (!token) return;
+      const res = await fetch('/api/loyverse/stores', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success && data.data && data.data.stores) {
+        setStores(data.data.stores);
+      }
+    } catch (error) {
+      console.error('Error fetching stores:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchClients();
+    fetchStores();
+  }, []);
+
+  // ── Sorting ──
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const getSortIndicator = (key) => {
+    if (sortKey !== key) return ' ↕';
+    return sortDir === 'asc' ? ' ▲' : ' ▼';
+  };
+
+  const getClientField = (client, key) => {
+    switch (key) {
+      case 'name': return (client.name || '').toLowerCase();
+      case 'phone': return formatPhone10(client.phone_number);
+      case 'tienda': return (client.tienda || '').toLowerCase();
+      case 'calle': {
+        if (!client.address) return '';
+        const parts = client.address.split(',').map(s => s.trim());
+        return (parts[0] || '').toLowerCase();
+      }
+      case 'numero': {
+        if (!client.address) return '';
+        const parts = client.address.split(',').map(s => s.trim());
+        return parts.length >= 3 ? (parts[1] || '') : '';
+      }
+      case 'colonia': {
+        if (!client.address) return '';
+        const parts = client.address.split(',').map(s => s.trim());
+        return parts.length >= 3 ? parts.slice(2).join(', ').toLowerCase() : '';
+      }
+      case 'municipio': return (client.city || '').toLowerCase();
+      case 'fecha': return new Date(client.created_at || client.first_visit || 0).getTime();
+      case 'visitas': return Number(client.total_visits || 0);
+      case 'gasto': return Number(client.total_spent || 0);
+      case 'puntos': return Number(client.total_points || client.points_balance || 0);
+      default: return '';
+    }
+  };
+
+  const sortedClients = React.useMemo(() => {
+    if (!sortKey) return clients;
+    const numericKeys = ['visitas', 'gasto', 'puntos', 'fecha'];
+    const isNumeric = numericKeys.includes(sortKey);
+
+    return [...clients].sort((a, b) => {
+      const va = getClientField(a, sortKey);
+      const vb = getClientField(b, sortKey);
+
+      let cmp;
+      if (isNumeric) {
+        cmp = va - vb;
+      } else {
+        cmp = String(va).localeCompare(String(vb), 'es', { sensitivity: 'base' });
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [clients, sortKey, sortDir]);
+
+  const handleInputChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const extractStore = async () => {
+    if (!editingClient || !editingClient.id) return;
+    setExtracting(true);
+    try {
+      const token = localStorage.getItem('loyverse_api_token');
+      const res = await fetch('/api/loyverse/clients/sync-store', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ customerId: editingClient.id })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No se pudo deducir');
+      if (data.storeName) {
+        setFormData(prev => ({ ...prev, tienda: data.storeName }));
+        alert(`¡Tienda deducida exitosamente: ${data.storeName}! Da clic en Guardar para conservar.`);
+      }
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const openCreateModal = () => {
+    setEditingClient(null);
+    setFormData({ nombre: '', whatsapp: '', calle: '', numero_casa: '', colonia: '', municipio: '', tienda: '' });
+    setShowModal(true);
+  };
+
+  const openEditModal = (client) => {
+    setEditingClient(client);
+    let calle = '';
+    let num = '';
+    let col = '';
+
+    if (client.address) {
+      const parts = client.address.split(',').map(s => s.trim());
+      if (parts.length >= 3) {
+        calle = parts[0];
+        num = parts[1];
+        col = parts.slice(2).join(', ');
+      } else {
+        calle = client.address;
+      }
+    }
+
+    setFormData({
+      nombre: toTitleCase(client.name) || '',
+      whatsapp: formatPhone10(client.phone_number) || '',
+      calle: toTitleCase(calle),
+      numero_casa: num,
+      colonia: toTitleCase(col),
+      municipio: toTitleCase(client.city) || '',
+      tienda: client.tienda || ''
+    });
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const token = localStorage.getItem('loyverse_api_token');
+    
+    try {
+      let res;
+      if (editingClient) {
+        const payload = { id: editingClient.id, ...formData };
+        res = await fetch('/api/loyverse/clients', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        res = await fetch('/api/loyverse/clients', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify(formData)
+        });
+      }
+      
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Error al guardar');
+      }
+      
+      setShowModal(false);
+      fetchClients();
+    } catch (error) {
+      console.error('Error saving client:', error);
+      alert('Error guardando cliente: ' + (error.message || error));
+    }
+  };
+
+  // ── BORRADO TOTAL: Elimina cliente de Loyverse + toda su data en Redis ──
+  const handleNukeClient = async (client) => {
+    const phone = client.phone_number;
+    const clientName = toTitleCase(client.name) || 'este cliente';
+    
+    if (!confirm(`⚠️ ¿Borrar COMPLETAMENTE a ${clientName}?\n\nEsto eliminará:\n• Su perfil de Loyverse\n• Su historial de chat\n• Sus cupones y folios\n• Todo rastro en el sistema\n\n¡Esta acción NO se puede deshacer!`)) return;
+    
+    const token = localStorage.getItem('loyverse_api_token');
+    try {
+      const res = await fetch('/api/loyverse/clients/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ phone: phone || '', id: client.id })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert('✅ Cliente eliminado completamente del sistema.');
+        fetchClients();
+      } else {
+        alert('Error al borrar: ' + (data.error || ''));
+      }
+    } catch (e) {
+      alert('Error de conexión.');
+    }
+  };
+
+  const renderStatusButton = (status) => {
+    let color = '#ccc';
+    let text = 'N/A';
+    if (status === 'rojo') { color = '#ef4444'; text = 'No se mandó'; }
+    if (status === 'naranja') { color = '#f97316'; text = 'Entregado'; }
+    if (status === 'verde') { color = '#22c55e'; text = 'Visto'; }
+
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: color }} />
+        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#555' }}>{text}</span>
+      </div>
+    );
+  };
+
+  const SortHeader = ({ label, sortId }) => (
+    <th onClick={() => handleSort(sortId)} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+      {label}<span style={{ opacity: sortKey === sortId ? 1 : 0.3, fontSize: '0.7rem' }}>{getSortIndicator(sortId)}</span>
+    </th>
+  );
+
+  return (
+    <div className={styles.container}>
+      <header className={styles.header}>
+        <h1>Clientes ({clients.length})</h1>
+        <button className={styles.createBtn} onClick={openCreateModal}>
+          Crear Cliente
+        </button>
+      </header>
+
+      {loading ? (
+        <p>Cargando clientes...</p>
+      ) : (
+        <div className={styles.tableWrapper}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <SortHeader label="Nombre" sortId="name" />
+                <SortHeader label="WhatsApp" sortId="phone" />
+                <SortHeader label="Registro" sortId="fecha" />
+                <th>Cupón</th>
+                <SortHeader label="Sucursal" sortId="tienda" />
+                <SortHeader label="Calle" sortId="calle" />
+                <SortHeader label="Municipio" sortId="municipio" />
+                <SortHeader label="Visitas" sortId="visitas" />
+                <SortHeader label="Gasto Total" sortId="gasto" />
+                <SortHeader label="Puntos" sortId="puntos" />
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedClients.map(client => {
+                let calle = '';
+                let num = '';
+                let col = '';
+                if (client.address) {
+                  const parts = client.address.split(',').map(s => s.trim());
+                  if (parts.length >= 3) {
+                    calle = parts[0];
+                    num = parts[1];
+                    col = parts.slice(2).join(', ');
+                  } else {
+                    calle = client.address;
+                  }
+                }
+                
+                return (
+                  <tr key={client.id}>
+                    <td className={styles.nowrap}>{toTitleCase(client.name)}</td>
+                    <td>{formatPhone10(client.phone_number)}</td>
+                    <td className={styles.nowrap}>{client.created_at ? new Date(client.created_at).toLocaleDateString('es-MX', {day: '2-digit', month: 'short', year: '2-digit'}) : '-'}</td>
+                    <td>{client.phone_number ? renderStatusButton(client.cuponStatus) : '-'}</td>
+                    <td><span className={styles.badge}>{client.tienda || '-'}</span></td>
+                    <td>{toTitleCase(calle)}</td>
+                    <td>{toTitleCase(client.city)}</td>
+                    <td>{client.total_visits || 0}</td>
+                    <td className={styles.nowrap}>${Number(client.total_spent || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                    <td>{client.total_points || client.points_balance || 0}</td>
+                    <td>
+                      <div className={styles.actionsBox}>
+                        <button className={styles.editBtn} onClick={() => openEditModal(client)}>Editar</button>
+                        <button className={styles.deleteBtn} onClick={() => handleNukeClient(client)}>🗑️ Borrar</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {clients.length === 0 && (
+                <tr>
+                  <td colSpan="12" style={{textAlign: 'center', padding: '1rem'}}>
+                    No hay clientes.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showModal && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ margin: 0 }}>{editingClient ? 'Editar Cliente' : 'Crear Cliente'}</h2>
+              {editingClient && (
+                <button 
+                  type="button" 
+                  onClick={extractStore} 
+                  disabled={extracting}
+                  style={{ background: '#fef3c7', color: '#b45309', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: extracting ? 'wait' : 'pointer' }}
+                >
+                  {extracting ? 'Buscando...' : '📍 Auto-Extraer Tienda'}
+                </button>
+              )}
+            </div>
+            <form onSubmit={handleSubmit} className={styles.form}>
+              <div className={styles.formGroup}>
+                <label>Nombre *</label>
+                <input required type="text" name="nombre" value={formData.nombre} onChange={handleInputChange} />
+              </div>
+              <div className={styles.formGroup}>
+                <label>WhatsApp</label>
+                <input type="text" name="whatsapp" value={formData.whatsapp} onChange={handleInputChange} />
+              </div>
+              <div className={styles.formGroup}>
+                <label>Sucursal de Registro</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <select name="tienda" value={formData.tienda} onChange={handleInputChange} className={styles.selectInput}>
+                    <option value="">-- Seleccionar --</option>
+                    {stores.map(idx => (
+                       <option key={idx.id} value={idx.name}>{idx.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className={styles.formGroup}>
+                <label>Calle</label>
+                <input type="text" name="calle" value={formData.calle} onChange={handleInputChange} />
+              </div>
+              <div className={styles.formGroup}>
+                <label>Número de casa</label>
+                <input type="text" name="numero_casa" value={formData.numero_casa} onChange={handleInputChange} />
+              </div>
+              <div className={styles.formGroup}>
+                <label>Colonia</label>
+                <input type="text" name="colonia" value={formData.colonia} onChange={handleInputChange} />
+              </div>
+              <div className={styles.formGroup}>
+                <label>Municipio</label>
+                <input type="text" name="municipio" value={formData.municipio} onChange={handleInputChange} />
+              </div>
+              
+              <div className={styles.modalActions}>
+                <button type="button" className={styles.cancelBtn} onClick={() => setShowModal(false)}>Cancelar</button>
+                <button type="submit" className={styles.saveBtn}>Guardar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

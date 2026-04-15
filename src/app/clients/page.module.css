@@ -1,0 +1,287 @@
+.container {
+  padding: 40px;
+  max-width: 98%; overflow-x: auto;
+  margin: 0 auto;
+  font-family: inherit;
+  color: var(--text-primary);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.header h1 {
+  font-size: 2rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.createBtn {
+  background-color: #000;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.createBtn:hover {
+  background-color: #333;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid #eaeaea;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.table th, .table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #eaeaea;
+  vertical-align: middle;
+}
+
+.table th {
+  background-color: #fafafa;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #666;
+  white-space: nowrap;
+}
+
+.table td {
+  font-size: 0.85rem;
+  color: #333;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.maxWidthCol {
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge {
+  background-color: #e0f2fe;
+  color: #0369a1;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.actionsBox {
+  display: flex;
+  gap: 6px;
+}
+
+.editBtn, .deleteBtn {
+  border: none;
+  background: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.8rem;
+}
+
+.editBtn {
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.editBtn:hover {
+  background-color: #e4e4e4;
+}
+
+.deleteBtn {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+.deleteBtn:hover {
+  background-color: #fecaca;
+}
+
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal {
+  background: #fff;
+  border-radius: 16px;
+  padding: 2.5rem;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+  animation: slideUp 0.3s ease-out forwards;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.modal h2 {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  font-size: 1.5rem;
+}
+
+.formGroup {
+  margin-bottom: 1rem;
+}
+
+.formGroup label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.formGroup input, .selectInput {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+  background-color: #fafafa;
+  transition: border-color 0.2s;
+}
+
+.formGroup input:focus, .selectInput:focus {
+  outline: none;
+  border-color: #000;
+  background-color: #fff;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 2.5rem;
+}
+
+.cancelBtn {
+  background: #f0f0f0;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cancelBtn:hover {
+  background: #e4e4e4;
+}
+
+.saveBtn {
+  background: #000;
+  color: #fff;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.saveBtn:hover {
+  background: #333;
+}
+
+@media (prefers-color-scheme: dark) {
+  .container {
+    color: #fff;
+  }
+  
+  .tableWrapper {
+    background: #111;
+    border-color: #333;
+  }
+
+  .table th {
+    background-color: #1a1a1a;
+    color: #999;
+  }
+
+  .table td, .table th {
+    border-color: #333;
+    color: #ddd;
+  }
+  
+  .badge {
+    background-color: #075985;
+    color: #bae6fd;
+  }
+
+  .modal {
+    background: #111;
+    color: #fff;
+    border: 1px solid #333;
+  }
+
+  .formGroup label {
+    color: #ddd;
+  }
+
+  .formGroup input, .selectInput {
+    background: #222;
+    border-color: #444;
+    color: #fff;
+  }
+
+  .formGroup input:focus, .selectInput:focus {
+    border-color: #888;
+    background: #1a1a1a;
+  }
+
+  .cancelBtn {
+    background: #333;
+    color: #fff;
+  }
+  .cancelBtn:hover {
+    background: #444;
+  }
+  .createBtn, .saveBtn {
+    background: #fff;
+    color: #000;
+  }
+  .createBtn:hover, .saveBtn:hover {
+    background: #ccc;
+  }
+}
