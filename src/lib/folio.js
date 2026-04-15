@@ -10,10 +10,8 @@ export function generateFolio() {
 }
 
 export function buildPromoText(baseText, folio, validFrom = 'hoy', validityDuration = 1) {
-  // Calculate "today" in Mexico City time (CST = UTC-6)
-  const nowUTC = new Date();
-  const mexicoOffsetMs = -6 * 60 * 60 * 1000;
-  const mexicoNow = new Date(nowUTC.getTime() + mexicoOffsetMs);
+  // FIX#6: DST-safe timezone (no hardcoded offset)
+  const mexicoNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Monterrey' }));
   
   // start date
   const startDate = new Date(mexicoNow.getTime());

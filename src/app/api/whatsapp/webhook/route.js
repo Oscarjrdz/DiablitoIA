@@ -5,6 +5,13 @@ import { generateFolio, buildPromoText } from '@/lib/folio';
 const FOLIO_REGEX = /^[A-Z]\d{3,4}$/i;
 const FOLIO_EXTRACT = /\b([A-Z]\d{3,4})\b/i;
 
+// ── 🏪 MAPA DE SUCURSALES (fuente única de verdad) ──
+const STORE_MAP = { '1': 'Bosques', '2': 'Valle de Lincoln', '3': 'San Blas', '4': 'Titanio', '5': 'Palmas', '6': 'Cordillera' };
+function buildStoreMenu(folio) {
+    const lines = Object.entries(STORE_MAP).map(([n, name]) => `${n}️⃣ - ${name}`);
+    return `📸 ¡Folio *${folio}* detectado en la imagen!\nPara activarlo, por favor selecciona en qué sucursal te encuentras respondiendo con el *número*:\n\n${lines.join('\n')}\n\n*(O responde ❌ CANCELAR si detecté mal el folio)*`;
+}
+
 async function getLoyverseStoresContext(storeHint, token) {
   try {
     const res = await fetch('https://api.loyverse.com/v1.0/stores', {
@@ -115,6 +122,7 @@ export async function POST(req) {
     // Loguear intento
     if (isImage) {
         await redis.lpush('debug_image_logs', JSON.stringify({ step: 'START', ts: Date.now(), mediaType: typeof payload.data.media, mediaVal: payload.data.media ? payload.data.media.substring(0,50) : null }));
+        await redis.ltrim('debug_image_logs', 0, 99);
     }
 
     if (isImage && payload.data.media) {
@@ -151,8 +159,8 @@ export async function POST(req) {
                        if (folioMatch) {
                            let extractedFolio = (folioMatch[1] || folioMatch[0]).toUpperCase();
                            await redis.set(`pending_folio_store_${cleanPhoneGlobal}`, extractedFolio);
-                           const menuText = `📸 ¡Folio *${extractedFolio}* detectado en la imagen!\nPara activarlo, por favor selecciona en qué sucursal te encuentras respondiendo con el *número*:\n\n1️⃣ - Bosques\n2️⃣ - Valle de Lincoln\n3️⃣ - San Blas\n4️⃣ - Titanio\n5️⃣ - Palmas\n6️⃣ - Cordillera\n\n*(O responde ❌ CANCELAR si detecté mal el folio)*`;
-                           await sendWhatsApp(phoneId, menuText, cfg);
+                           await redis.expire(`pending_folio_store_${cleanPhoneGlobal}`, 600);
+                           await sendWhatsApp(phoneId, buildStoreMenu(extractedFolio), cfg);
                            return NextResponse.json({ success: true, note: 'image_folio_detected' });
                        }
                    } else {
@@ -165,7 +173,12 @@ export async function POST(req) {
            console.error("Error procesando imagen para folio:", err); 
            await redis.lpush('debug_image_logs', JSON.stringify({ step: 'ERROR', error: err.message }));
        }
-       // Si no es folio o falla, retornar
+       // FIX#5: Si no es folio, informar al usuario en vez de silencio
+       try {
+           const cfgFb = await redis.get('wapp_config');
+           const cfgFallback = typeof cfgFb === 'string' ? JSON.parse(cfgFb) : (cfgFb || {});
+           await sendWhatsApp(phoneId, '📸 Recibí tu imagen pero no encontré un código de cupón.\n\nSi tienes un cupón, asegúrate de que el folio (ej. *F666*) sea visible en la foto. 😊', cfgFallback);
+       } catch(e) {}
        return NextResponse.json({ success: true });
     }
 
@@ -181,9 +194,8 @@ export async function POST(req) {
             return NextResponse.json({ success: true });
         }
         
-        const storeMap = { '1': 'Bosques', '2': 'Valle de Lincoln', '3': 'San Blas', '4': 'Titanio', '5': 'Palmas', '6': 'Cordillera' };
-        const selNum = textMsg.replace(/\D/g, ''); 
-        const selectedStore = storeMap[textMsg] || storeMap[selNum];
+        const selNum = textMsg.replace(/\D/g, ''); // FIX#4: Usa STORE_MAP global
+        const selectedStore = STORE_MAP[textMsg] || STORE_MAP[selNum];
         
         if (selectedStore) {
             await redis.del(`pending_folio_store_${cleanPhoneGlobal}`);
@@ -579,18 +591,20 @@ export async function POST(req) {
                 return NextResponse.json({ success: true });
             }
 
+            // FIX#3: Bloquear tanto canjeado como activado
             const folioStatus = await redis.get(`folio_status_${folio}`);
-            if (folioStatus === 'canjeado') {
-                await sendWhatsApp(phoneId, '⚠️ Este cupón ya fue canjeado anteriormente.', cfg);
+            if (folioStatus === 'canjeado' || folioStatus === 'activado') {
+                const statusMsg = folioStatus === 'canjeado'
+                    ? '⚠️ Este cupón ya fue canjeado anteriormente.'
+                    : '✅ Este cupón ya fue activado. Muestra tu folio en caja para canjearlo.';
+                await sendWhatsApp(phoneId, statusMsg, cfg);
                 return NextResponse.json({ success: true });
             }
 
             const validDateStr = await redis.get(`folio_valid_date_${folio}`);
             if (validDateStr) {
-                const nowUTC = new Date();
-                const mexicoOffsetMs = -6 * 60 * 60 * 1000;
-                const mexicoNow = new Date(nowUTC.getTime() + mexicoOffsetMs);
-                const todayStr = mexicoNow.toISOString().split('T')[0];
+                // FIX#6: Usar timezone nativo en vez de offset fijo (DST-safe)
+                const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Monterrey' });
                 const parts = validDateStr.split('|');
                 const startDate = parts[0];
                 const endDate = parts[1] || parts[0];
@@ -626,6 +640,15 @@ export async function POST(req) {
                 return NextResponse.json({ success: true });
             }
 
+            // FIX#2: Mutex para prevenir doble-activación
+            const activationLock = `folio_activating_${folio}`;
+            const lockAcquired = await redis.setnx(activationLock, '1');
+            if (!lockAcquired) {
+                await sendWhatsApp(phoneId, '⏳ Tu cupón se está activando, espera un momento...', cfg);
+                return NextResponse.json({ success: true });
+            }
+            await redis.expire(activationLock, 30);
+
             const result = await createLoyverseItem(folio, storesContext.targetStore.id, storesContext.allStores, loyverseToken);
 
             if (result.ok) {
@@ -640,6 +663,7 @@ export async function POST(req) {
                 console.error('Loyverse item creation failed:', result.data);
                 await sendWhatsApp(phoneId, '❌ Hubo un error activando tu cupón. Intenta de nuevo en unos minutos.', cfg);
             }
+            await redis.del(activationLock);
         } catch (err) {
             console.error('❌ Folio validation error:', err);
             await sendWhatsApp(phoneId, '❌ Error procesando tu cupón. Intenta más tarde.', cfg);
@@ -677,29 +701,38 @@ export async function POST(req) {
         const cachedPoints = await redis.get(`client_points_${cleanPhone}`);
         clientPoints = parseInt(cachedPoints || '0');
     } else {
-        // No hay cache, buscar en Loyverse
+        // FIX#7: Buscar en Loyverse con paginación completa
         try {
             const loyToken = await redis.get('loyverse_token');
             if (loyToken) {
-                const searchRes = await fetch('https://api.loyverse.com/v1.0/customers?limit=250', {
-                    headers: { Authorization: `Bearer ${loyToken}` }
-                });
-                if (searchRes.ok) {
+                const clientPhone10 = cleanPhone.slice(-10);
+                let match = null;
+                let cursor = null;
+                let keepSearching = true;
+                while (keepSearching) {
+                    let url = 'https://api.loyverse.com/v1.0/customers?limit=250';
+                    if (cursor) url += `&cursor=${cursor}`;
+                    const searchRes = await fetch(url, {
+                        headers: { Authorization: `Bearer ${loyToken}` }
+                    });
+                    if (!searchRes.ok) break;
                     const searchData = await searchRes.json();
-                    const clientPhone10 = cleanPhone.slice(-10);
-                    const match = (searchData.customers || []).find(c => {
+                    match = (searchData.customers || []).find(c => {
                         if (!c.phone_number) return false;
                         return c.phone_number.replace(/\D/g, '').slice(-10) === clientPhone10;
                     });
-                    if (match) {
-                        clientName = match.name;
-                        clientPoints = match.total_points || 0;
-                        isRegistered = true;
-                        // Cachear en Redis para no buscar cada vez
-                        await redis.set(`client_name_${cleanPhone}`, clientName);
-                        await redis.set(`client_points_${cleanPhone}`, String(clientPoints));
-                        await redis.set(`client_registered_${cleanPhone}`, '1');
-                    }
+                    if (match) break;
+                    cursor = searchData.cursor || null;
+                    keepSearching = !!cursor;
+                }
+                if (match) {
+                    clientName = match.name;
+                    clientPoints = match.total_points || 0;
+                    isRegistered = true;
+                    // Cachear en Redis para no buscar cada vez
+                    await redis.set(`client_name_${cleanPhone}`, clientName);
+                    await redis.set(`client_points_${cleanPhone}`, String(clientPoints));
+                    await redis.set(`client_registered_${cleanPhone}`, '1');
                 }
             }
         } catch(lookupErr) { console.error('[Bot] Loyverse lookup error:', lookupErr); }
