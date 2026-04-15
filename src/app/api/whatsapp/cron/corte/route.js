@@ -49,7 +49,7 @@ export async function GET(request) {
                     if (shift.closed_at) {
                         const closedTime = new Date(shift.closed_at);
                         const diffMinsClosure = (now.getTime() - closedTime.getTime()) / 60000;
-                        if (diffMinsClosure >= 0 && diffMinsClosure <= 15) {
+                        if (diffMinsClosure >= -60 && diffMinsClosure <= 120) {
                             const lockKey = `shift_alert_${shift.id}`;
                             const alreadySent = await redis.get(lockKey);
                             if (!alreadySent) {
