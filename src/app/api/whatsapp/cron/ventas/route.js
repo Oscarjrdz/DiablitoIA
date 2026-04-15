@@ -150,6 +150,15 @@ export async function GET(request) {
             more = !!cur;
         }
 
+        const palmasId = stores.find(s => s.name.toLowerCase().includes('palmas'))?.id;
+        allReceipts.forEach(r => {
+            if (r.store_id === palmasId && r.created_at) {
+                const fix = new Date(r.created_at);
+                fix.setHours(fix.getHours() + 1);
+                r.created_at = fix.toISOString();
+            }
+        });
+
         // Filtramos usando "Business Day" de cada ticket
         const todayReceipts = allReceipts.filter(r => {
             if (r.cancelled_at) return false;
@@ -205,6 +214,14 @@ export async function GET(request) {
                 hasMoreCus = !!cusCur;
             }
         } catch(ce) { console.error('Error fetching cust:', ce); }
+
+        allCustomers.forEach(c => {
+            if (c.note && c.note.toLowerCase().includes('palmas') && c.created_at) {
+                const fix = new Date(c.created_at);
+                fix.setHours(fix.getHours() + 1);
+                c.created_at = fix.toISOString();
+            }
+        });
 
         const todayCustomers = allCustomers.filter(c => {
             const cDate = new Date(c.created_at);

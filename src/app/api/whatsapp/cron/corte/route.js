@@ -46,6 +46,19 @@ export async function GET(request) {
             const shiftData = await shiftRes.json();
             if (shiftData.shifts) {
                 for (const shift of shiftData.shifts) {
+                    const sObj = stores.find(s => s.id === shift.store_id);
+                    if (sObj && sObj.name.toLowerCase().includes('palmas')) {
+                        if (shift.opened_at) {
+                            const o = new Date(shift.opened_at);
+                            o.setHours(o.getHours() + 1);
+                            shift.opened_at = o.toISOString();
+                        }
+                        if (shift.closed_at) {
+                            const c = new Date(shift.closed_at);
+                            c.setHours(c.getHours() + 1);
+                            shift.closed_at = c.toISOString();
+                        }
+                    }
                     if (shift.closed_at) {
                         const closedTime = new Date(shift.closed_at);
                         const diffMinsClosure = (now.getTime() - closedTime.getTime()) / 60000;
