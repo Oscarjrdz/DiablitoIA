@@ -112,9 +112,15 @@ export async function POST(req) {
 
     // ── 📸 MANEJO DE IMÁGENES PARA EXTRAER FOLIO ──
     const isImage = payload.data.type === 'image' || !!payload.data.__raw?.message?.imageMessage;
+    // Loguear intento
+    if (isImage) {
+        await redis.lpush('debug_image_logs', JSON.stringify({ step: 'START', ts: Date.now(), mediaType: typeof payload.data.media, mediaVal: payload.data.media ? payload.data.media.substring(0,50) : null }));
+    }
+
     if (isImage && payload.data.media) {
        try {
            const imgRes = await fetch(payload.data.media);
+           await redis.lpush('debug_image_logs', JSON.stringify({ step: 'FETCH_MEDIA', ok: imgRes.ok, status: imgRes.status }));
            if (imgRes.ok) {
                const arrayBuffer = await imgRes.arrayBuffer();
                const base64Image = Buffer.from(arrayBuffer).toString('base64');
@@ -122,6 +128,7 @@ export async function POST(req) {
                const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
                const aiToken = cfg.aiToken;
                if (aiToken) {
+                   await redis.lpush('debug_image_logs', JSON.stringify({ step: 'CALL_GEMINI', len: base64Image.length }));
                    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${aiToken}`, {
                        method: 'POST',
                        headers: { 'Content-Type': 'application/json' },
@@ -135,9 +142,11 @@ export async function POST(req) {
                            generationConfig: { maxOutputTokens: 50, temperature: 0 }
                        })
                    });
+                   await redis.lpush('debug_image_logs', JSON.stringify({ step: 'GEMINI_RESPONSE', ok: geminiRes.ok, status: geminiRes.status }));
                    if (geminiRes.ok) {
                        const geminiData = await geminiRes.json();
                        const reply = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim().toUpperCase();
+                       await redis.lpush('debug_image_logs', JSON.stringify({ step: 'GEMINI_TEXT', text: reply }));
                        const folioMatch = reply.match(FOLIO_EXTRACT) || (FOLIO_REGEX.test(reply) ? [reply] : null);
                        if (folioMatch) {
                            let extractedFolio = (folioMatch[1] || folioMatch[0]).toUpperCase();
@@ -146,10 +155,16 @@ export async function POST(req) {
                            await sendWhatsApp(phoneId, menuText, cfg);
                            return NextResponse.json({ success: true, note: 'image_folio_detected' });
                        }
+                   } else {
+                       const errT = await geminiRes.text();
+                       await redis.lpush('debug_image_logs', JSON.stringify({ step: 'GEMINI_FAIL', text: errT }));
                    }
                }
            }
-       } catch(err) { console.error("Error procesando imagen para folio:", err); }
+       } catch(err) { 
+           console.error("Error procesando imagen para folio:", err); 
+           await redis.lpush('debug_image_logs', JSON.stringify({ step: 'ERROR', error: err.message }));
+       }
        // Si no es folio o falla, retornar
        return NextResponse.json({ success: true });
     }
