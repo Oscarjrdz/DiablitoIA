@@ -354,9 +354,10 @@ export default function ClientsPage() {
                       {(() => {
                         const lastDate = client.updated_at || client.last_visit;
                         if (!lastDate || !client.total_visits) return <span style={{color:'#999'}}>—</span>;
-                        const now = new Date();
-                        const then = new Date(lastDate);
-                        const diffDays = Math.floor((now - then) / 86400000);
+                        const toMtyDate = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: 'America/Monterrey' });
+                        const todayMty = toMtyDate(new Date());
+                        const visitMty = toMtyDate(new Date(lastDate));
+                        const diffDays = Math.round((new Date(todayMty) - new Date(visitMty)) / 86400000);
                         let color = '#22c55e';
                         if (diffDays > 30) color = '#ef4444';
                         else if (diffDays > 7) color = '#f97316';
