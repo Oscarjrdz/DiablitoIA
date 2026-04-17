@@ -2,6 +2,14 @@ const Redis = require('ioredis');
 
 const rawRedis = new Redis("redis://default:doyoQnFFAlJoxrhkc3KrRxL1awfSlSjr@redis-18769.c270.us-east-1-3.ec2.cloud.redislabs.com:18769");
 
+async function sendWhatsApp(to, body, cfg) {
+  await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/messages/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: cfg.wappToken, to, body })
+  });
+}
+
 const STORE_MANAGERS = {
   'titanio': 'Abraham',
   'palmas': 'Valeria',
@@ -155,7 +163,11 @@ async function main() {
          }
     }
 
-    console.log("=== MENSAJES REALES GENERADOS ===");
+    console.log("=== ENVIANDO MENSAJES REALES AL GRUPO ===");
+
+    const grupoId = await rawRedis.get('ventas_grupo_id');
+    const configStr = await rawRedis.get('wapp_config');
+    const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
 
     for (const store of activeStores) {
         if (store.firstTime) {
@@ -193,11 +205,14 @@ async function main() {
                 }
             }
 
-            const msgAlert = `-------------\n🚨 *ALERTA APERTURA*\n\n${phrase}\n\n🕒 *HORA APERTURA TURNO:* ${shiftTimeStr}${delayAlert}\n🧾 *Primer Ticket:* ${ticketTimeStr}\n\n⚡ _El Diablito_\n-------------`;
+            const msgAlert = `🚨 *ALERTA APERTURA*\n\n${phrase}\n\n🕒 *HORA APERTURA TURNO:* ${shiftTimeStr}${delayAlert}\n🧾 *Primer Ticket:* ${ticketTimeStr}\n\n⚡ _El Diablito_`;
             console.log(msgAlert);
+            if (grupoId && cfg.wappToken) {
+                await sendWhatsApp(grupoId.replace(/"/g, ''), msgAlert, cfg);
+            }
         }
     }
-    
+    console.log("Completado.");
     process.exit(0);
 }
 

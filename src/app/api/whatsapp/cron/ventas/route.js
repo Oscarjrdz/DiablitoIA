@@ -153,36 +153,11 @@ export async function GET(request) {
             more = !!cur;
         }
 
-        const palmasId = stores.find(s => s.name.toLowerCase().includes('palmas'))?.id;
-        allReceipts.forEach(r => {
-            if (r.store_id === palmasId && r.created_at) {
-                const fix = new Date(r.created_at);
-                fix.setHours(fix.getHours() + 1);
-                r.created_at = fix.toISOString();
-            }
-        });
-
         // FETCH SHIFTS for "Hora Apertura"
         const shiftRes = await fetch(`https://api.loyverse.com/v1.0/shifts?updated_at_min=${fetchStart}&updated_at_max=${fetchEnd}&limit=100`, { headers: authH });
         let shiftData = { shifts: [] };
         if (shiftRes.ok) {
             shiftData = await shiftRes.json();
-            // Palmas +1 hour fix
-            const pId = stores.find(s => s.name.toLowerCase().includes('palmas'))?.id;
-            (shiftData.shifts || []).forEach(sh => {
-                 if (sh.store_id === pId) {
-                      if (sh.opened_at) {
-                           const o = new Date(sh.opened_at);
-                           o.setHours(o.getHours() + 1);
-                           sh.opened_at = o.toISOString();
-                      }
-                      if (sh.closed_at) {
-                           const c = new Date(sh.closed_at);
-                           c.setHours(c.getHours() + 1);
-                           sh.closed_at = c.toISOString();
-                      }
-                 }
-            });
         }
 
         // Filtramos usando "Business Day" de cada ticket
@@ -245,14 +220,6 @@ export async function GET(request) {
                 hasMoreCus = !!cusCur;
             }
         } catch(ce) { console.error('Error fetching cust:', ce); }
-
-        allCustomers.forEach(c => {
-            if (c.note && c.note.toLowerCase().includes('palmas') && c.created_at) {
-                const fix = new Date(c.created_at);
-                fix.setHours(fix.getHours() + 1);
-                c.created_at = fix.toISOString();
-            }
-        });
 
         const todayCustomers = allCustomers.filter(c => {
             const cDate = new Date(c.created_at);
@@ -327,7 +294,7 @@ export async function GET(request) {
                 const storeName = store.name.replace(/prueba|p-\d+/gi, '').trim();
                 const rnd = Math.floor(Math.random() * FIRST_TICKET_PHRASES.length);
                 const managerName = getManager(store.name);
-                const focusName = managerName ? `*${storeName} (con ${managerName})*` : `*${storeName}*`;
+                const focusName = managerName ? `*${storeName}* (con ${managerName})` : `*${storeName}*`;
                 const phrase = FIRST_TICKET_PHRASES[rnd].replace(/\[SUCURSAL\]/g, focusName);
                 
                 const ticketTimeStr = store.firstTime.toLocaleTimeString('es-MX', { timeZone: 'America/Monterrey', hour: '2-digit', minute: '2-digit', hour12: true });
