@@ -9,22 +9,25 @@ async function sendWhatsApp(to, body, cfg) {
   });
 }
 
-// ── Mapeo de encargados por tienda ──
 const STORE_MANAGERS = {
   'titanio': 'Abraham',
-  'palmas': 'Lidia',
-  'real de palmas': 'Lidia',
-  'cordillera': 'Rocío',
+  'palmas': 'Valeria',
+  'real de palmas': 'Valeria',
+  'garcia': 'Lidia',
+  'valle de lincoln': 'Lidia',
   'san blas': 'César',
   'blas': 'César'
 };
 
 function getManager(storeName) {
   const lower = storeName.toLowerCase();
-  // Bosques: Paty antes de las 4 PM MTY, Sebas después
+  // Bosques: Paty antes de las 4 PM MTY, Sebas Semental después
   if (lower.includes('bosques')) {
-    const mtyHour = parseInt(new Date().toLocaleTimeString('en-US', { timeZone: 'America/Monterrey', hour: '2-digit', hour12: false }));
-    return mtyHour < 16 ? 'Paty' : 'Sebas';
+    const mtyDate = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Monterrey' }));
+    const dayOfWeek = mtyDate.getDay(); // 0 = Domingo
+    if (dayOfWeek === 0) return 'Sebas Semental';
+    const mtyHour = mtyDate.getHours();
+    return mtyHour < 16 ? 'Paty' : 'Sebas Semental';
   }
   for (const [key, name] of Object.entries(STORE_MANAGERS)) {
     if (lower.includes(key)) return name;
@@ -159,12 +162,40 @@ export async function GET(request) {
             }
         });
 
+        // FETCH SHIFTS for "Hora Apertura"
+        const shiftRes = await fetch(`https://api.loyverse.com/v1.0/shifts?updated_at_min=${fetchStart}&updated_at_max=${fetchEnd}&limit=100`, { headers: authH });
+        let shiftData = { shifts: [] };
+        if (shiftRes.ok) {
+            shiftData = await shiftRes.json();
+            // Palmas +1 hour fix
+            const pId = stores.find(s => s.name.toLowerCase().includes('palmas'))?.id;
+            (shiftData.shifts || []).forEach(sh => {
+                 if (sh.store_id === pId) {
+                      if (sh.opened_at) {
+                           const o = new Date(sh.opened_at);
+                           o.setHours(o.getHours() + 1);
+                           sh.opened_at = o.toISOString();
+                      }
+                      if (sh.closed_at) {
+                           const c = new Date(sh.closed_at);
+                           c.setHours(c.getHours() + 1);
+                           sh.closed_at = c.toISOString();
+                      }
+                 }
+            });
+        }
+
         // Filtramos usando "Business Day" de cada ticket
         const todayReceipts = allReceipts.filter(r => {
             if (r.cancelled_at) return false;
             const rDate = new Date(r.created_at);
             const rMty = new Date(rDate.toLocaleString('en-US', { timeZone: 'America/Monterrey' }));
-            if (rMty.getHours() < 7) rMty.setDate(rMty.getDate() - 1);
+            const hr = rMty.getHours();
+            
+            // "de 2 a 6:59 es cerrado"
+            if (hr >= 2 && hr < 7) return false;
+
+            if (hr < 2) rMty.setDate(rMty.getDate() - 1);
             return rMty.toLocaleDateString('en-CA') === mtyStr;
         });
 
@@ -172,7 +203,7 @@ export async function GET(request) {
         const ps = {};
         stores.forEach(s => { 
             if (s.name.toLowerCase().includes('prueba')) return; 
-            ps[s.id] = { id: s.id, name: s.name, v: 0, t: 0, lastTime: null, firstTime: null, registered: 0 }; 
+            ps[s.id] = { id: s.id, name: s.name, v: 0, t: 0, lastTime: null, firstTime: null, registered: 0, shiftOpenedAt: null }; 
         });
 
         todayReceipts.forEach(r => {
@@ -255,12 +286,38 @@ export async function GET(request) {
         const hora = now.toLocaleTimeString('es-MX', { timeZone: 'America/Monterrey', hour: '2-digit', minute: '2-digit', hour12: false });
         const fmt = n => '$' + (n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+        const STORE_SCHEDULES = {
+          'titanio': { h: 12, m: 0, text: '12:00 PM' },
+          'valle de lincoln': { h: 16, m: 0, text: '04:00 PM' },
+          'garcia': { h: 16, m: 0, text: '04:00 PM' },
+          'san blas': { h: 16, m: 0, text: '04:00 PM' },
+          'palmas': { h: 16, m: 0, text: '04:00 PM' },
+          'real de palmas': { h: 16, m: 0, text: '04:00 PM' },
+          'bosques': { h: 9, m: 0, text: '09:00 AM' },
+          'cordillera': { h: 16, m: 0, text: '04:00 PM' }
+        };
+
         const activeStores = Object.values(ps).filter(s => s.t > 0).sort((a, b) => b.t - a.t);
+
+        // Match firstTime with Shift openedTime
+        for (const store of activeStores) {
+             if (store.firstTime && shiftData.shifts) {
+                 const sShifts = shiftData.shifts.filter(sh => sh.store_id === store.id && sh.opened_at);
+                 const validShifts = sShifts.filter(sh => new Date(sh.opened_at) <= store.firstTime);
+                 if (validShifts.length > 0) {
+                      validShifts.sort((a,b) => new Date(b.opened_at) - new Date(a.opened_at));
+                      store.shiftOpenedAt = new Date(validShifts[0].opened_at);
+                 } else if (sShifts.length > 0) {
+                      sShifts.sort((a,b) => new Date(b.opened_at) - new Date(a.opened_at));
+                      store.shiftOpenedAt = new Date(sShifts[0].opened_at);
+                 }
+             }
+        }
 
         // ── INYECCIÓN HOUSTON (FIRST TICKET ALERTS) ──
         const grupoId = await redis.get('ventas_grupo_id');
         for (const store of activeStores) {
-            const firstTicketKey = `first_ticket_${store.id}_${mtyStr}`;
+            const firstTicketKey = `first_ticket_v2_${store.id}_${mtyStr}`;
             const alreadySent = await redis.get(firstTicketKey);
             
             if (!alreadySent && store.firstTime) {
@@ -269,10 +326,46 @@ export async function GET(request) {
                 
                 const storeName = store.name.replace(/prueba|p-\d+/gi, '').trim();
                 const rnd = Math.floor(Math.random() * FIRST_TICKET_PHRASES.length);
-                const phrase = FIRST_TICKET_PHRASES[rnd].replace(/\[SUCURSAL\]/g, storeName);
+                const managerName = getManager(store.name);
+                const focusName = managerName ? `*${storeName} (con ${managerName})*` : `*${storeName}*`;
+                const phrase = FIRST_TICKET_PHRASES[rnd].replace(/\[SUCURSAL\]/g, focusName);
                 
-                const timeStr = store.firstTime.toLocaleTimeString('es-MX', { timeZone: 'America/Monterrey', hour: '2-digit', minute: '2-digit', hour12: true });
-                const msgAlert = `🚨 *ALERTA APERTURA*\n\n${phrase}\n⏰ (Apertura: ${timeStr})\n\n⚡ _El Diablito_`;
+                const ticketTimeStr = store.firstTime.toLocaleTimeString('es-MX', { timeZone: 'America/Monterrey', hour: '2-digit', minute: '2-digit', hour12: true });
+                let shiftTimeStr = 'Desconocida';
+                let delayAlert = '';
+
+                if (store.shiftOpenedAt) {
+                    shiftTimeStr = store.shiftOpenedAt.toLocaleTimeString('es-MX', { timeZone: 'America/Monterrey', hour: '2-digit', minute: '2-digit', hour12: true });
+                    
+                    const lowerName = storeName.toLowerCase();
+                    const schedKey = Object.keys(STORE_SCHEDULES).find(k => lowerName.includes(k));
+                    
+                    if (schedKey) {
+                        const sched = STORE_SCHEDULES[schedKey];
+                        const sHour = parseInt(store.shiftOpenedAt.toLocaleTimeString('en-US', { timeZone: 'America/Monterrey', hour: 'numeric', hour12: false }));
+                        const sMin = parseInt(store.shiftOpenedAt.toLocaleTimeString('en-US', { timeZone: 'America/Monterrey', minute: 'numeric' }));
+                        
+                        const actualMins = sHour * 60 + sMin;
+                        const expectedMins = sched.h * 60 + sched.m;
+                        const diff = actualMins - expectedMins;
+                        
+                        // Si abrieron más de 5 minutos tarde
+                        if (diff > 5) {
+                            delayAlert = `\n🔴 *¡OJO! Abrieron ${diff} minutos TARDE* (Su horario es a las ${sched.text})`;
+                        } else if (diff < -5) {
+                            delayAlert = `\n🟢 *Abrieron ${Math.abs(diff)} minutos temprano* (Su horario es a las ${sched.text})`;
+                        } else {
+                            delayAlert = `\n✅ *Abrieron súper PUNTUAL* (A las ${sched.text})`;
+                        }
+                    }
+                }
+
+                // Destacar mucho la hora de apertura
+                const msgAlert = `🚨 *ALERTA APERTURA*\n\n`
+                               + `${phrase}\n\n`
+                               + `🕒 *HORA APERTURA TURNO:* ${shiftTimeStr}${delayAlert}\n`
+                               + `🧾 *Primer Ticket:* ${ticketTimeStr}\n\n`
+                               + `⚡ _El Diablito_`;
                 
                 // Manda alerta general al grupo
                 if (grupoId && grupoId.includes('@g.us')) {

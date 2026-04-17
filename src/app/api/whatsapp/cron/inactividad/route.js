@@ -9,12 +9,12 @@ async function sendWhatsApp(to, body, cfg) {
   });
 }
 
-// ── Mapeo de encargados por tienda ──
 const STORE_MANAGERS = {
   'titanio': 'Abraham',
-  'palmas': 'Lidia',
-  'real de palmas': 'Lidia',
-  'cordillera': 'Rocío',
+  'palmas': 'Valeria',
+  'real de palmas': 'Valeria',
+  'garcia': 'Lidia',
+  'valle de lincoln': 'Lidia',
   'san blas': 'César',
   'blas': 'César'
 };
@@ -22,10 +22,13 @@ const STORE_MANAGERS = {
 function getManager(storeName) {
   const lower = storeName.toLowerCase();
 
-  // Bosques: Paty antes de las 4 PM MTY, Sebas después
+  // Bosques: Paty antes de las 4 PM MTY, Sebas Semental después
   if (lower.includes('bosques')) {
-    const mtyHour = parseInt(new Date().toLocaleTimeString('en-US', { timeZone: 'America/Monterrey', hour: '2-digit', hour12: false }));
-    return mtyHour < 16 ? 'Paty' : 'Sebas';
+    const mtyDate = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Monterrey' }));
+    const dayOfWeek = mtyDate.getDay(); // 0 = Domingo
+    if (dayOfWeek === 0) return 'Sebas Semental';
+    const mtyHour = mtyDate.getHours();
+    return mtyHour < 16 ? 'Paty' : 'Sebas Semental';
   }
 
   for (const [key, name] of Object.entries(STORE_MANAGERS)) {
