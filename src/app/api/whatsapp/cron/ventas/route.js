@@ -482,9 +482,11 @@ export async function GET(request) {
                 customComment = STORE_ONLY_PHRASES[rnd].replace(/{tienda}/g, stName).replace(/{tickets}/g, s.t);
             }
 
-            msg += `${prefix} *${stName}*  |  👥 Regs: ${s.registered}\n`;
-            msg += `   ${customComment}\n`;
-            msg += `   ⌚ Última hora: ${ltStr}\n\n`;
+            msg += `✨ ${customComment}\n`;
+            msg += `${prefix} *${stName}*\n`;
+            msg += `   🧾 ${s.t} tickets\n`;
+            msg += `   ⏱️ Ut: ${ltStr}\n`;
+            msg += `   👤 Regs: ${s.registered}\n\n`;
         });
 
         msg += `━━━━━━━━━━━━━━━━━━\n⚡ _El Diablito Intelligence_`;
