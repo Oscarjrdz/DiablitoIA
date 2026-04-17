@@ -842,7 +842,7 @@ Ejemplo: "¡Perfecto, ya te he registrado! [REGISTRO_OK:Oscar R|Cirros 102 Col L
 
                 // ── 📋 AUTO-REGISTRO: Detectar tag [REGISTRO_OK] en la respuesta del bot ──
                 const alreadyRegistered = await redis.get(`client_registered_${cleanPhone}`);
-                const regMatch = reply.match(/\[REGISTRO_OK:([^|]+)\|([^|]+)\|([^\]]+)\]/);
+                const regMatch = reply.match(/\[REGISTRO_OK:([^|]+)\|([^|]+)\|([^\]]*)\]/);
                 if (!alreadyRegistered && regMatch) {
                     try {
                                     const clientData = { name: regMatch[1].trim(), address: regMatch[2].trim(), city: regMatch[3].trim() };
