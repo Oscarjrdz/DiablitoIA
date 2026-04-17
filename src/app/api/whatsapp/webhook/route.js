@@ -644,6 +644,14 @@ export async function POST(req) {
                 return NextResponse.json({ success: true });
             }
 
+            // ── 🏪 Si no viene sucursal y NO es flujo de imagen, pedir sucursal ──
+            if (!storeFromMsg && !isManagerImageFlow) {
+                await redis.set(`pending_folio_store_${cleanPhoneGlobal}`, folio);
+                await redis.expire(`pending_folio_store_${cleanPhoneGlobal}`, 600);
+                await sendWhatsApp(phoneId, buildStoreMenu(folio), cfg);
+                return NextResponse.json({ success: true, note: 'folio_needs_store' });
+            }
+
             const loyverseToken = await redis.get('loyverse_token');
             if (!loyverseToken) {
                 await sendWhatsApp(phoneId, '❌ Error interno: No se pudo conectar con el punto de venta.', cfg);
