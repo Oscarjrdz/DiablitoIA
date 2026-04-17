@@ -182,6 +182,26 @@ export async function POST(req) {
        return NextResponse.json({ success: true });
     }
 
+     // ── 🛡️ GUARDIA: Imagen sin media pero caption con folio → forzar menú de sucursal ──
+     // Si es imagen (con o sin media), y el caption/body contiene un folio,
+     // NO dejar que caiga al activador directo. Forzar el flujo de selección de sucursal.
+     if (isImage && textMsg) {
+         const captionFolioMatch = textMsg.match(FOLIO_EXTRACT) || (FOLIO_REGEX.test(textMsg) ? [textMsg] : null);
+         if (captionFolioMatch) {
+             const captionFolio = (captionFolioMatch[1] || captionFolioMatch[0]).toUpperCase();
+             const alreadyPending = await redis.get(`pending_folio_store_${cleanPhoneGlobal}`);
+             if (!alreadyPending) {
+                 // Solo si el flujo de imagen no lo guardó ya (evita duplicado)
+                 const configStr = await redis.get('wapp_config');
+                 const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
+                 await redis.set(`pending_folio_store_${cleanPhoneGlobal}`, captionFolio);
+                 await redis.expire(`pending_folio_store_${cleanPhoneGlobal}`, 600);
+                 await sendWhatsApp(phoneId, buildStoreMenu(captionFolio), cfg);
+             }
+             return NextResponse.json({ success: true, note: 'image_caption_folio_intercepted' });
+         }
+     }
+
     // ── ⏳ INTERCEPCIÓN DE FOLIO PENDIENTE ──
     const pendingFolio = await redis.get(`pending_folio_store_${cleanPhoneGlobal}`);
     if (pendingFolio && textMsg) {
