@@ -31,6 +31,8 @@ const getRedisClient = () => {
         const serialized = values.map(v => typeof v === 'object' ? JSON.stringify(v) : v);
         return await rawRedis.lpush(key, ...serialized);
       },
+      ltrim: async (key, start, stop) => rawRedis.ltrim(key, start, stop),
+      lrange: async (key, start, stop) => rawRedis.lrange(key, start, stop),
       keys: async (pattern) => rawRedis.keys(pattern),
     };
   }
@@ -51,6 +53,8 @@ const getRedisClient = () => {
     setnx: async () => 1,
     expire: async () => 1,
     lpush: async () => 1,
+    ltrim: async () => 'OK',
+    lrange: async () => [],
     keys: async () => [],
   };
 };
