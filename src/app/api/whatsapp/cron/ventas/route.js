@@ -49,6 +49,24 @@ const WINNER_PHRASES = [
   "🔥 *{nombre}* incendiando *{tienda}* con {tickets} tickets. ¡Que alguien llame a los bomberos!"
 ];
 
+const MANAGER_WINNER_PHRASES = {
+  'sebas semental': [
+    "🔥 *{nombre}* rayó a la competencia como a sus tatuajes, ganando en *{tienda}* con {tickets} tickets. 💉",
+    "🎨 *{nombre}* inyectó tinta y ventas en *{tienda}* con {tickets} tickets. Puro arte. 🤘",
+    "🐉 Con más tickets que tatuajes en su cuerpo, *{nombre}* domina en *{tienda}* con {tickets} ventas. 😎"
+  ],
+  'abraham': [
+    "⚽ ¡Goooooooooool de *{nombre}*! Lidera la tabla a lo Santos Laguna en *{tienda}* con {tickets} tickets. 🟢⚪",
+    "🏆 *{nombre}* defiende la corona en *{tienda}* como guerrero de la Comarca, asegurando {tickets} tickets. 🛡️",
+    "⚔️ Modo 'Santos Laguna' activado. *{nombre}* golea a la competencia con {tickets} tickets en *{tienda}*. ⚽"
+  ],
+  'lidia': [
+    "🙄 La indiscutible, la inalcanzable 'MEJOR EMPLEADA DE LA HISTORIA': *{nombre}* lidera desde *{tienda}* con {tickets} tickets. Pasen a felicitarla. 💅",
+    "✨ Oh salvadora de El Diablito, la 'empleada del siglo' *{nombre}* volvió a aplastar a todos en *{tienda}* con {tickets} tickets. Qué barbaridad. 🙄",
+    "👑 Pónganle tapete rojo a *{nombre}*. La 'mejor del condado' nos honra facturando {tickets} tickets en *{tienda}*. Increíble esfuerzo (nótese el sarcasmo). 😂"
+  ]
+};
+
 const WINNER_GENERIC = [
   "🥇 ¡*{tienda}* lidera con {tickets} tickets! ¡Arriba esa tienda campeona! 💪",
   "👑 ¡La corona del día es para *{tienda}*! {tickets} tickets y nadie les alcanza. ¡Bravo!"
@@ -366,12 +384,20 @@ export async function GET(request) {
         if (activeStores.length > 0) {
             const winner = activeStores[0];
             const winnerManager = getManager(winner.name);
+            const stName = winner.name.replace(/prueba|p-\d+/gi, '').trim();
             let winnerMsg;
             if (winnerManager) {
-                const rndIdx = Math.floor(Math.random() * WINNER_PHRASES.length);
-                winnerMsg = (WINNER_PHRASES[rndIdx] || WINNER_PHRASES[0])
+                const wmLower = winnerManager.toLowerCase();
+                let chosenPhrases = WINNER_PHRASES; // Valeria, César, Paty usan genéricas
+                
+                if (MANAGER_WINNER_PHRASES[wmLower]) {
+                    chosenPhrases = MANAGER_WINNER_PHRASES[wmLower];
+                }
+                
+                const rndIdx = Math.floor(Math.random() * chosenPhrases.length);
+                winnerMsg = (chosenPhrases[rndIdx])
                     .replace(/{nombre}/g, winnerManager)
-                    .replace(/{tienda}/g, winner.name)
+                    .replace(/{tienda}/g, stName)
                     .replace(/{tickets}/g, winner.t);
             } else {
                 const rndIdx = Math.floor(Math.random() * WINNER_GENERIC.length);
