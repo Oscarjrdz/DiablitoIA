@@ -124,8 +124,8 @@ export async function GET(request) {
         // Esto protege contra encargados que olvidan sacar el corte de caja.
         const nowMty = new Date();
         const mtyHour = parseInt(nowMty.toLocaleTimeString('en-US', { timeZone: 'America/Monterrey', hour: '2-digit', hour12: false }));
-        if (mtyHour < 7) {
-            return NextResponse.json({ success: true, reason: 'Fuera de horario operativo (antes de 7 AM MTY) – alertas de inactividad silenciadas' });
+        if (mtyHour >= 2 && mtyHour < 7) {
+            return NextResponse.json({ success: true, reason: 'Fuera de horario operativo (2AM - 7AM MTY) – alertas de inactividad silenciadas' });
         }
 
 
@@ -211,32 +211,54 @@ export async function GET(request) {
         });
 
         let alerts = [];
-        Object.values(ps).forEach(s => {
-            // Solo alertar si la tienda ya abrió (tiene al menos 1 ticket) y NO cerró turno
+        for (const s of Object.values(ps)) {
+            // Regla 2: Ignorar si no ha caído/anunciado su primer ticket del día (gatillo oficial)
+            const firstTicketKey = `first_ticket_v2_${s.id}_${mtyStr}`;
+            const firstTicketSent = await redis.get(firstTicketKey);
+            if (firstTicketSent !== 'SENT') {
+                continue;
+            }
+
+            // Regla 3: Evaluación de inactividad si no ha sido cerrada
             if (s.t > 0 && s.lastTime && !closedStoreIds.has(s.id)) {
                 const diffMs = now.getTime() - s.lastTime.getTime();
                 const diffMins = Math.floor(diffMs / 60000);
                 
                 if (diffMins >= 30) {
+                    // Determinar nivel de alerta (30, 40, 50, 60...)
+                    const alertLevel = Math.floor((diffMins - 30) / 10) * 10 + 30;
+                    
+                    // Memoria dinámica anclada a la hora exacta de *ese* último ticket en particular
+                    const idleKey = `idle_alert_${s.id}_${s.lastTime.getTime()}`;
+                    const lastAlertStr = await redis.get(idleKey);
+                    const lastAlertLevel = lastAlertStr ? parseInt(lastAlertStr) : 0;
+
+                    // Si ya disparamos mensaje para esta banda de minutos (ej. 30 o superior) brincamos
+                    if (lastAlertLevel >= alertLevel) {
+                        continue;
+                    }
+
+                    // Registrar nueva banda para la posteridad y silenciar futuros crones
+                    await redis.setex(idleKey, 86400 * 2, alertLevel.toString());
+
                     const manager = getManager(s.name);
                     let alertText;
                     
                     if (manager) {
-                        // Mensaje personalizado con nombre del encargado
                         const rndIdx = Math.floor(Math.random() * ALERT_WITH_NAME.length);
                         alertText = ALERT_WITH_NAME[rndIdx];
                         alertText = alertText.replace(/{nombre}/g, manager);
                     } else {
-                        // Mensaje genérico sin nombre
                         const rndIdx = Math.floor(Math.random() * ALERT_GENERIC.length);
                         alertText = ALERT_GENERIC[rndIdx];
                     }
                     
-                    alertText = alertText.replace(/{tienda}/g, s.name).replace(/{min}/g, diffMins);
+                    // Mostramos el alertLevel (30, 40) en vez del minútaje crudo (33, 44) para UX psicológica perfecta
+                    alertText = alertText.replace(/{tienda}/g, s.name).replace(/{min}/g, alertLevel);
                     alerts.push(alertText);
                 }
             }
-        });
+        }
 
         if (alerts.length > 0) {
             const finalAlertStr = `🚨 *Hola grupo* 🚨\n\n🔴 *RUTINA DE INACTIVIDAD* 🔴\n\n` + alerts.join('\n\n') + `\n\n⚡ _El Diablito Intelligence_`;
