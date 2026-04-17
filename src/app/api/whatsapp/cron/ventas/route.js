@@ -486,7 +486,7 @@ export async function GET(request) {
             msg += `${prefix} *${stName}*\n`;
             msg += `   🧾 ${s.t} tickets\n`;
             msg += `   ⏱️ Ut: ${ltStr}\n`;
-            msg += `   👤 Regs: ${s.registered}\n\n`;
+            msg += `   👤 Clientes reg.: ${s.registered}\n\n`;
         });
 
         msg += `━━━━━━━━━━━━━━━━━━\n⚡ _El Diablito Intelligence_`;
