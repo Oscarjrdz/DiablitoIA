@@ -458,7 +458,9 @@ export async function GET(request) {
         const randomOpening = OPENING_PHRASES[Math.floor(Math.random() * OPENING_PHRASES.length)] || "🔥 Reporte del día:";
         
         let msg = `${randomOpening}\n\n`;
-        msg += `📅 ${mtyStr} •  ⏰ ${hora} hrs\n\n`;
+        const dispDateRaw = new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Monterrey', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
+        const displayDate = 'Hoy ' + dispDateRaw.charAt(0).toUpperCase() + dispDateRaw.slice(1).replace(',', '');
+        msg += `📅 ${displayDate} •  ⏰ ${hora} hrs\n\n`;
 
         const emojis = ['🥇', '🥈', '🥉', '🏅', '🎖️', '🟢', '🟡'];
         activeStores.forEach((s, i) => {
@@ -497,7 +499,9 @@ export async function GET(request) {
 
         // ── 2. ADMIN MESSAGE (Full financials) ──
         let msgAdmin = `📊 *VENTAS DE HOY (Admin)*\n`;
-        msgAdmin += `📅 ${mtyStr} •  ⏰ ${hora} hrs\n\n`;
+        const dispDateRawAdm = new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Monterrey', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
+        const displayDateAdm = 'Hoy ' + dispDateRawAdm.charAt(0).toUpperCase() + dispDateRawAdm.slice(1).replace(',', '');
+        msgAdmin += `📅 ${displayDateAdm} •  ⏰ ${hora} hrs\n\n`;
         
         activeStores.forEach((s, i) => {
             let ltStr = "N/A";
