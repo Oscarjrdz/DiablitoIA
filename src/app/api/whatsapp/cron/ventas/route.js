@@ -42,34 +42,32 @@ const OPENING_PHRASES = [
   "🎯 ¡Equipo legendario! Les traigo el score de sus *IMPARABLES* ventas. 📊"
 ]; // Las corté para espacio, las he rellenado con algunas representativas, tú ya conoces el array original o si deseas luego puedes volver a pegar las 50.
 
-const WINNER_PHRASES = [
-  "🥇 *{nombre}*, te la rifaste en *{tienda}* con {tickets} tickets. ¡Eres una máquina, sigue así! 💪",
-  "👑 ¡La corona es para *{nombre}* en *{tienda}*! {tickets} tickets y contando. ¡Tiemblen los demás!",
-  "🏆 ¡CAMPEÓN DEL DÍA! *{nombre}* con *{tienda}* lidera con {tickets} tickets. ¡Aplausos! 👏",
-  "🔥 *{nombre}* incendiando *{tienda}* con {tickets} tickets. ¡Que alguien llame a los bomberos!"
-];
-
-const MANAGER_WINNER_PHRASES = {
+const MANAGER_PHRASES = {
   'sebas semental': [
-    "🔥 *{nombre}* rayó a la competencia como a sus tatuajes, ganando en *{tienda}* con {tickets} tickets. 💉",
-    "🎨 *{nombre}* inyectó tinta y ventas en *{tienda}* con {tickets} tickets. Puro arte. 🤘",
-    "🐉 Con más tickets que tatuajes en su cuerpo, *{nombre}* domina en *{tienda}* con {tickets} ventas. 😎"
+    "🔥 *{nombre}* rayando a la competencia como a sus tatuajes en *{tienda}*. (💉 {tickets} tickets)",
+    "🎨 *{nombre}* inyectando tinta y billetes en *{tienda}*. Puro arte. (🤘 {tickets} tickets)",
+    "🐉 Con más tickets que tatuajes, *{nombre}* anda con todo en *{tienda}*. (😎 {tickets} ventas)"
   ],
   'abraham': [
-    "⚽ ¡Goooooooooool de *{nombre}*! Lidera la tabla a lo Santos Laguna en *{tienda}* con {tickets} tickets. 🟢⚪",
-    "🏆 *{nombre}* defiende la corona en *{tienda}* como guerrero de la Comarca, asegurando {tickets} tickets. 🛡️",
-    "⚔️ Modo 'Santos Laguna' activado. *{nombre}* golea a la competencia con {tickets} tickets en *{tienda}*. ⚽"
+    "⚽ ¡Modo ataque de *{nombre}*! Sudando la camiseta a lo Santos Laguna en *{tienda}*. (🟢⚪ {tickets} tickets)",
+    "🛡️ *{nombre}* defendiendo la localía en *{tienda}* como guerrero de la Comarca. (🛡️ {tickets} tickets)",
+    "⚔️ Modo 'Santos Laguna'. *{nombre}* le pone técnica y corazón en *{tienda}*. (⚽ {tickets} tickets)"
   ],
   'lidia': [
-    "🙄 La indiscutible, la inalcanzable 'MEJOR EMPLEADA DE LA HISTORIA': *{nombre}* lidera desde *{tienda}* con {tickets} tickets. Pasen a felicitarla. 💅",
-    "✨ Oh salvadora de El Diablito, la 'empleada del siglo' *{nombre}* volvió a aplastar a todos en *{tienda}* con {tickets} tickets. Qué barbaridad. 🙄",
-    "👑 Pónganle tapete rojo a *{nombre}*. La 'mejor del condado' nos honra facturando {tickets} tickets en *{tienda}*. Increíble esfuerzo (nótese el sarcasmo). 😂"
+    "🙄 La indiscutible 'MEJOR EMPLEADA DE LA HISTORIA': *{nombre}* sigue facturando en *{tienda}*. Pasen a felicitarla. (💅 {tickets} tickets)",
+    "✨ Oh salvadora de El Diablito, la 'empleada del siglo' *{nombre}* se dignó a cobrar en *{tienda}*. Qué barbaridad. (🙄 {tickets} tickets)",
+    "👑 Tapete rojo para *{nombre}*. La 'mejor del condado' nos honró facturando en *{tienda}*. Nótese el sarcasmo. (😂 {tickets} tickets)"
   ]
 };
 
-const WINNER_GENERIC = [
-  "🥇 ¡*{tienda}* lidera con {tickets} tickets! ¡Arriba esa tienda campeona! 💪",
-  "👑 ¡La corona del día es para *{tienda}*! {tickets} tickets y nadie les alcanza. ¡Bravo!"
+const GENERIC_PHRASES = [
+  "💪 ¡Vamos banda! *{nombre}* aportando todo el poder a *{tienda}*. (💥 {tickets} tickets)",
+  "⚡ *{nombre}* dándole con tubo en *{tienda}*. ¡A darle! (🔥 {tickets} tickets)"
+];
+
+const STORE_ONLY_PHRASES = [
+  "🛒 *{tienda}* sumando y sumando al contador global. (🎯 {tickets} tickets)",
+  "🚀 El equipo de *{tienda}* firme en el campo de batalla. (⚔️ {tickets} tickets)"
 ];
 
 // ── Bóveda de 50 Frases Aleatorias (Primer Ticket / Houston) ──
@@ -367,46 +365,32 @@ export async function GET(request) {
         let msg = `${randomOpening}\n\n`;
         msg += `📅 ${mtyStr} •  ⏰ ${hora} hrs\n\n`;
 
-        const emojis = ['🔵', '🟢', '🟡', '🟠', '🟣', '🔴'];
+        const emojis = ['🥇', '🥈', '🥉', '🏅', '🎖️', '🟢', '🟡'];
         activeStores.forEach((s, i) => {
             let ltStr = "N/A";
             if (s.lastTime) {
                 ltStr = s.lastTime.toLocaleTimeString('es-MX', { timeZone: 'America/Monterrey', hour: '2-digit', minute: '2-digit', hour12: false }) + ' hrs';
             }
-            const prefix = i === 0 ? '👑' : emojis[i % emojis.length];
-            msg += `${prefix} *${s.name}*\n`;
-            msg += `   🧾 ${s.t} tickets\n`;
-            msg += `   ⏱️ Ut: ${ltStr}\n`;
-            msg += `   👤 Regs: ${s.registered}\n\n`;
-        });
-
-        // ── Frase personalizada para el GANADOR ──
-        if (activeStores.length > 0) {
-            const winner = activeStores[0];
-            const winnerManager = getManager(winner.name);
-            const stName = winner.name.replace(/prueba|p-\d+/gi, '').trim();
-            let winnerMsg;
-            if (winnerManager) {
-                const wmLower = winnerManager.toLowerCase();
-                let chosenPhrases = WINNER_PHRASES; // Valeria, César, Paty usan genéricas
-                
-                if (MANAGER_WINNER_PHRASES[wmLower]) {
-                    chosenPhrases = MANAGER_WINNER_PHRASES[wmLower];
-                }
-                
-                const rndIdx = Math.floor(Math.random() * chosenPhrases.length);
-                winnerMsg = (chosenPhrases[rndIdx])
-                    .replace(/{nombre}/g, winnerManager)
-                    .replace(/{tienda}/g, stName)
-                    .replace(/{tickets}/g, winner.t);
+            const prefix = emojis[i] || '🔸';
+            const stName = s.name.replace(/prueba|p-\d+/gi, '').trim();
+            const sManager = getManager(s.name);
+            
+            let customComment = '';
+            if (sManager) {
+                const wmLower = sManager.toLowerCase();
+                let arr = GENERIC_PHRASES;
+                if (MANAGER_PHRASES[wmLower]) arr = MANAGER_PHRASES[wmLower];
+                const rnd = Math.floor(Math.random() * arr.length);
+                customComment = arr[rnd].replace(/{nombre}/g, sManager).replace(/{tienda}/g, stName).replace(/{tickets}/g, s.t);
             } else {
-                const rndIdx = Math.floor(Math.random() * WINNER_GENERIC.length);
-                winnerMsg = (WINNER_GENERIC[rndIdx] || WINNER_GENERIC[0])
-                    .replace(/{tienda}/g, winner.name)
-                    .replace(/{tickets}/g, winner.t);
+                const rnd = Math.floor(Math.random() * STORE_ONLY_PHRASES.length);
+                customComment = STORE_ONLY_PHRASES[rnd].replace(/{tienda}/g, stName).replace(/{tickets}/g, s.t);
             }
-            msg += `━━━━━━━━━━━━━━━━━━\n${winnerMsg}\n`;
-        }
+
+            msg += `${prefix} *${stName}*  |  👥 Regs: ${s.registered}\n`;
+            msg += `   ${customComment}\n`;
+            msg += `   ⌚ Última hora: ${ltStr}\n\n`;
+        });
 
         msg += `━━━━━━━━━━━━━━━━━━\n⚡ _El Diablito Intelligence_`;
 
