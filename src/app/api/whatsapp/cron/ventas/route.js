@@ -394,65 +394,8 @@ export async function GET(request) {
 
         // ── INYECCIÓN HOUSTON (FIRST TICKET ALERTS) ──
         const grupoId = await redis.get('ventas_grupo_id');
-        for (const store of activeStores) {
-            const firstTicketKey = `first_ticket_v2_${store.id}_${mtyStr}`;
-            const alreadySent = await redis.get(firstTicketKey);
-            
-            if (!alreadySent && store.firstTime) {
-                // Bloqueamos rápido para evitar reenvíos en ejecuciones paralelas o futuras
-                await redis.setex(firstTicketKey, 86400 * 2, 'SENT'); // 48 hrs 
-                
-                const storeName = store.name.replace(/prueba|p-\d+/gi, '').trim();
-                const rnd = Math.floor(Math.random() * FIRST_TICKET_PHRASES.length);
-                const managerName = getManager(store.name);
-                const focusName = managerName ? `*${storeName}* (con ${managerName})` : `*${storeName}*`;
-                const phrase = FIRST_TICKET_PHRASES[rnd].replace(/\[SUCURSAL\]/g, focusName);
-                
-                const ticketTimeStr = store.firstTime.toLocaleTimeString('es-MX', { timeZone: 'America/Monterrey', hour: '2-digit', minute: '2-digit', hour12: true });
-                let shiftTimeStr = 'Desconocida';
-                let delayAlert = '';
-
-                if (store.shiftOpenedAt) {
-                    shiftTimeStr = store.shiftOpenedAt.toLocaleTimeString('es-MX', { timeZone: 'America/Monterrey', hour: '2-digit', minute: '2-digit', hour12: true });
-                    
-                    const lowerName = storeName.toLowerCase();
-                    const schedKey = Object.keys(STORE_SCHEDULES).find(k => lowerName.includes(k));
-                    
-                    if (schedKey) {
-                        const sched = STORE_SCHEDULES[schedKey];
-                        const sHour = parseInt(store.shiftOpenedAt.toLocaleTimeString('en-US', { timeZone: 'America/Monterrey', hour: 'numeric', hour12: false }));
-                        const sMin = parseInt(store.shiftOpenedAt.toLocaleTimeString('en-US', { timeZone: 'America/Monterrey', minute: 'numeric' }));
-                        
-                        const actualMins = sHour * 60 + sMin;
-                        const expectedMins = sched.h * 60 + sched.m;
-                        const diff = actualMins - expectedMins;
-                        
-                        // Si abrieron más de 5 minutos tarde
-                        if (diff > 5) {
-                            delayAlert = `\n🔴 *¡OJO! Abrieron ${diff} minutos TARDE* (Su horario es a las ${sched.text})`;
-                        } else if (diff < -5) {
-                            delayAlert = `\n🟢 *Abrieron ${Math.abs(diff)} minutos temprano* (Su horario es a las ${sched.text})`;
-                        } else {
-                            delayAlert = `\n✅ *Abrieron súper PUNTUAL* (A las ${sched.text})`;
-                        }
-                    }
-                }
-
-                // Destacar mucho la hora de apertura
-                const msgAlert = `🚨 *ALERTA APERTURA*\n\n`
-                               + `${phrase}\n\n`
-                               + `🕒 *HORA APERTURA TURNO:* ${shiftTimeStr}${delayAlert}\n`
-                               + `🧾 *Primer Ticket:* ${ticketTimeStr}\n\n`
-                               + `⚡ _El Diablito_`;
-                
-                // Manda alerta general al grupo
-                if (grupoId && grupoId.includes('@g.us')) {
-                    await sendWhatsApp(grupoId, msgAlert, cfg);
-                } else {
-                    await sendWhatsApp(OWNER_PHONE, msgAlert, cfg); // Default owner if group missing
-                }
-            }
-        }
+        // ── INYECCIÓN HOUSTON ELIMINADA (ALERTA DE APERTURA) ──
+        // El usuario solicitó eliminar este envío al grupo y a su número.
 
         // ── 1. GROUP MESSAGE (Resumen Global) ──
         const randomOpening = OPENING_PHRASES[Math.floor(Math.random() * OPENING_PHRASES.length)] || "🔥 Reporte del día:";
@@ -508,7 +451,8 @@ export async function GET(request) {
             if (s.lastTime) ltStr = s.lastTime.toLocaleTimeString('es-MX', { timeZone: 'America/Monterrey', hour: '2-digit', minute: '2-digit', hour12: false }) + ' hrs';
             msgAdmin += `${emojis[i % emojis.length]} *${s.name}*\n`;
             msgAdmin += `   💰 ${fmt(s.v)}\n`;
-            msgAdmin += `   🧾 ${s.t} tickets (Ut: ${ltStr})\n\n`;
+            msgAdmin += `   🧾 ${s.t} tickets (Ut: ${ltStr})\n`;
+            msgAdmin += `   👤 Clientes reg.: ${s.registered}\n\n`;
         });
         
         const noSales = stores.filter(s => !ps[s.id] || ps[s.id].v === 0);

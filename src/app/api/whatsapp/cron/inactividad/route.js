@@ -112,6 +112,9 @@ export async function GET(request) {
     }
 
     try {
+        // ALERTA DE INACTIVIDAD DESACTIVADA POR PETICIÓN DEL USUARIO
+        return NextResponse.json({ success: true, reason: 'Inactividad notifications disabled by user request' });
+
         const nowMs = Date.now();
         const lockStr = await redis.get('cron_inactividad_lock');
         if (lockStr && (nowMs - parseInt(lockStr)) < 45000) {

@@ -117,8 +117,12 @@ export async function POST(req) {
     let cleanPhoneGlobal = phoneId ? '52' + phoneId.replace(/\D/g, '').slice(-10) : '';
     let textMsg = textMsgRaw;
 
-    // ── 📸 MANEJO DE IMÁGENES PARA EXTRAER FOLIO ──
-    const isImage = payload.data.type === 'image' || !!payload.data.__raw?.message?.imageMessage;
+    // ── 📸 MANEJO DE IMÁGENES PARA EXTRAER FOLIO (Omitir en grupos) ──
+    const isGroupMsg = (phoneId && phoneId.includes('@g.us')) || 
+                       (payload.data.__raw?.key?.remoteJid && payload.data.__raw.key.remoteJid.includes('@g.us')) ||
+                       (payload.data.key?.remoteJid && payload.data.key.remoteJid.includes('@g.us'));
+
+    const isImage = (payload.data.type === 'image' || !!payload.data.__raw?.message?.imageMessage) && !isGroupMsg;
     // Loguear intento
     if (isImage) {
         await redis.lpush('debug_image_logs', JSON.stringify({ step: 'START', ts: Date.now(), mediaType: typeof payload.data.media, mediaVal: payload.data.media ? payload.data.media.substring(0,50) : null }));

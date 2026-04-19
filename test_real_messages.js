@@ -206,10 +206,11 @@ async function main() {
             }
 
             const msgAlert = `🚨 *ALERTA APERTURA*\n\n${phrase}\n\n🕒 *HORA APERTURA TURNO:* ${shiftTimeStr}${delayAlert}\n🧾 *Primer Ticket:* ${ticketTimeStr}\n\n⚡ _El Diablito_`;
-            console.log(msgAlert);
-            if (grupoId && cfg.wappToken) {
-                await sendWhatsApp(grupoId.replace(/"/g, ''), msgAlert, cfg);
-            }
+            console.log("SIMULADO (DESACTIVADO POR PETICIÓN):", msgAlert);
+            // ALERTA DESACTIVADA A PETICIÓN DEL USUARIO
+            // if (grupoId && cfg.wappToken) {
+            //     await sendWhatsApp(grupoId.replace(/"/g, ''), msgAlert, cfg);
+            // }
         }
     }
     console.log("Completado.");
