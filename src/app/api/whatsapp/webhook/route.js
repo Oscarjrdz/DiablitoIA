@@ -3,7 +3,7 @@ import { redis } from '@/lib/redis';
 import { generateFolio, buildPromoText } from '@/lib/folio';
 
 const FOLIO_REGEX = /^[A-Z]\d{3,4}$/i;
-const FOLIO_EXTRACT = /\b([A-Z]\d{3,4})\b/i;
+const FOLIO_EXTRACT = /([A-Z]\d{3,4})/i;
 
 // ── 🏪 MAPA DE SUCURSALES (fuente única de verdad) ──
 const STORE_MAP = { '1': 'Bosques', '2': 'Valle de Lincoln', '3': 'San Blas', '4': 'Titanio', '5': 'Palmas', '6': 'Cordillera' };
@@ -134,6 +134,7 @@ export async function POST(req) {
            const imgRes = await fetch(payload.data.media);
            await redis.lpush('debug_image_logs', JSON.stringify({ step: 'FETCH_MEDIA', ok: imgRes.ok, status: imgRes.status }));
            if (imgRes.ok) {
+               const mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
                const arrayBuffer = await imgRes.arrayBuffer();
                const base64Image = Buffer.from(arrayBuffer).toString('base64');
                const configStr = await redis.get('wapp_config');
@@ -147,9 +148,9 @@ export async function POST(req) {
                        body: JSON.stringify({
                            contents: [{
                                parts: [
-                                   { text: "Busca un código de 1 letra y 3 o 4 números (ej F666, A1234, X9876). Responde SOLO con el código exacto, o NO_FOLIO si no encuentras ninguno." },
-                                   { inlineData: { mimeType: "image/jpeg", data: base64Image } }
-                               ]
+                                    { text: "Busca un código de 1 letra y 3 o 4 números (ej F666, A1234, X9876). Responde SOLO con el código exacto, o NO_FOLIO si no encuentras ninguno." },
+                                    { inlineData: { mimeType: mimeType, data: base64Image } }
+                                ]
                            }],
                            generationConfig: { maxOutputTokens: 50, temperature: 0 }
                        })
@@ -654,8 +655,22 @@ export async function POST(req) {
         const configStr = await redis.get('wapp_config');
         const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
         const folio = (folioMatch[1] || folioMatch[0]).toUpperCase();
-        // Extraer nombre de sucursal del mensaje (todo después del folio)
-        const storeFromMsg = textMsg.replace(FOLIO_EXTRACT, '').trim();
+        
+        let storeFromMsg = '';
+        const leftover = textMsg.replace(FOLIO_EXTRACT, '').trim();
+        const selNum = leftover.replace(/\D/g, '');
+        if (STORE_MAP[selNum]) {
+            storeFromMsg = STORE_MAP[selNum];
+        } else if (leftover) {
+            for (const [key, name] of Object.entries(STORE_MAP)) {
+                 const shortName = name.split(' ').pop().toUpperCase(); 
+                 if (leftover.includes(shortName) || leftover.includes(name.toUpperCase())) {
+                      storeFromMsg = name;
+                      break;
+                 }
+            }
+        }
+
         let cleanPhone = '52' + phoneId.replace(/\D/g, '').slice(-10);
 
         try {
