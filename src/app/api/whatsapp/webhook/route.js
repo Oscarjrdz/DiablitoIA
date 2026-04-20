@@ -658,13 +658,14 @@ export async function POST(req) {
         
         let storeFromMsg = '';
         const leftover = textMsg.replace(FOLIO_EXTRACT, '').trim();
+        const leftoverUp = leftover.toUpperCase();
         const selNum = leftover.replace(/\D/g, '');
         if (STORE_MAP[selNum]) {
             storeFromMsg = STORE_MAP[selNum];
-        } else if (leftover) {
+        } else if (leftoverUp) {
             for (const [key, name] of Object.entries(STORE_MAP)) {
                  const shortName = name.split(' ').pop().toUpperCase(); 
-                 if (leftover.includes(shortName) || leftover.includes(name.toUpperCase())) {
+                 if (leftoverUp.includes(shortName) || leftoverUp.includes(name.toUpperCase())) {
                       storeFromMsg = name;
                       break;
                  }
