@@ -152,7 +152,7 @@ export async function POST(req) {
                                     { inlineData: { mimeType: mimeType, data: base64Image } }
                                 ]
                            }],
-                           generationConfig: { maxOutputTokens: 50, temperature: 0 }
+                           generationConfig: { maxOutputTokens: 256, temperature: 0, thinkingConfig: { thinkingBudget: 0 } }
                        })
                    });
                    await redis.lpush('debug_image_logs', JSON.stringify({ step: 'GEMINI_RESPONSE', ok: geminiRes.ok, status: geminiRes.status }));
@@ -918,7 +918,7 @@ Ejemplo: "¡Perfecto, ya te he registrado! [REGISTRO_OK:Oscar R|Cirros 102 Col L
             body: JSON.stringify({
                 contents: geminiContents,
                 generationConfig: {
-                    maxOutputTokens: 500,
+                    maxOutputTokens: 1024,
                     temperature: 0.7
                 }
             })
