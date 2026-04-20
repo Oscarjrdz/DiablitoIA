@@ -614,13 +614,13 @@ export async function POST(req) {
                         });
                         if (!searchRes.ok) break;
                         const searchData = await searchRes.json();
-                        const match = (searchData.customers || []).find(c => {
+                        const matches = (searchData.customers || []).filter(c => {
                             if (!c.phone_number) return false;
                             const cand = c.phone_number.replace(/\D/g, '');
                             return cand.endsWith(phone10);
                         });
                         
-                        if (match) {
+                        for (const match of matches) {
                             await fetch(`https://api.loyverse.com/v1.0/customers/${match.id}`, {
                                 method: 'DELETE',
                                 headers: { Authorization: `Bearer ${loyverseToken}` }
