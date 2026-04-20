@@ -142,7 +142,7 @@ export async function POST(req) {
                const aiToken = cfg.aiToken;
                if (aiToken) {
                    await redis.lpush('debug_image_logs', JSON.stringify({ step: 'CALL_GEMINI', len: base64Image.length }));
-                   const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${aiToken}`, {
+                   const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${aiToken}`, {
                        method: 'POST',
                        headers: { 'Content-Type': 'application/json' },
                        body: JSON.stringify({
@@ -912,7 +912,7 @@ Ejemplo: "¡Perfecto, ya te he registrado! [REGISTRO_OK:Oscar R|Cirros 102 Col L
             if (text) geminiContents.push({ role, parts: [{ text }] });
         }
 
-        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${aiToken}`, {
+        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${aiToken}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
