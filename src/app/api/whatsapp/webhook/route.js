@@ -707,7 +707,7 @@ export async function POST(req) {
                 }
             }
 
-            const promoPos = await redis.get(`promo_pos_${cleanPhone}`);
+            const promoPos = await redis.get(`promo_pos_${folioOwner}`);
             if (promoPos === 'canjeado') {
                 await sendWhatsApp(phoneId, '⚠️ Ya canjeaste tu promoción anteriormente.', cfg);
                 return NextResponse.json({ success: true });
