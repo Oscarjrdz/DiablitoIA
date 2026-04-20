@@ -61,11 +61,20 @@ export async function POST(req) {
       };
     }
 
-    const res = await fetch(baseUrl + endpoint, {
+    let res = await fetch(baseUrl + endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(bodyPayload)
     });
+
+    // FALLBACK: Si subida de imagen falla (muy común por IP proxy / WA media bans), reenviar texto
+    if (!res.ok && endpoint === '/messages/image') {
+       res = await fetch(baseUrl + '/messages/chat', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ token: wConfig.wappToken, to: toPhoneUri, body: promoText })
+       });
+    }
 
     if (res.ok) {
       const sendRes = await res.json();
