@@ -22,6 +22,7 @@ export default function ClientsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
   const [extracting, setExtracting] = useState(false);
+  const [welcomeStatus, setWelcomeStatus] = useState({});
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
   const [formData, setFormData] = useState({
@@ -273,6 +274,35 @@ export default function ClientsPage() {
     }
   };
 
+  // ── ENVIAR CUPÓN DE BIENVENIDA MANUALMENTE ──
+  const handleSendWelcome = async (client) => {
+    const phone = client.phone_number;
+    if (!phone) {
+      alert("Este cliente no tiene WhatsApp registrado.");
+      return;
+    }
+    setWelcomeStatus(prev => ({ ...prev, [client.id]: 'sending' }));
+    try {
+      const token = localStorage.getItem('loyverse_api_token');
+      const res = await fetch('/api/loyverse/clients/resend-promo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ phone }) // Al no enviar promoId, el backend usa la de bienvenida automáticamente
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setWelcomeStatus(prev => ({ ...prev, [client.id]: 'success' }));
+        setTimeout(() => setWelcomeStatus(prev => ({ ...prev, [client.id]: null })), 4000);
+      } else {
+        alert(data.error || 'Error al enviar cupón');
+        setWelcomeStatus(prev => ({ ...prev, [client.id]: null }));
+      }
+    } catch (e) {
+      alert('Error de conexión al intentar enviar.');
+      setWelcomeStatus(prev => ({ ...prev, [client.id]: null }));
+    }
+  };
+
   const renderStatusButton = (status) => {
     let color = '#ccc';
     let text = 'N/A';
@@ -315,6 +345,7 @@ export default function ClientsPage() {
                 <SortHeader label="Registro" sortId="fecha" />
                 <th>Cupón</th>
                 <SortHeader label="Sucursal" sortId="tienda" />
+                <th>Regalía</th>
                 <SortHeader label="Calle" sortId="calle" />
                 <SortHeader label="Municipio" sortId="municipio" />
                 <SortHeader label="Visitas" sortId="visitas" />
@@ -347,6 +378,20 @@ export default function ClientsPage() {
                     <td className={styles.nowrap}>{client.created_at ? new Date(client.created_at).toLocaleDateString('es-MX', {day: '2-digit', month: 'short', year: '2-digit'}) : '-'}</td>
                     <td>{client.phone_number ? renderStatusButton(client.cuponStatus) : '-'}</td>
                     <td><span className={styles.badge}>{client.tienda || '-'}</span></td>
+                    <td>
+                      <button 
+                        onClick={() => handleSendWelcome(client)}
+                        disabled={welcomeStatus[client.id] === 'sending'}
+                        style={{
+                          background: welcomeStatus[client.id] === 'success' ? '#10b981' : '#0ea5e9',
+                          color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px',
+                          fontSize: '0.7rem', fontWeight: 700, cursor: welcomeStatus[client.id] === 'sending' ? 'wait' : 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {welcomeStatus[client.id] === 'sending' ? '⏳ Enviando...' : welcomeStatus[client.id] === 'success' ? '✅ Enviado' : '🚀 Cupón Bienv.'}
+                      </button>
+                    </td>
                     <td>{toTitleCase(calle)}</td>
                     <td>{toTitleCase(client.city)}</td>
                     <td>{client.total_visits || 0}</td>
@@ -378,7 +423,7 @@ export default function ClientsPage() {
               })}
               {clients.length === 0 && (
                 <tr>
-                  <td colSpan="13" style={{textAlign: 'center', padding: '1rem'}}>
+                  <td colSpan="14" style={{textAlign: 'center', padding: '1rem'}}>
                     No hay clientes.
                   </td>
                 </tr>
