@@ -534,13 +534,31 @@ export async function POST(req) {
         const configStr = await redis.get('wapp_config');
         const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
         let cleanPhone = '52' + phoneId.replace(/\D/g, '').slice(-10);
+        let phone10 = cleanPhone.slice(-10);
 
         try {
             // 1. Buscar el folio asociado a este teléfono
             const folio = await redis.get(`promo_folio_${cleanPhone}`);
 
-            // 2. Lista de todas las keys a borrar
-            const keysToDelete = [
+            // 2. Traer todas las keys dinámicamente con el wildcard
+            let keysToDelete = [];
+            try {
+                const dynamicKeys = await redis.keys(`*${phone10}*`);
+                if (dynamicKeys && Array.isArray(dynamicKeys)) {
+                    keysToDelete = keysToDelete.concat(dynamicKeys);
+                }
+                if (folio) {
+                    const dynamicFolioKeys = await redis.keys(`*${folio}*`);
+                    if (dynamicFolioKeys && Array.isArray(dynamicFolioKeys)) {
+                        keysToDelete = keysToDelete.concat(dynamicFolioKeys);
+                    }
+                }
+            } catch (err) {
+                console.warn('redis.keys not supported or failed', err);
+            }
+
+            // 2b. Añadir manual list to ensure everything gets deleted even if keys() fails
+            const manualKeys = [
                 `chat_hist_${phoneId}`,
                 `chat_hist_${cleanPhone}@c.us`,
                 `chat_hist_${cleanPhone}`,
@@ -551,11 +569,12 @@ export async function POST(req) {
                 `loyverse_visits_${cleanPhone}`,
                 `client_name_${cleanPhone}`,
                 `client_points_${cleanPhone}`,
+                `client_registered_${cleanPhone}`,
+                `pending_folio_store_${cleanPhone}`
             ];
-
-            // 3. Si tenía folio, borrar todo lo del folio
+            
             if (folio) {
-                keysToDelete.push(
+                manualKeys.push(
                     `folio_owner_${folio}`,
                     `folio_item_name_${folio}`,
                     `folio_valid_date_${folio}`,
@@ -564,27 +583,58 @@ export async function POST(req) {
                     `folio_promo_id_${folio}`
                 );
             }
+            
+            for (let v = 1; v <= 50; v++) { manualKeys.push(`promo_sent_${cleanPhone}_v_${v}`); }
+            for (const s of [100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000]) { manualKeys.push(`promo_sent_${cleanPhone}_s_${s}`); }
 
-            // 4. Buscar y borrar keys de promos enviadas (promo_sent_{phone}_*)
-            // Redis no tiene SCAN directo en ioredis simple, usamos keys conocidas
-            // Intentamos borrar patrones comunes de visitas/gasto
-            for (let v = 1; v <= 50; v++) {
-                keysToDelete.push(`promo_sent_${cleanPhone}_v_${v}`);
-            }
-            for (const s of [100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000]) {
-                keysToDelete.push(`promo_sent_${cleanPhone}_s_${s}`);
-            }
+            // Deduplicar keys
+            keysToDelete = [...new Set([...keysToDelete, ...manualKeys])];
 
             // 5. Ejecutar borrado masivo
             let deleted = 0;
             for (const key of keysToDelete) {
+                if (key.includes('reset_lock_')) continue; // Don't delete any active reset lock
                 const result = await redis.del(key);
-                deleted += result;
+                deleted += result ? 1 : 0;
             }
             // Agregamos un REPELLER de fantasmas (Reset Lock por 5 mins) para bloquear webhooks rezagados de Loyverse
             await redis.setex(`reset_lock_${cleanPhone}`, 15, '1');
 
-            await sendWhatsApp(phoneId, `🔄 *RESET COMPLETO*\n\n✅ Se eliminaron *${deleted}* registros asociados a tu número.\n\n📱 Teléfono: ${cleanPhone}\n${folio ? `🎟️ Folio borrado: ${folio}` : '🎟️ Sin folio previo'}\n\n💡 Ahora puedes empezar de cero. Manda *HOLA* para interactuar.`, cfg);
+            // 6. Eliminar profundamente de Loyverse API
+            const loyverseToken = await redis.get('loyverse_token');
+            if (loyverseToken) {
+                try {
+                    let cursor = null;
+                    let keepSearching = true;
+                    while (keepSearching) {
+                        let url = 'https://api.loyverse.com/v1.0/customers?limit=250';
+                        if (cursor) url += `&cursor=${cursor}`;
+                        const searchRes = await fetch(url, {
+                            headers: { Authorization: `Bearer ${loyverseToken}` }
+                        });
+                        if (!searchRes.ok) break;
+                        const searchData = await searchRes.json();
+                        const match = (searchData.customers || []).find(c => {
+                            if (!c.phone_number) return false;
+                            const cand = c.phone_number.replace(/\D/g, '');
+                            return cand.endsWith(phone10);
+                        });
+                        
+                        if (match) {
+                            await fetch(`https://api.loyverse.com/v1.0/customers/${match.id}`, {
+                                method: 'DELETE',
+                                headers: { Authorization: `Bearer ${loyverseToken}` }
+                            });
+                        }
+                        cursor = searchData.cursor || null;
+                        keepSearching = !!cursor;
+                    }
+                } catch (e) {
+                    console.error('Reset delete customer error in webhook:', e);
+                }
+            }
+
+            await sendWhatsApp(phoneId, `🔄 *RESET TOTAL COMPLETADO*\n\n✅ Se ha eliminado tu cuenta y tu historial completo de la base de datos local y Loyverse.\n\n⚙️ Archivos del sistema borrados: ${deleted}\n📱 Teléfono: ${cleanPhone}\n\n💡 Hemos olvidado todo. Manda *HOLA* para volver a empezar.`, cfg);
 
         } catch (err) {
             console.error('❌ RESET error:', err);
