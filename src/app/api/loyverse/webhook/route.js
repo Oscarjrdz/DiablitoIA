@@ -210,11 +210,24 @@ export async function POST(req) {
                                            caption: promoText
                                         };
                                      }
-                                     const resPromo = await fetch(`https://gatewaywapp-production.up.railway.app/${wappInstance}${endpoint}`, {
+                                     let resPromo = await fetch(`https://gatewaywapp-production.up.railway.app/${wappInstance}${endpoint}`, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify(promoReqBody)
                                      });
+                                     
+                                     // FALLBACK: Si falla la imagen, enviar como texto plano
+                                     if (!resPromo.ok && endpoint === '/messages/image') {
+                                         resPromo = await fetch(`https://gatewaywapp-production.up.railway.app/${wappInstance}/messages/chat`, {
+                                             method: 'POST',
+                                             headers: { 'Content-Type': 'application/json' },
+                                             body: JSON.stringify({
+                                                 token: wappToken,
+                                                 to: rPhone + '@c.us',
+                                                 body: promoText
+                                             })
+                                         });
+                                     }
                                      await resPromo.text().catch(()=>null);
                                      limiteVentas = true; // Activar el candado, no se enviarán más promos iterables este turno
                                   }
@@ -407,11 +420,20 @@ export async function POST(req) {
       };
     }
 
-    const gwRes = await fetch(baseUrl + endpoint, {
+    let gwRes = await fetch(baseUrl + endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(bodyPayload)
     });
+
+    // FALLBACK: Si subida de imagen falla (muy común por IP proxy / WA media bans), reenviar texto
+    if (!gwRes.ok && endpoint === '/messages/image') {
+       gwRes = await fetch(baseUrl + '/messages/chat', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ token: wConfig.wappToken, to: toPhoneUri, body: promoText })
+       });
+    }
 
     if (gwRes.ok) {
       if (welcomePromo.id) { await redis.incr(`promo_sent_count_${welcomePromo.id}`); }
