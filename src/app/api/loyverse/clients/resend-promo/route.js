@@ -4,11 +4,16 @@ import { generateFolio, buildPromoText } from '@/lib/folio';
 
 export async function POST(req) {
   try {
-    const { phone, promoId } = await req.json();
+    const { phone, promoId, customerName } = await req.json();
     if (!phone) return NextResponse.json({ error: 'WhatsApp number missing' }, { status: 400 });
 
     let cleanPhone = phone.replace(/\D/g, '');
     if (!cleanPhone.startsWith('52')) cleanPhone = '52' + cleanPhone;
+
+    let finalCustomerName = customerName || '';
+    if (!finalCustomerName) {
+      finalCustomerName = await redis.get(`client_name_${cleanPhone}`) || '';
+    }
 
     const promosInfo = await redis.get('promotions');
     let promos = typeof promosInfo === 'string' ? JSON.parse(promosInfo) : (promosInfo || []);
@@ -34,7 +39,7 @@ export async function POST(req) {
     // Generate NEW folio for this send
     const folio = generateFolio();
     const { text: promoTextRaw, validDate } = buildPromoText(targetPromo.text, folio, targetPromo.validFrom, targetPromo.validityDuration);
-    const promoText = promoTextRaw.replace(/{nombre_de_cliente}/g, '');
+    const promoText = promoTextRaw.replace(/{nombre_de_cliente}/g, finalCustomerName);
     
     // Si la promo tiene un itemName personalizado, guardar en Redis para el folio
     if (targetPromo.itemName) {

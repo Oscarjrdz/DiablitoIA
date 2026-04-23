@@ -309,7 +309,7 @@ export default function ClientsPage() {
       const res = await fetch('/api/loyverse/clients/resend-promo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ phone, promoId })
+        body: JSON.stringify({ phone, promoId, customerName: client.name })
       });
       const data = await res.json();
       if (res.ok && data.success) {
