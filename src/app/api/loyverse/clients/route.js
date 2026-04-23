@@ -152,7 +152,7 @@ export async function POST(req) {
               reqBody = { 
                 token: wappToken, 
                 to: toPhoneUri, 
-                image: `https://global-sales-prediction.vercel.app/api/promotions/image?ts=${Date.now()}`, 
+                image: `https://global-sales-prediction.vercel.app/api/promotions/image?id=${welcomePromo.id}&ts=${Date.now()}`, 
                 caption: promoText 
               };
             }

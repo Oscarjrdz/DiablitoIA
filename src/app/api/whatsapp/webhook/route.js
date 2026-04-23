@@ -21,7 +21,12 @@ async function getLoyverseStoresContext(storeHint, token) {
     const data = await res.json();
     const hint = storeHint.toUpperCase();
     const allStores = data.stores || [];
-    const targetStore = allStores.find(s => s.name.toUpperCase().includes(hint));
+    const targetStore = allStores.find(s => {
+      const dbName = s.name.toUpperCase();
+      if (dbName.includes(hint)) return true;
+      if (hint.includes('VALLE DE LINCOLN') && dbName.includes('GARCIA')) return true;
+      return false;
+    });
     return targetStore ? { targetStore, allStores } : null;
   } catch { return null; }
 }
@@ -660,12 +665,18 @@ export async function POST(req) {
         const leftover = textMsg.replace(FOLIO_EXTRACT, '').trim();
         const leftoverUp = leftover.toUpperCase();
         const selNum = leftover.replace(/\D/g, '');
-        if (STORE_MAP[selNum]) {
+        
+        // Exact dictionary match check first:
+        let exactMatch = Object.values(STORE_MAP).find(v => leftoverUp.includes(v.toUpperCase()));
+        
+        if (exactMatch) {
+            storeFromMsg = exactMatch;
+        } else if (STORE_MAP[selNum]) {
             storeFromMsg = STORE_MAP[selNum];
         } else if (leftoverUp) {
             for (const [key, name] of Object.entries(STORE_MAP)) {
                  const shortName = name.split(' ').pop().toUpperCase(); 
-                 if (leftoverUp.includes(shortName) || leftoverUp.includes(name.toUpperCase())) {
+                 if (leftoverUp.includes(shortName)) {
                       storeFromMsg = name;
                       break;
                  }
@@ -1029,7 +1040,7 @@ Ejemplo: "¡Perfecto, ya te he registrado! [REGISTRO_OK:Oscar R|Cirros 102 Col L
                                                                     
                                                                     if (welcomePromo.image) {
                                                                         endpoint = '/messages/image';
-                                                                        wBody = { token: cfg.wappToken, to: cleanPhone + '@c.us', image: `https://global-sales-prediction.vercel.app/api/promotions/image?ts=${Date.now()}`, caption: promoText };
+                                                                        wBody = { token: cfg.wappToken, to: cleanPhone + '@c.us', image: `https://global-sales-prediction.vercel.app/api/promotions/image?id=${welcomePromo.id}&ts=${Date.now()}`, caption: promoText };
                                                                     }
                                                                     
                                                                     const gwRes = await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}${endpoint}`, {
