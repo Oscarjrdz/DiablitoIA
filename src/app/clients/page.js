@@ -18,11 +18,14 @@ const formatPhone10 = (raw) => {
 export default function ClientsPage() {
   const [clients, setClients] = useState([]);
   const [stores, setStores] = useState([]);
+  const [promos, setPromos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
   const [extracting, setExtracting] = useState(false);
   const [welcomeStatus, setWelcomeStatus] = useState({});
+  const [selectedPromo, setSelectedPromo] = useState({});
+  const [openDropdown, setOpenDropdown] = useState(null);
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
   const [formData, setFormData] = useState({
@@ -71,9 +74,22 @@ export default function ClientsPage() {
     }
   };
 
+  const fetchPromos = async () => {
+    try {
+      const res = await fetch('/api/promotions');
+      const data = await res.json();
+      if (data.success) {
+        setPromos(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching promos:', error);
+    }
+  };
+
   useEffect(() => {
     fetchClients();
     fetchStores();
+    fetchPromos();
   }, []);
 
   // ── Sorting ──
@@ -274,25 +290,34 @@ export default function ClientsPage() {
     }
   };
 
-  // ── ENVIAR CUPÓN DE BIENVENIDA MANUALMENTE ──
-  const handleSendWelcome = async (client) => {
+  // ── ENVIAR CUPÓN SELECCIONADO AL CLIENTE ──
+  const handleSendPromo = async (client) => {
     const phone = client.phone_number;
     if (!phone) {
       alert("Este cliente no tiene WhatsApp registrado.");
       return;
     }
+    const promoId = selectedPromo[client.id];
+    if (!promoId) {
+      alert("Selecciona un cupón antes de enviar.");
+      return;
+    }
     setWelcomeStatus(prev => ({ ...prev, [client.id]: 'sending' }));
+    setOpenDropdown(null);
     try {
       const token = localStorage.getItem('loyverse_api_token');
       const res = await fetch('/api/loyverse/clients/resend-promo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ phone }) // Al no enviar promoId, el backend usa la de bienvenida automáticamente
+        body: JSON.stringify({ phone, promoId })
       });
       const data = await res.json();
       if (res.ok && data.success) {
         setWelcomeStatus(prev => ({ ...prev, [client.id]: 'success' }));
-        setTimeout(() => setWelcomeStatus(prev => ({ ...prev, [client.id]: null })), 4000);
+        setTimeout(() => {
+          setWelcomeStatus(prev => ({ ...prev, [client.id]: null }));
+          setSelectedPromo(prev => ({ ...prev, [client.id]: '' }));
+        }, 4000);
       } else {
         alert(data.error || 'Error al enviar cupón');
         setWelcomeStatus(prev => ({ ...prev, [client.id]: null }));
@@ -379,18 +404,81 @@ export default function ClientsPage() {
                     <td>{client.phone_number ? renderStatusButton(client.cuponStatus) : '-'}</td>
                     <td><span className={styles.badge}>{client.tienda || '-'}</span></td>
                     <td>
-                      <button 
-                        onClick={() => handleSendWelcome(client)}
-                        disabled={welcomeStatus[client.id] === 'sending'}
-                        style={{
-                          background: welcomeStatus[client.id] === 'success' ? '#10b981' : '#0ea5e9',
-                          color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px',
-                          fontSize: '0.7rem', fontWeight: 700, cursor: welcomeStatus[client.id] === 'sending' ? 'wait' : 'pointer',
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        {welcomeStatus[client.id] === 'sending' ? '⏳ Enviando...' : welcomeStatus[client.id] === 'success' ? '✅ Enviado' : '🚀 Cupón Bienv.'}
-                      </button>
+                      {welcomeStatus[client.id] === 'sending' ? (
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#f59e0b', whiteSpace: 'nowrap' }}>⏳ Enviando...</span>
+                      ) : welcomeStatus[client.id] === 'success' ? (
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#10b981', whiteSpace: 'nowrap' }}>✅ Enviado</span>
+                      ) : (
+                        <div style={{ position: 'relative', minWidth: '120px' }}>
+                          <button
+                            onClick={() => setOpenDropdown(openDropdown === client.id ? null : client.id)}
+                            style={{
+                              background: selectedPromo[client.id] ? '#0ea5e9' : '#334155',
+                              color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px',
+                              fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer',
+                              whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px', width: '100%',
+                              justifyContent: 'space-between'
+                            }}
+                          >
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '90px' }}>
+                              {selectedPromo[client.id]
+                                ? (promos.find(p => p.id === selectedPromo[client.id])?.itemName || 'Cupón')
+                                : '🎟️ Seleccionar'}
+                            </span>
+                            <span style={{ fontSize: '0.6rem' }}>▼</span>
+                          </button>
+                          {openDropdown === client.id && (
+                            <div style={{
+                              position: 'absolute', top: '100%', left: 0, zIndex: 50,
+                              background: '#1e293b', borderRadius: '8px', marginTop: '4px',
+                              boxShadow: '0 10px 25px rgba(0,0,0,0.3)', minWidth: '200px',
+                              border: '1px solid #334155', overflow: 'hidden'
+                            }}>
+                              {promos.length === 0 ? (
+                                <div style={{ padding: '10px 14px', color: '#94a3b8', fontSize: '0.75rem' }}>No hay promos activas</div>
+                              ) : promos.map(p => (
+                                <div
+                                  key={p.id}
+                                  onClick={() => {
+                                    setSelectedPromo(prev => ({ ...prev, [client.id]: p.id }));
+                                    setOpenDropdown(null);
+                                  }}
+                                  style={{
+                                    padding: '8px 14px', cursor: 'pointer', fontSize: '0.75rem',
+                                    color: selectedPromo[client.id] === p.id ? '#38bdf8' : '#e2e8f0',
+                                    background: selectedPromo[client.id] === p.id ? '#0f172a' : 'transparent',
+                                    borderBottom: '1px solid #334155',
+                                    display: 'flex', alignItems: 'center', gap: '8px',
+                                    transition: 'background 0.15s'
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.background = '#334155'}
+                                  onMouseLeave={e => e.currentTarget.style.background = selectedPromo[client.id] === p.id ? '#0f172a' : 'transparent'}
+                                >
+                                  <span>{p.isWelcomePromo ? '👋' : '🎁'}</span>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.itemName || 'Sin nombre'}</div>
+                                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>Vigencia: {p.validityDuration || 1} día(s)</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {selectedPromo[client.id] && (
+                            <button
+                              onClick={() => handleSendPromo(client)}
+                              style={{
+                                marginTop: '4px', width: '100%',
+                                background: '#10b981', color: '#fff', border: 'none',
+                                padding: '4px 8px', borderRadius: '4px',
+                                fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              📤 Enviar Cupón
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td>{toTitleCase(calle)}</td>
                     <td>{toTitleCase(client.city)}</td>
