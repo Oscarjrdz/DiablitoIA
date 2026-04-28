@@ -2,7 +2,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Settings, TrendingUp, Store, Smartphone, Users, Bot, Megaphone, TicketCheck } from 'lucide-react';
+import { LayoutDashboard, Settings, TrendingUp, Store, Smartphone, Users, Bot, Megaphone, TicketCheck, Receipt } from 'lucide-react';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -12,6 +12,7 @@ export default function Sidebar() {
     { label: 'Chat Web', icon: Smartphone, href: '/chat' },
     { label: 'Promociones', icon: Megaphone, href: '/promociones' },
     { label: 'Redimidos', icon: TicketCheck, href: '/redimidos' },
+    { label: 'Gastos', icon: Receipt, href: '/gastos' },
     { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
     { label: 'Predictions', icon: TrendingUp, href: '/predictions' },
     { label: 'Bot IA', icon: Bot, href: '/bot' },
