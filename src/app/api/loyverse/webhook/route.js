@@ -118,22 +118,22 @@ export async function POST(req) {
                              
                             const nameToUse = custData.name || 'Cliente';
                             const points = custData.total_points || 0;
-                            const msgText = `Hola ${nameToUse} Gracias por visitar el diablito ${sObj.name} tienes acumulados hasta ahora ${points} puntos, te esperamos pronto.`;
-                            
-                            const reqBody = {
-                               number: rPhone,
-                               options: { delay: 1200, presence: "composing" },
-                               textMessage: { text: msgText }
-                            };
-                            
+
+                            const skuPromoRegex = /^[A-Z]\d{4}$/i;
+                            const itemLines = (receipt.line_items || [])
+                               .filter(li => !li.sku || !skuPromoRegex.test(li.sku))
+                               .map(li => {
+                                  const qty = li.quantity && li.quantity > 1 ? `${li.quantity}x ` : '';
+                                  return `• ${qty}${li.item_name || 'Producto'}`;
+                               });
+                            const itemsText = itemLines.length > 0 ? itemLines.join('\n') : 'tu pedido';
+                            const msgText = `Hola ${nameToUse}, gracias por tu visita, esperamos que disfrutes de:\n${itemsText}\n\nRecuerda que entre mas compres mas puntos acumulas, hasta ahora tienes *${points} puntos*.`;
+
                             try {
-                               await fetch(`https://gatewaywapp-production.up.railway.app/${wappInstance}/message/sendText`, {
+                               await fetch(`https://gatewaywapp-production.up.railway.app/${wappInstance}/messages/chat`, {
                                   method: 'POST',
-                                  headers: {
-                                     'Content-Type': 'application/json',
-                                     'apikey': wappToken
-                                  },
-                                  body: JSON.stringify(reqBody)
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ token: wappToken, to: rPhone + '@c.us', body: msgText })
                                });
 
                                // ---- TRIGGER PROMOTIONS ENGINE ----
