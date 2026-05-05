@@ -11,12 +11,20 @@ export async function GET(req) {
 
     const headers = { 'Authorization': token };
     
-    const res = await fetch(`${LOYVERSE_API_URL}?limit=250`, { headers });
-    if (!res.ok) throw new Error('Failed to fetch customers');
-    
-    const data = await res.json();
-    
-    const customers = await Promise.all((data.customers || []).map(async (c) => {
+    let allCustomers = [];
+    let cursor = null;
+    do {
+      const url = cursor
+        ? `${LOYVERSE_API_URL}?limit=250&cursor=${encodeURIComponent(cursor)}`
+        : `${LOYVERSE_API_URL}?limit=250`;
+      const res = await fetch(url, { headers });
+      if (!res.ok) throw new Error('Failed to fetch customers');
+      const data = await res.json();
+      allCustomers = allCustomers.concat(data.customers || []);
+      cursor = data.cursor || null;
+    } while (cursor);
+
+    const customers = await Promise.all(allCustomers.map(async (c) => {
       let tienda = '';
       if (c.note && c.note.includes('Tienda:')) {
         const match = c.note.match(/Tienda:\s*(.+)(?:\n|$)/);

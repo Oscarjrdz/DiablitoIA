@@ -28,6 +28,8 @@ export default function ClientsPage() {
   const [openDropdown, setOpenDropdown] = useState(null);
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 50;
   const [formData, setFormData] = useState({
     nombre: '',
     whatsapp: '',
@@ -100,6 +102,7 @@ export default function ClientsPage() {
       setSortKey(key);
       setSortDir('asc');
     }
+    setCurrentPage(1);
   };
 
   const getSortIndicator = (key) => {
@@ -158,6 +161,9 @@ export default function ClientsPage() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
   }, [clients, sortKey, sortDir]);
+
+  const totalPages = Math.ceil(sortedClients.length / PAGE_SIZE);
+  const pagedClients = sortedClients.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -381,19 +387,11 @@ export default function ClientsPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedClients.map(client => {
+              {pagedClients.map(client => {
                 let calle = '';
-                let num = '';
-                let col = '';
                 if (client.address) {
                   const parts = client.address.split(',').map(s => s.trim());
-                  if (parts.length >= 3) {
-                    calle = parts[0];
-                    num = parts[1];
-                    col = parts.slice(2).join(', ');
-                  } else {
-                    calle = client.address;
-                  }
+                  calle = parts[0] || client.address;
                 }
                 
                 return (
@@ -518,6 +516,28 @@ export default function ClientsPage() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!loading && totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', padding: '1rem 0', marginTop: '0.5rem' }}>
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: currentPage === 1 ? '#334155' : '#0ea5e9', color: '#fff', fontWeight: 700, cursor: currentPage === 1 ? 'default' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1 }}
+          >
+            ← Anterior
+          </button>
+          <span style={{ color: '#94a3b8', fontSize: '0.9rem', fontWeight: 600 }}>
+            Página {currentPage} de {totalPages}
+          </span>
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: currentPage === totalPages ? '#334155' : '#0ea5e9', color: '#fff', fontWeight: 700, cursor: currentPage === totalPages ? 'default' : 'pointer', opacity: currentPage === totalPages ? 0.4 : 1 }}
+          >
+            Siguiente →
+          </button>
         </div>
       )}
 
