@@ -6,6 +6,8 @@ import Link from 'next/link';
 export default function RedimidosPage() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   const fetchLogs = async () => {
     try {
@@ -34,7 +36,7 @@ export default function RedimidosPage() {
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <h1>Cupones Redimidos</h1>
+        <h1>Cupones Redimidos <span style={{fontSize: '1.1rem', fontWeight: 400, color: '#94a3b8', marginLeft: '8px'}}>({logs.length})</span></h1>
         <div style={{display: 'flex', gap: '10px'}}>
            <Link href="/promociones">
               <button className={styles.createBtn} style={{background: '#64748b'}}>Regresar a Promociones</button>
@@ -62,7 +64,7 @@ export default function RedimidosPage() {
               </tr>
             </thead>
             <tbody>
-              {logs.map((log) => {
+              {logs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map((log) => {
                 const dateObj = new Date(log.receiptDate);
                 const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString();
 
@@ -89,6 +91,28 @@ export default function RedimidosPage() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!loading && Math.ceil(logs.length / PAGE_SIZE) > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', padding: '1rem 0', marginTop: '0.5rem' }}>
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: currentPage === 1 ? '#334155' : '#0ea5e9', color: '#fff', fontWeight: 700, cursor: currentPage === 1 ? 'default' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1 }}
+          >
+            ← Anterior
+          </button>
+          <span style={{ color: '#94a3b8', fontSize: '0.9rem', fontWeight: 600 }}>
+            Página {currentPage} de {Math.ceil(logs.length / PAGE_SIZE)}
+          </span>
+          <button
+            onClick={() => setCurrentPage(p => Math.min(Math.ceil(logs.length / PAGE_SIZE), p + 1))}
+            disabled={currentPage === Math.ceil(logs.length / PAGE_SIZE)}
+            style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: currentPage === Math.ceil(logs.length / PAGE_SIZE) ? '#334155' : '#0ea5e9', color: '#fff', fontWeight: 700, cursor: currentPage === Math.ceil(logs.length / PAGE_SIZE) ? 'default' : 'pointer', opacity: currentPage === Math.ceil(logs.length / PAGE_SIZE) ? 0.4 : 1 }}
+          >
+            Siguiente →
+          </button>
         </div>
       )}
     </div>
