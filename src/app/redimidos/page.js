@@ -76,7 +76,7 @@ export default function RedimidosPage() {
                     <td><span className={styles.badge} style={{background: '#10b981'}}>{log.storeName}</span></td>
                     <td>{log.cashierName}</td>
                     <td>{log.receiptNumber}</td>
-                    <td style={{fontWeight: 'bold', color: '#0f172a'}}>${Number(log.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                    <td style={{fontWeight: 'bold', color: '#ffffff'}}>${Number(log.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 );
               })}
