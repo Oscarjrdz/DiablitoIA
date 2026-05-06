@@ -639,15 +639,19 @@ export default function ChatPage() {
                 </div>
                 {editingField === 'store' ? (
                   <div className={styles.infoEditRow}>
-                    <input
+                    <select
                       className={styles.infoEditInput}
                       value={editStore}
                       onChange={e => setEditStore(e.target.value)}
-                      placeholder="Nombre de sucursal"
                       autoFocus
-                    />
+                    >
+                      <option value="">— Seleccionar sucursal —</option>
+                      {stores.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
                     <div className={styles.infoEditActions}>
-                      <button className={styles.infoSaveBtn} onClick={() => saveClientField('store')} disabled={savingField}>
+                      <button className={styles.infoSaveBtn} onClick={() => saveClientField('store')} disabled={savingField || !editStore}>
                         {savingField ? '...' : 'Guardar'}
                       </button>
                       <button className={styles.infoCancelBtn} onClick={() => setEditingField(null)}>Cancelar</button>
