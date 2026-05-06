@@ -75,6 +75,41 @@
 }
 .searchInput::placeholder { color: #8696a0; }
 
+/* ── Filtro de sucursales ── */
+.storeFilterBar {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  background: #111b21;
+  border-bottom: 1px solid #1f2c34;
+  scrollbar-width: none;
+}
+.storeFilterBar::-webkit-scrollbar { display: none; }
+
+.storeChip {
+  flex-shrink: 0;
+  background: #2a3942;
+  color: #aebac1;
+  border: none;
+  border-radius: 16px;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.storeChip:hover { background: #374045; color: #e9edef; }
+.storeChipActive {
+  background: #00a884;
+  color: #111b21;
+  font-weight: 700;
+}
+.storeChipActive:hover { background: #06cf9c; }
+
 /* Chat list */
 .chatList {
   flex: 1;

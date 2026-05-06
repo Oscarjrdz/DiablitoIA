@@ -110,6 +110,7 @@ export default function ChatPage() {
   const [toast, setToast] = useState(null);
   const [clientCard, setClientCard] = useState(null);
   const [loadingCard, setLoadingCard] = useState(false);
+  const [storeFilter, setStoreFilter] = useState('');  // '' = todos
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -311,10 +312,15 @@ export default function ChatPage() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
-  // ── Filtrar chats ──
-  const filtered = search
-    ? chats.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search))
-    : chats;
+  // ── Lista de sucursales únicas (de los chats cargados) ──
+  const stores = [...new Set(chats.map(c => c.store).filter(Boolean))].sort();
+
+  // ── Filtrar chats por búsqueda y/o sucursal ──
+  const filtered = chats.filter(c => {
+    const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
+    const matchStore = !storeFilter || c.store === storeFilter;
+    return matchSearch && matchStore;
+  });
 
   // ── Inyectar separadores de fecha en mensajes ──
   const msgsWithSeps = [];
@@ -367,9 +373,32 @@ export default function ChatPage() {
           </div>
         </div>
 
+        {/* ── Filtro por sucursal ── */}
+        {stores.length > 0 && (
+          <div className={styles.storeFilterBar}>
+            <button
+              className={`${styles.storeChip} ${storeFilter === '' ? styles.storeChipActive : ''}`}
+              onClick={() => setStoreFilter('')}
+            >
+              Todas
+            </button>
+            {stores.map(s => (
+              <button
+                key={s}
+                className={`${styles.storeChip} ${storeFilter === s ? styles.storeChipActive : ''}`}
+                onClick={() => setStoreFilter(prev => prev === s ? '' : s)}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className={styles.chatList}>
           {loadingChats && <p className={styles.tip}>Cargando chats...</p>}
-          {!loadingChats && filtered.length === 0 && <p className={styles.tip}>Sin chats aún</p>}
+          {!loadingChats && filtered.length === 0 && (
+            <p className={styles.tip}>{storeFilter ? `Sin chats en ${storeFilter}` : 'Sin chats aún'}</p>
+          )}
           {filtered.map(chat => (
             <div
               key={chat.phone}
