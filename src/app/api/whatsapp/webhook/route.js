@@ -1147,7 +1147,8 @@ NUNCA omitas la opción de Pedido a Domicilio y SIEMPRE debe ser la primera de l
                 if (regMatch) {
                     const cleanReply = reply.replace(/\[REGISTRO_OK:[^\]]+\]/, '').trim();
                     // Actualizar el último entry del historial sin el tag
-                    parsed[parsed.length - 1] = { role: 'model', parts: [{ text: cleanReply }] };
+                    const prevEntry = parsed[parsed.length - 1];
+                    parsed[parsed.length - 1] = { role: 'model', parts: [{ text: cleanReply, ts: prevEntry?.parts?.[0]?.ts || Date.now() }] };
                     await redis.set(historyKey, JSON.stringify(parsed));
                     await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
                     await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
