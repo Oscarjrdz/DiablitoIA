@@ -1048,8 +1048,8 @@ export async function POST(req) {
             // Cliente nuevo: invitar a registrarse
             await sendWhatsApp(phoneId, '¡Hola! 👋🍔 Bienvenido a *El Diablito Boneless & Burgers*', cfg);
             await new Promise(r => setTimeout(r, 800));
-            await sendWhatsApp(phoneId, 'Veo que en nuestro sistema aún no está registrado tu *nombre* y tu *número*. Para comenzar debes registrarte y además recibes una *🍔 BURGER GRATIS* 🎁\n\nSolo necesito tu *nombre* y *dirección* (calle, número, colonia, municipio).', cfg);
-            parsed.push({ role: 'model', parts: [{ text: 'Hola! Bienvenido al Diablito. Veo que en nuestro sistema aún no está registrado tu nombre y tu número. Para comenzar debes registrarte y además recibes una burger gratis. Solo necesito tu nombre y dirección.', ts: Date.now() }] });
+            await sendWhatsApp(phoneId, 'Veo que en nuestro sistema aún no estás registrado. Para comenzar debes registrarte y además recibes una *🍔 BURGER GRATIS* 🎁\n\nSolo necesito tu *nombre apellido* y *dirección* (calle, número, colonia, municipio).', cfg);
+            parsed.push({ role: 'model', parts: [{ text: 'Hola! Bienvenido al Diablito. Veo que en nuestro sistema aún no estás registrado. Para comenzar debes registrarte y además recibes una burger gratis. Solo necesito tu nombre apellido y tu dirección.', ts: Date.now() }] });
             await redis.set(historyKey, JSON.stringify(parsed));
             await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
             await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
