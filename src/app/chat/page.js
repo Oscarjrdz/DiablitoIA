@@ -61,9 +61,9 @@ function Ticks({ status }) {
   );
 }
 
-// ── Formato de tiempo relativo (lista) ──
+// ── Formato de tiempo relativo (lista de chats) ──
 function relTime(ts) {
-  if (!ts) return '';
+  if (!ts) return 'Reciente';
   const now = new Date(), d = new Date(ts);
   const toStr = x => x.toLocaleDateString('en-CA', { timeZone: 'America/Monterrey' });
   const nowS = toStr(now), dS = toStr(d);
@@ -272,9 +272,21 @@ export default function ChatPage() {
   // ── Inyectar separadores de fecha en mensajes ──
   const msgsWithSeps = [];
   let lastLabel = null;
+  let addedUndated = false;
   for (const m of messages) {
+    if (!m.ts) {
+      if (!addedUndated) {
+        msgsWithSeps.push({ _sep: true, label: 'Mensajes anteriores' });
+        addedUndated = true;
+      }
+      msgsWithSeps.push(m);
+      continue;
+    }
     const label = dayLabel(m.ts);
-    if (label && label !== lastLabel) { msgsWithSeps.push({ _sep: true, label }); lastLabel = label; }
+    if (label && label !== lastLabel) {
+      msgsWithSeps.push({ _sep: true, label });
+      lastLabel = label;
+    }
     msgsWithSeps.push(m);
   }
 
