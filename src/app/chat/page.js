@@ -554,7 +554,9 @@ export default function ChatPage() {
               className={`${styles.chatItem} ${activeChat?.phone === chat.phone ? styles.chatActive : ''}`}
               onClick={() => openChat(chat)}
             >
-              <Avatar name={chat.name} phone={chat.phone} size={49} picUrl={profilePics[chat.phone]} />
+              <div className={chat.deliveryMode ? styles.deliveryRing : undefined}>
+                <Avatar name={chat.name} phone={chat.phone} size={49} picUrl={profilePics[chat.phone]} />
+              </div>
               <div className={styles.chatMeta}>
                 <div className={styles.chatRow1}>
                   <span className={styles.chatName}>{chat.name}</span>

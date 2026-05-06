@@ -962,6 +962,17 @@ export async function POST(req) {
     // Reset human-read flag so the chat shows as "needs attention" again
     await redis.del(`human_read_${cleanPhone}`);
 
+    // ── 🛵 DELIVERY MODE: Si está activo, guardar mensaje pero NO responder ──
+    const deliveryActive = await redis.get(`delivery_mode_${cleanPhone}`);
+    if (deliveryActive) {
+        if (parsed.length > 40) parsed = parsed.slice(-40);
+        await redis.set(historyKey, JSON.stringify(parsed));
+        await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
+        await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+        console.log(`[Bot] Delivery mode activo para ${cleanPhone} - mensaje guardado, bot silenciado`);
+        return NextResponse.json({ success: true, note: 'delivery_mode_silent' });
+    }
+
     if (parsed.length > 40) {
         parsed = parsed.slice(-40);
     }
@@ -1069,7 +1080,7 @@ Su número es: ${clientPhone10}. (No pidas su número).
 NUNCA le ofrezcas registrarse de nuevo ni le ofrezcas el Cupón de Bienvenida (ya lo usó).
 
 INTERACCIÓN FRECUENTE (MENÚ PRINCIPAL):
-1) Pedido a Domicilio: Si el cliente selecciona la opción 1 o pide un pedido a domicilio, pregúntale qué productos/delicias se le antojan hoy.${clientAddress ? ` Además, confírmale su dirección guardada diciéndole: "¿Te lo enviamos a *${clientAddress}*? 📍". Si el cliente dice que sí o no corrige, usa esa dirección.` : ' Como no tiene dirección guardada, también pídele su dirección de entrega.'} NO menciones que un asesor confirmará el pedido.
+1) Pedido a Domicilio: Si el cliente selecciona la opción 1 o pide un pedido a domicilio, pregúntale qué productos/delicias se le antojan hoy.${clientAddress ? ` Además, confírmale su dirección guardada diciéndole: "¿Te lo enviamos a *${clientAddress}*? 📍". Si el cliente dice que sí o no corrige, usa esa dirección.` : ' Como no tiene dirección guardada, también pídele su dirección de entrega.'} NO menciones que un asesor confirmará el pedido. IMPORTANTE: Cuando respondas a un pedido a domicilio, SIEMPRE agrega al final de tu mensaje la etiqueta invisible [DOMICILIO_OK].
 2) Revisar Puntos: Si el cliente selecciona la opción 2 o pregunta por sus puntos, confírmale amablemente que tiene exactamente "${clientPoints} puntos" e infórmale que puede canjearlos como dinero o descuentos al comprar en sucursal.
 3) Editar Datos: Si el cliente selecciona la opción 3 o pide cambiar su domicilio, pregúntale cuál será su nueva dirección y su nombre, y actualízalo usando la etiqueta secreta de actualización.
 
@@ -1157,13 +1168,19 @@ NUNCA omitas la opción de Pedido a Domicilio y SIEMPRE debe ser la primera de l
             const reply = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
             if (reply) {
-                // Limpiar tag antes de enviar al usuario
-                const cleanReply = reply.replace(/\[REGISTRO_OK:[^\]]*\]/g, '').trim();
+                // Limpiar tags antes de enviar al usuario
+                let cleanReply = reply.replace(/\[REGISTRO_OK:[^\]]*\]/g, '').replace(/\[DOMICILIO_OK\]/g, '').trim();
                 parsed.push({ role: 'model', parts: [{ text: cleanReply, ts: Date.now() }] });
                 await redis.set(historyKey, JSON.stringify(parsed));
                 await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
                 await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
                 await sendWhatsApp(phoneId, cleanReply, cfg);
+
+                // ── 🛵 DELIVERY MODE: Detectar tag [DOMICILIO_OK] → silenciar bot 1 hora ──
+                if (reply.includes('[DOMICILIO_OK]')) {
+                    await redis.setex(`delivery_mode_${cleanPhone}`, 3600, '1');
+                    console.log(`[Bot] Delivery mode activado para ${cleanPhone} (1 hora)`);
+                }
 
                 // ── 📋 AUTO-REGISTRO / ACTUALIZACIÓN: Detectar tag [REGISTRO_OK] en la respuesta del bot ──
                 const alreadyRegistered = await redis.get(`client_registered_${cleanPhone}`);
