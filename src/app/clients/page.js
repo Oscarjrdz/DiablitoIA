@@ -30,6 +30,9 @@ export default function ClientsPage() {
   const [sortDir, setSortDir] = useState('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 50;
+  const [clientToDelete, setClientToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [toast, setToast] = useState(null); // { msg, type: 'success'|'error' }
   const [formData, setFormData] = useState({
     nombre: '',
     whatsapp: '',
@@ -270,29 +273,38 @@ export default function ClientsPage() {
     }
   };
 
-  // ── BORRADO TOTAL: Elimina cliente de Loyverse + toda su data en Redis ──
-  const handleNukeClient = async (client) => {
-    const phone = client.phone_number;
-    const clientName = toTitleCase(client.name) || 'este cliente';
-    
-    if (!confirm(`⚠️ ¿Borrar COMPLETAMENTE a ${clientName}?\n\nEsto eliminará:\n• Su perfil de Loyverse\n• Su historial de chat\n• Sus cupones y folios\n• Todo rastro en el sistema\n\n¡Esta acción NO se puede deshacer!`)) return;
-    
+  // ── Toast helper ──
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  // ── Abre el modal de confirmación ──
+  const handleNukeClient = (client) => setClientToDelete(client);
+
+  // ── Ejecuta el borrado tras confirmar ──
+  const confirmDelete = async () => {
+    if (!clientToDelete) return;
+    setDeleting(true);
     const token = localStorage.getItem('loyverse_api_token');
     try {
       const res = await fetch('/api/loyverse/clients/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ phone: phone || '', id: client.id })
+        body: JSON.stringify({ phone: clientToDelete.phone_number || '', id: clientToDelete.id })
       });
       const data = await res.json();
       if (res.ok) {
-        alert('✅ Cliente eliminado completamente del sistema.');
+        setClientToDelete(null);
+        showToast(`${toTitleCase(clientToDelete.name)} eliminado del sistema.`, 'success');
         fetchClients();
       } else {
-        alert('Error al borrar: ' + (data.error || ''));
+        showToast('Error al borrar: ' + (data.error || 'Intenta de nuevo.'), 'error');
       }
-    } catch (e) {
-      alert('Error de conexión.');
+    } catch {
+      showToast('Error de conexión.', 'error');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -600,6 +612,54 @@ export default function ClientsPage() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* ── Modal de confirmación de borrado ── */}
+      {clientToDelete && (
+        <div className={styles.modalOverlay} onClick={() => !deleting && setClientToDelete(null)}>
+          <div className={styles.deleteModal} onClick={e => e.stopPropagation()}>
+            <div className={styles.deleteIconWrap}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                <path d="M10 11v6M14 11v6" />
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+              </svg>
+            </div>
+            <h3 className={styles.deleteTitle}>¿Eliminar cliente?</h3>
+            <p className={styles.deleteClientName}>{toTitleCase(clientToDelete.name)}</p>
+            <ul className={styles.deleteList}>
+              <li>Perfil en Loyverse</li>
+              <li>Historial de chat</li>
+              <li>Cupones y folios</li>
+              <li>Todo rastro en el sistema</li>
+            </ul>
+            <p className={styles.deleteWarning}>Esta acción no se puede deshacer.</p>
+            <div className={styles.deleteActions}>
+              <button
+                className={styles.cancelBtn}
+                onClick={() => setClientToDelete(null)}
+                disabled={deleting}
+              >
+                Cancelar
+              </button>
+              <button
+                className={styles.confirmDeleteBtn}
+                onClick={confirmDelete}
+                disabled={deleting}
+              >
+                {deleting ? 'Eliminando...' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Toast de feedback ── */}
+      {toast && (
+        <div className={`${styles.toast} ${toast.type === 'error' ? styles.toastError : styles.toastSuccess}`}>
+          {toast.type === 'success' ? '✅' : '❌'} {toast.msg}
         </div>
       )}
     </div>

@@ -224,6 +224,128 @@
   background: #333;
 }
 
+/* ── Modal de confirmación de borrado ── */
+.deleteModal {
+  background: #fff;
+  border-radius: 20px;
+  padding: 2rem 2rem 1.75rem;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.25);
+  animation: slideUp 0.25s ease-out forwards;
+  text-align: center;
+}
+
+.deleteIconWrap {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #fef2f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.25rem;
+  border: 2px solid #fecaca;
+}
+
+.deleteTitle {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #111;
+  margin: 0 0 0.35rem;
+}
+
+.deleteClientName {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #ef4444;
+  margin: 0 0 1.1rem;
+}
+
+.deleteList {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  background: #fafafa;
+  border-radius: 10px;
+  border: 1px solid #eee;
+  text-align: left;
+}
+
+.deleteList li {
+  font-size: 0.82rem;
+  color: #555;
+  padding: 7px 14px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deleteList li::before {
+  content: '•';
+  color: #ef4444;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.deleteList li:last-child { border-bottom: none; }
+
+.deleteWarning {
+  font-size: 0.78rem;
+  color: #9ca3af;
+  margin: 0 0 1.5rem;
+}
+
+.deleteActions {
+  display: flex;
+  gap: 10px;
+}
+
+.deleteActions .cancelBtn {
+  flex: 1;
+}
+
+.confirmDeleteBtn {
+  flex: 1;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.confirmDeleteBtn:hover:not(:disabled) { background: #dc2626; }
+.confirmDeleteBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 13px 24px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  z-index: 9999;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+  animation: fadeInUp 0.3s ease-out;
+  white-space: nowrap;
+}
+
+.toastSuccess { background: #111; color: #fff; }
+.toastError   { background: #ef4444; color: #fff; }
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
 @media (prefers-color-scheme: dark) {
   .container {
     color: #fff;
@@ -284,4 +406,18 @@
   .createBtn:hover, .saveBtn:hover {
     background: #ccc;
   }
+
+  .deleteModal {
+    background: #1a1a1a;
+    border: 1px solid #333;
+  }
+  .deleteTitle { color: #f1f1f1; }
+  .deleteList {
+    background: #111;
+    border-color: #333;
+  }
+  .deleteList li { color: #bbb; border-color: #333; }
+  .deleteIconWrap { background: #2d1515; border-color: #5c2020; }
+  .deleteWarning { color: #666; }
+  .toastSuccess { background: #e9edef; color: #111; }
 }
