@@ -690,16 +690,30 @@
   font-size: 13px;
 }
 
-.infoScroll {
+.infoFixed {
   flex: 1;
-  overflow-y: auto;
-  padding: 16px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  padding: 14px 12px;
+  overflow: hidden;
 }
-.infoScroll::-webkit-scrollbar { width: 4px; }
-.infoScroll::-webkit-scrollbar-thumb { background: #374045; border-radius: 2px; }
+
+/* Compras: única sección con scroll interno */
+.infoCardGrow {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.infoCardGrow .infoReceiptList {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #374045 transparent;
+}
+.infoCardGrow .infoReceiptList::-webkit-scrollbar { width: 4px; }
+.infoCardGrow .infoReceiptList::-webkit-scrollbar-thumb { background: #374045; border-radius: 2px; }
 
 /* Bloque avatar */
 .infoAvatar {
@@ -801,6 +815,75 @@
   color: #525d65;
   font-style: italic;
 }
+
+/* Edición inline */
+.infoEditBtn {
+  background: none;
+  border: none;
+  color: #00a884;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.infoEditBtn:hover { color: #06cf9c; }
+
+.infoEditRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.infoEditInput {
+  width: 100%;
+  background: #2a3942;
+  border: 1px solid #374045;
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: #e9edef;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+.infoEditInput:focus { border-color: #00a884; }
+
+.infoEditActions {
+  display: flex;
+  gap: 6px;
+}
+
+.infoSaveBtn {
+  flex: 1;
+  background: #00a884;
+  color: #111b21;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.infoSaveBtn:hover:not(:disabled) { background: #06cf9c; }
+.infoSaveBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.infoCancelBtn {
+  background: #2a3942;
+  color: #8696a0;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.infoCancelBtn:hover { background: #374045; }
 
 /* Lista de cupones */
 .infoCouponList {

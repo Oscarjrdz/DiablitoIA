@@ -192,3 +192,50 @@ export async function GET(req) {
     return NextResponse.json({ success: false, error: e.message }, { status: 500 });
   }
 }
+
+// Actualiza dirección o sucursal en Loyverse + Redis
+export async function PATCH(req) {
+  try {
+    const { id, address, note, _storeRedis, _phone } = await req.json();
+    if (!id) return NextResponse.json({ success: false, error: 'id requerido' }, { status: 400 });
+
+    const loyverseToken = await redis.get('loyverse_token');
+    if (!loyverseToken) return NextResponse.json({ success: false, error: 'No token' }, { status: 500 });
+
+    // Traer el cliente actual para no pisarle campos
+    const custRes = await fetch(`https://api.loyverse.com/v1.0/customers/${id}`, {
+      headers: { Authorization: `Bearer ${loyverseToken}` }
+    });
+    if (!custRes.ok) return NextResponse.json({ success: false, error: 'Cliente no encontrado' }, { status: 404 });
+    const cust = await custRes.json();
+
+    const payload = { id, name: cust.name };
+    if (address !== undefined) payload.address = address;
+    if (note !== undefined) payload.note = note;
+    if (cust.phone_number) payload.phone_number = cust.phone_number;
+    if (cust.city) payload.city = cust.city;
+
+    const updRes = await fetch('https://api.loyverse.com/v1.0/customers', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${loyverseToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!updRes.ok) {
+      const err = await updRes.text();
+      return NextResponse.json({ success: false, error: err }, { status: 500 });
+    }
+
+    // Actualizar Redis si se cambió la sucursal
+    if (_storeRedis !== undefined && _phone) {
+      let cleanPhone = _phone.replace(/\D/g, '');
+      if (!cleanPhone.startsWith('52')) cleanPhone = '52' + cleanPhone;
+      await redis.set(`client_store_${cleanPhone}`, _storeRedis);
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    console.error('[client-card PATCH]', e);
+    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+  }
+}

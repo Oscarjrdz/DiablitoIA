@@ -110,7 +110,11 @@ export default function ChatPage() {
   const [toast, setToast] = useState(null);
   const [clientCard, setClientCard] = useState(null);
   const [loadingCard, setLoadingCard] = useState(false);
-  const [storeFilter, setStoreFilter] = useState('');  // '' = todos
+  const [storeFilter, setStoreFilter] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editStore, setEditStore] = useState('');
+  const [editingField, setEditingField] = useState(null); // 'address' | 'store' | null
+  const [savingField, setSavingField] = useState(false);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -177,6 +181,43 @@ export default function ChatPage() {
     } catch {}
     setLoadingCard(false);
   }, []);
+
+  const saveClientField = useCallback(async (field) => {
+    if (!clientCard?.client?.customerId) return;
+    setSavingField(true);
+    try {
+      const body = { id: clientCard.client.customerId };
+      if (field === 'address') body.address = editAddress;
+      if (field === 'store') {
+        const currentNote = clientCard.client._note || '';
+        body.note = currentNote.includes('Tienda:')
+          ? currentNote.replace(/Tienda:\s*.+?(\n|$)/, `Tienda: ${editStore}$1`)
+          : (currentNote ? `${currentNote}\nTienda: ${editStore}` : `Tienda: ${editStore}`);
+        body._storeRedis = editStore;
+        body._phone = clientCard.client.phone;
+      }
+      const res = await fetch('/api/loyverse/client-card', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) {
+        setClientCard(prev => ({
+          ...prev,
+          client: {
+            ...prev.client,
+            address: field === 'address' ? editAddress : prev.client.address,
+            tienda: field === 'store' ? editStore : prev.client.tienda
+          }
+        }));
+        showToast('Actualizado correctamente', 'success');
+        setEditingField(null);
+      } else {
+        showToast('Error al guardar', 'error');
+      }
+    } catch { showToast('Error de conexión', 'error'); }
+    setSavingField(false);
+  }, [clientCard, editAddress, editStore]);
 
   const openChat = useCallback((chat) => {
     setActiveChat(chat);
@@ -552,22 +593,24 @@ export default function ChatPage() {
 
           {loadingCard ? (
             <div className={styles.infoLoading}>Cargando...</div>
-          ) : clientCard ? (
-            <div className={styles.infoScroll}>
+          ) : (
+            <div className={styles.infoFixed}>
 
               {/* Avatar + nombre */}
               <div className={styles.infoAvatar}>
-                <Avatar name={clientCard.client.name} phone={clientCard.client.phone} size={64} picUrl={profilePics[activeChat.phone]} />
-                <div className={styles.infoName}>{clientCard.client.name}</div>
+                <Avatar
+                  name={clientCard?.client?.name || activeChat.name}
+                  phone={activeChat.phone}
+                  size={56}
+                  picUrl={profilePics[activeChat.phone]}
+                />
+                <div className={styles.infoName}>{clientCard?.client?.name || activeChat.name}</div>
                 <div className={styles.infoPhone}>
-                  {clientCard.client.phone10.replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3')}
+                  {(clientCard?.client?.phone10 || activeChat.phone.slice(-10)).replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3')}
                 </div>
-                {clientCard.client.tienda && (
-                  <div className={styles.infoStore}>{clientCard.client.tienda}</div>
-                )}
-                {clientCard.client.duplicateRecords && (
+                {clientCard?.client?.duplicateRecords && (
                   <div className={styles.infoDuplicateWarn}>
-                    ⚠️ {clientCard.client.loyverseRecords} registros en Loyverse — puntos y compras sumados
+                    ⚠️ {clientCard.client.loyverseRecords} registros en Loyverse
                   </div>
                 )}
               </div>
@@ -576,28 +619,88 @@ export default function ChatPage() {
               <div className={styles.infoCard}>
                 <div className={styles.infoCardLabel}>Puntos acumulados</div>
                 <div className={styles.infoPoints}>
-                  {clientCard.client.points !== null
+                  {clientCard?.client?.points != null
                     ? Number(clientCard.client.points).toLocaleString('es-MX')
-                    : <span style={{ fontSize: 14, color: '#525d65' }}>No en Loyverse</span>
+                    : <span style={{ fontSize: 13, color: '#525d65' }}>—</span>
                   }
                 </div>
               </div>
 
-              {/* Dirección */}
-              {clientCard.client.address && (
-                <div className={styles.infoCard}>
-                  <div className={styles.infoCardLabel}>Dirección</div>
-                  <div className={styles.infoAddress}>{clientCard.client.address}</div>
+              {/* Sucursal — editable */}
+              <div className={styles.infoCard}>
+                <div className={styles.infoCardLabel}>
+                  Sucursal
+                  {editingField !== 'store' && (
+                    <button className={styles.infoEditBtn} onClick={() => {
+                      setEditStore(clientCard?.client?.tienda || '');
+                      setEditingField('store');
+                    }}>Editar</button>
+                  )}
                 </div>
-              )}
+                {editingField === 'store' ? (
+                  <div className={styles.infoEditRow}>
+                    <input
+                      className={styles.infoEditInput}
+                      value={editStore}
+                      onChange={e => setEditStore(e.target.value)}
+                      placeholder="Nombre de sucursal"
+                      autoFocus
+                    />
+                    <div className={styles.infoEditActions}>
+                      <button className={styles.infoSaveBtn} onClick={() => saveClientField('store')} disabled={savingField}>
+                        {savingField ? '...' : 'Guardar'}
+                      </button>
+                      <button className={styles.infoCancelBtn} onClick={() => setEditingField(null)}>Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.infoAddress}>
+                    {clientCard?.client?.tienda || <span className={styles.infoEmpty}>Sin sucursal</span>}
+                  </div>
+                )}
+              </div>
+
+              {/* Dirección — editable */}
+              <div className={styles.infoCard}>
+                <div className={styles.infoCardLabel}>
+                  Dirección
+                  {editingField !== 'address' && (
+                    <button className={styles.infoEditBtn} onClick={() => {
+                      setEditAddress(clientCard?.client?.address || '');
+                      setEditingField('address');
+                    }}>Editar</button>
+                  )}
+                </div>
+                {editingField === 'address' ? (
+                  <div className={styles.infoEditRow}>
+                    <input
+                      className={styles.infoEditInput}
+                      value={editAddress}
+                      onChange={e => setEditAddress(e.target.value)}
+                      placeholder="Dirección del cliente"
+                      autoFocus
+                    />
+                    <div className={styles.infoEditActions}>
+                      <button className={styles.infoSaveBtn} onClick={() => saveClientField('address')} disabled={savingField}>
+                        {savingField ? '...' : 'Guardar'}
+                      </button>
+                      <button className={styles.infoCancelBtn} onClick={() => setEditingField(null)}>Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.infoAddress}>
+                    {clientCard?.client?.address || <span className={styles.infoEmpty}>Sin dirección</span>}
+                  </div>
+                )}
+              </div>
 
               {/* Cupones canjeados */}
               <div className={styles.infoCard}>
                 <div className={styles.infoCardLabel}>
                   Cupones canjeados
-                  <span className={styles.infoBadge}>{clientCard.coupons.length}</span>
+                  <span className={styles.infoBadge}>{clientCard?.coupons?.length ?? 0}</span>
                 </div>
-                {clientCard.coupons.length === 0 ? (
+                {!clientCard?.coupons?.length ? (
                   <div className={styles.infoEmpty}>Sin cupones</div>
                 ) : (
                   <div className={styles.infoCouponList}>
@@ -613,13 +716,13 @@ export default function ChatPage() {
                 )}
               </div>
 
-              {/* Compras recientes */}
-              <div className={styles.infoCard}>
+              {/* Compras recientes — solo este bloque tiene scroll */}
+              <div className={`${styles.infoCard} ${styles.infoCardGrow}`}>
                 <div className={styles.infoCardLabel}>
                   Compras recientes
-                  <span className={styles.infoBadge}>{clientCard.receipts.length}</span>
+                  <span className={styles.infoBadge}>{clientCard?.receipts?.length ?? 0}</span>
                 </div>
-                {clientCard.receipts.length === 0 ? (
+                {!clientCard?.receipts?.length ? (
                   <div className={styles.infoEmpty}>Sin compras registradas</div>
                 ) : (
                   <div className={styles.infoReceiptList}>
@@ -640,10 +743,6 @@ export default function ChatPage() {
                 )}
               </div>
 
-            </div>
-          ) : (
-            <div className={styles.infoEmpty} style={{ padding: '2rem', textAlign: 'center' }}>
-              Cliente no encontrado<br />en Loyverse
             </div>
           )}
         </div>
