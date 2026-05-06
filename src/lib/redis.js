@@ -34,6 +34,14 @@ const getRedisClient = () => {
       ltrim: async (key, start, stop) => rawRedis.ltrim(key, start, stop),
       lrange: async (key, start, stop) => rawRedis.lrange(key, start, stop),
       keys: async (pattern) => rawRedis.keys(pattern),
+      mget: async (...keys) => {
+        if (!keys || keys.length === 0) return [];
+        const vals = await rawRedis.mget(...keys);
+        return vals.map(val => {
+          if (!val) return null;
+          try { return JSON.parse(val); } catch (e) { return val; }
+        });
+      },
     };
   }
 
