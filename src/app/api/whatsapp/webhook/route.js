@@ -916,8 +916,8 @@ export async function POST(req) {
             // Cliente nuevo: invitar a registrarse
             await sendWhatsApp(phoneId, '¡Hola! 👋🍔 Bienvenido a *El Diablito Boneless & Burgers*', cfg);
             await new Promise(r => setTimeout(r, 800));
-            await sendWhatsApp(phoneId, 'Regístrate y recibe una *🍔 BURGER GRATIS* 🎁\n\nSolo necesito tu *nombre* y *dirección* (calle, número, colonia, municipio).', cfg);
-            parsed.push({ role: 'model', parts: [{ text: 'Hola! Bienvenido al Diablito. Regístrate y recibe una burger gratis. Solo necesito tu nombre y dirección.', ts: Date.now() }] });
+            await sendWhatsApp(phoneId, 'Veo que en nuestro sistema aún no está registrado tu *nombre* y tu *número*. Para comenzar debes registrarte y además recibes una *🍔 BURGER GRATIS* 🎁\n\nSolo necesito tu *nombre* y *dirección* (calle, número, colonia, municipio).', cfg);
+            parsed.push({ role: 'model', parts: [{ text: 'Hola! Bienvenido al Diablito. Veo que en nuestro sistema aún no está registrado tu nombre y tu número. Para comenzar debes registrarte y además recibes una burger gratis. Solo necesito tu nombre y dirección.', ts: Date.now() }] });
             await redis.set(historyKey, JSON.stringify(parsed));
             await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
             await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
@@ -961,11 +961,33 @@ Ejemplo: "¡Listo, he actualizado tu domicilio! [REGISTRO_OK:Oscar|Bosques 102|M
 Su número es: ${clientPhone10}. (No le pidas su número, ya lo tienes).
 Tu objetivo principal es invitarlo a registrarse cordialmente para que reciba el Cupón de Bienvenida (Hamburguesa Gratis).
 
+# REGLA ESTRICTA DE FLUJO (EVASIÓN DE TEMAS):
+Si el cliente te pregunta cualquier otra cosa, te dice piropos, muestra enojo o saca cualquier otro tema, NO VAMOS A AVANZAR. Debes "driblar" ese mensaje, diciéndole algo como "Sí, te entiendo" o "Muchas gracias", pero SIEMPRE insistiendo al final que si no se registra (dando su nombre y dirección) no podemos avanzar con el pedido o proceso. NO respondas dudas de menú ni otras cosas hasta que se registre.
+
 # REGLA DE REGISTRO CRÍTICA:
 Para registrarlo, necesitas que te diga su Nombre y su Dirección (calle, número, colonia, etc).
 Solo cuando te haya dado su nombre y dirección, confírmale el registro y AÑADE AL FINAL de tu respuesta exactamente esta línea invisible:
 [REGISTRO_OK:nombre|dirección|ciudad]
-Ejemplo: "¡Perfecto, ya te he registrado! [REGISTRO_OK:Oscar R|Cirros 102 Col Las Nubes|Santa Catarina]"`;
+Ejemplo: "¡Perfecto, ya te he registrado! [REGISTRO_OK:Oscar R|Cirros 102 Col Las Nubes|Santa Catarina]"
+
+# FORMATO OBLIGATORIO AL CONFIRMAR REGISTRO:
+Cuando confirmes el registro del cliente, SIEMPRE presenta las opciones disponibles como lista numerada con la siguiente estructura EXACTA:
+1️⃣ Hacer un Pedido a Domicilio 🛵
+2️⃣ Revisar Puntos 🎁
+3️⃣ Editar datos 📝
+
+Ejemplo completo de respuesta tras registro:
+"¡Perfecto, *Oscar*! 🎉
+
+¡Ya estás registrado! 🚀 Tu *🍔 BURGER GRATIS* de bienvenida te espera.
+
+Aquí tienes tus opciones:
+1️⃣ Hacer un Pedido a Domicilio 🛵
+2️⃣ Revisar Puntos 🎁
+3️⃣ Editar datos 📝
+
+¡Cualquier cosa, aquí estoy! 🌶️"
+NUNCA omitas la opción de Pedido a Domicilio y SIEMPRE debe ser la primera de la lista.`;
         }
 
         // System instruction va aparte en Gemini, pero lo metemos como primer user+model exchange
