@@ -36,12 +36,16 @@ export async function POST(req) {
                 
                 const sObj = (storeData.stores || []).find(s => s.id === receipt.store_id);
                 if (sObj) {
+                  // Actualizar sucursal en Redis siempre (última tienda donde compró)
                   await redis.set(`client_store_${rPhone}`, sObj.name);
-                  
-                  // Update Loyverse Note string to ensure store persists in CRM
+
+                  // Actualizar nota en Loyverse — sobreescribir "Tienda:" con la sucursal actual
                   const currentNote = custData.note || '';
-                  if (!currentNote.includes('Tienda:')) {
-                     const newNote = currentNote ? `${currentNote}\nTienda: ${sObj.name}` : `Tienda: ${sObj.name}`;
+                  const newNote = currentNote.includes('Tienda:')
+                    ? currentNote.replace(/Tienda:\s*.+?(\n|$)/, `Tienda: ${sObj.name}$1`)
+                    : (currentNote ? `${currentNote}\nTienda: ${sObj.name}` : `Tienda: ${sObj.name}`);
+
+                  if (newNote !== currentNote) {
                      const updatePayload = {
                         id: custData.id,
                         name: custData.name || 'Cliente',
@@ -50,7 +54,6 @@ export async function POST(req) {
                      };
                      if (custData.address) updatePayload.address = custData.address;
                      if (custData.city) updatePayload.city = custData.city;
-                     
                      try {
                         await fetch('https://api.loyverse.com/v1.0/customers', {
                            method: 'POST',
