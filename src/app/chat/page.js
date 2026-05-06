@@ -108,6 +108,8 @@ export default function ChatPage() {
   const [chatToDelete, setChatToDelete] = useState(null);
   const [deletingChat, setDeletingChat] = useState(false);
   const [toast, setToast] = useState(null);
+  const [clientCard, setClientCard] = useState(null);
+  const [loadingCard, setLoadingCard] = useState(false);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -164,6 +166,17 @@ export default function ChatPage() {
     } catch {}
   }, []);
 
+  const fetchClientCard = useCallback(async (phone) => {
+    setLoadingCard(true);
+    setClientCard(null);
+    try {
+      const res = await fetch(`/api/loyverse/client-card?phone=${encodeURIComponent(phone)}`);
+      const data = await res.json();
+      if (data.success) setClientCard(data);
+    } catch {}
+    setLoadingCard(false);
+  }, []);
+
   const openChat = useCallback((chat) => {
     setActiveChat(chat);
     setMessages([]);
@@ -172,12 +185,13 @@ export default function ChatPage() {
     setAttachment(null);
     clearInterval(msgPollRef.current);
     fetchMessages(chat.phone);
+    fetchClientCard(chat.phone);
     // Cargar foto si no la tenemos
     if (!profilePics[chat.phone]) fetchProfilePic(chat.phone);
     msgPollRef.current = setInterval(() => {
       if (activeChatRef.current?.phone === chat.phone) fetchMessages(chat.phone);
     }, 2000);
-  }, [fetchMessages, fetchProfilePic, profilePics]);
+  }, [fetchMessages, fetchProfilePic, fetchClientCard, profilePics]);
 
   useEffect(() => () => clearInterval(msgPollRef.current), []);
 
@@ -504,6 +518,102 @@ export default function ChatPage() {
             <h2 className={styles.emptyTitle}>Diablito Chat</h2>
             <p className={styles.emptySub}>Selecciona un chat para comenzar</p>
           </div>
+        </div>
+      )}
+
+      {/* ══ PANEL DERECHO: TARJETA DEL CLIENTE ══ */}
+      {activeChat && (
+        <div className={styles.infoPanel}>
+          <div className={styles.infoPanelHeader}>
+            <span>Perfil del cliente</span>
+          </div>
+
+          {loadingCard ? (
+            <div className={styles.infoLoading}>Cargando...</div>
+          ) : clientCard ? (
+            <div className={styles.infoScroll}>
+
+              {/* Avatar + nombre */}
+              <div className={styles.infoAvatar}>
+                <Avatar name={clientCard.client.name} phone={clientCard.client.phone} size={64} picUrl={profilePics[activeChat.phone]} />
+                <div className={styles.infoName}>{clientCard.client.name}</div>
+                <div className={styles.infoPhone}>
+                  {clientCard.client.phone10.replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3')}
+                </div>
+                {clientCard.client.tienda && (
+                  <div className={styles.infoStore}>{clientCard.client.tienda}</div>
+                )}
+              </div>
+
+              {/* Puntos */}
+              <div className={styles.infoCard}>
+                <div className={styles.infoCardLabel}>Puntos acumulados</div>
+                <div className={styles.infoPoints}>{(clientCard.client.points || 0).toLocaleString('es-MX')}</div>
+              </div>
+
+              {/* Dirección */}
+              {clientCard.client.address && (
+                <div className={styles.infoCard}>
+                  <div className={styles.infoCardLabel}>Dirección</div>
+                  <div className={styles.infoAddress}>{clientCard.client.address}</div>
+                </div>
+              )}
+
+              {/* Cupones canjeados */}
+              <div className={styles.infoCard}>
+                <div className={styles.infoCardLabel}>
+                  Cupones canjeados
+                  <span className={styles.infoBadge}>{clientCard.coupons.length}</span>
+                </div>
+                {clientCard.coupons.length === 0 ? (
+                  <div className={styles.infoEmpty}>Sin cupones</div>
+                ) : (
+                  <div className={styles.infoCouponList}>
+                    {clientCard.coupons.slice(0, 8).map((c, i) => (
+                      <div key={i} className={styles.infoCouponRow}>
+                        <span className={styles.infoCouponName}>{c.couponName || c.folio || 'Cupón'}</span>
+                        <span className={styles.infoCouponDate}>
+                          {c.receiptDate ? new Date(c.receiptDate).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : '—'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Compras recientes */}
+              <div className={styles.infoCard}>
+                <div className={styles.infoCardLabel}>
+                  Compras recientes
+                  <span className={styles.infoBadge}>{clientCard.receipts.length}</span>
+                </div>
+                {clientCard.receipts.length === 0 ? (
+                  <div className={styles.infoEmpty}>Sin compras registradas</div>
+                ) : (
+                  <div className={styles.infoReceiptList}>
+                    {clientCard.receipts.map((r, i) => (
+                      <div key={i} className={styles.infoReceiptRow}>
+                        <div className={styles.infoReceiptLeft}>
+                          <div className={styles.infoReceiptStore}>{r.store}</div>
+                          <div className={styles.infoReceiptDate}>
+                            {r.date ? new Date(r.date).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'}
+                          </div>
+                        </div>
+                        <div className={styles.infoReceiptAmount}>
+                          ${Number(r.total).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
+          ) : (
+            <div className={styles.infoEmpty} style={{ padding: '2rem', textAlign: 'center' }}>
+              Cliente no encontrado<br />en Loyverse
+            </div>
+          )}
         </div>
       )}
 
