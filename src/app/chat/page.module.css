@@ -107,8 +107,9 @@
 
 /* ── Sección Agregar Chat ── */
 .newChatSection {
-  padding: 0 12px 0;
+  padding: 8px 12px 8px;
   flex-shrink: 0;
+  border-bottom: 1px solid #1f2c34;
 }
 
 .newChatToggle {
