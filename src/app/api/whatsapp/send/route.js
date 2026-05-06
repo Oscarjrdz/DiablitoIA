@@ -60,6 +60,8 @@ export async function POST(req) {
 
     await redis.set(hKey, JSON.stringify(parsed));
     await redis.set(`chat_hist_${cleanTo}`, JSON.stringify(parsed));
+    // Mark as human-read when a human sends a message
+    await redis.set(`human_read_${cleanTo}`, '1');
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error('Send message error:', e);

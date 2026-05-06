@@ -294,6 +294,23 @@ export default function ChatPage() {
     }
   };
 
+  // ── Toggle human read/unread ──
+  const toggleHumanRead = useCallback(async (phone, currentlyNeedsHuman) => {
+    try {
+      await fetch('/api/whatsapp/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, read: currentlyNeedsHuman })
+      });
+      setChats(prev => prev.map(c =>
+        c.phone === phone ? { ...c, needsHuman: !currentlyNeedsHuman } : c
+      ));
+      showToast(currentlyNeedsHuman ? 'Marcado como leído' : 'Marcado como no leído', 'success');
+    } catch {
+      showToast('Error al actualizar', 'error');
+    }
+  }, []);
+
   const handleInputChange = (e) => {
     setInputText(e.target.value);
     autoResize();
@@ -343,7 +360,7 @@ export default function ChatPage() {
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setChats(prev => prev.map(c =>
       c.phone === activeChat.phone
-        ? { ...c, lastText: text || '📎 Archivo', lastTs: now, fromMe: true }
+        ? { ...c, lastText: text || '📎 Archivo', lastTs: now, fromMe: true, needsHuman: false }
         : c
     ));
     try {
@@ -459,21 +476,44 @@ export default function ChatPage() {
                     {chat.fromMe && ' '}
                     {chat.lastText || <em style={{ opacity: 0.4 }}>Sin mensajes</em>}
                   </span>
-                  {chat.unread > 0 && <span className={styles.badge}>{chat.unread > 99 ? '99+' : chat.unread}</span>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                    {chat.needsHuman && <span className={styles.needsHumanBadge} title="Sin atención humana">●</span>}
+                    {chat.unread > 0 && <span className={styles.badge}>{chat.unread > 99 ? '99+' : chat.unread}</span>}
+                  </div>
                 </div>
               </div>
-              <button
-                className={styles.chatDeleteBtn}
-                onClick={e => { e.stopPropagation(); setChatToDelete(chat); }}
-                title="Eliminar chat"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                  <path d="M10 11v6M14 11v6" />
-                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                </svg>
-              </button>
+              <div className={styles.chatActionBtns}>
+                <button
+                  className={styles.chatMarkBtn}
+                  onClick={e => { e.stopPropagation(); toggleHumanRead(chat.phone, chat.needsHuman); }}
+                  title={chat.needsHuman ? 'Marcar como leído' : 'Marcar como no leído'}
+                >
+                  {chat.needsHuman ? (
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  ) : (
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" />
+                      <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  )}
+                </button>
+                <button
+                  className={styles.chatDeleteBtn}
+                  onClick={e => { e.stopPropagation(); setChatToDelete(chat); }}
+                  title="Eliminar chat"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    <path d="M10 11v6M14 11v6" />
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                  </svg>
+                </button>
+              </div>
             </div>
           ))}
         </div>

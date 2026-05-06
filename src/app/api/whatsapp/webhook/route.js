@@ -959,6 +959,8 @@ export async function POST(req) {
     let parsed = typeof history === 'string' ? JSON.parse(history) : (history || []);
     parsed.push({ role: 'user', parts: [{ text: bodyStr, ts: Date.now() }] });
     await redis.incr(`chat_unread_${cleanPhone}`);
+    // Reset human-read flag so the chat shows as "needs attention" again
+    await redis.del(`human_read_${cleanPhone}`);
 
     if (parsed.length > 40) {
         parsed = parsed.slice(-40);

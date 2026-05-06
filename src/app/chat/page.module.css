@@ -511,15 +511,57 @@
   margin: 0;
 }
 
+/* ── Badge verde: necesita atención humana ── */
+.needsHumanBadge {
+  color: #25d366;
+  font-size: 14px;
+  line-height: 1;
+  animation: pulseGreen 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes pulseGreen {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── Contenedor de botones de acción en tarjeta ── */
+.chatActionBtns {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.chatItem:hover .chatActionBtns { display: flex; }
+.chatActive .chatActionBtns { display: flex; }
+
+/* ── Botón marcar leído/no leído ── */
+.chatMarkBtn {
+  background: none;
+  border: none;
+  color: #374045;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  line-height: 0;
+}
+.chatMarkBtn:hover {
+  background: rgba(37, 211, 102, 0.15);
+  color: #25d366;
+}
+
 /* ── Botón basura en tarjeta de chat ── */
 .chatDeleteBtn {
   background: none;
   border: none;
   color: #374045;
   cursor: pointer;
-  padding: 6px;
+  padding: 5px;
   border-radius: 50%;
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
@@ -530,8 +572,6 @@
   background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
 }
-.chatItem:hover .chatDeleteBtn { display: flex; }
-.chatActive .chatDeleteBtn { display: flex; }
 
 /* ── Modal de confirmación ── */
 .deleteOverlay {

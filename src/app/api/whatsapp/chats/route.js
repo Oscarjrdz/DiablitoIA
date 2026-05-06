@@ -9,11 +9,12 @@ export async function GET() {
     const chats = await Promise.all(keys.map(async (key) => {
       const phone = key.replace('chat_hist_', '').replace('@c.us', '');
       try {
-        const [histData, cachedName, unreadRaw, cachedStore] = await Promise.all([
+        const [histData, cachedName, unreadRaw, cachedStore, humanRead] = await Promise.all([
           redis.get(key),
           redis.get(`client_name_${phone}`),
           redis.get(`chat_unread_${phone}`),
-          redis.get(`client_store_${phone}`)
+          redis.get(`client_store_${phone}`),
+          redis.get(`human_read_${phone}`)
         ]);
         const parsed = typeof histData === 'string' ? JSON.parse(histData) : (histData || []);
         const lastMsg = parsed.length > 0 ? parsed[parsed.length - 1] : null;
@@ -25,7 +26,8 @@ export async function GET() {
           fromMe: lastMsg?.role === 'model',
           unread: parseInt(unreadRaw || '0'),
           msgCount: parsed.length,
-          store: cachedStore || ''
+          store: cachedStore || '',
+          needsHuman: !humanRead && parsed.length > 0
         };
       } catch {
         return { phone, name: phone.slice(-10), lastText: '', lastTs: 0, fromMe: false, unread: 0, msgCount: 0, store: '' };
