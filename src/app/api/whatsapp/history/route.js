@@ -33,7 +33,8 @@ export async function GET(req) {
           : '',
         status: part.status || (m.role === 'model' ? 'sent' : null),
         attachmentType: part.attachmentType || null,
-        hasAttachment: part.hasAttachment || false
+        hasAttachment: part.hasAttachment || false,
+        attachmentUrl: part.attachmentUrl || null
       };
     });
 

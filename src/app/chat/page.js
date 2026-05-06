@@ -650,8 +650,13 @@ export default function ChatPage() {
                     <Avatar name={activeChat.name} phone={activeChat.phone} size={28} picUrl={profilePics[activeChat.phone]} />
                   )}
                   <div className={m.fromMe ? styles.bubbleOut : styles.bubbleIn}>
+                    {/* Image from base64 (manual send) */}
                     {m.attachment && m.attachmentType === 'image' && (
                       <img src={m.attachment} alt="" style={{ maxWidth: '100%', borderRadius: 6, display: 'block', marginBottom: 4 }} />
+                    )}
+                    {/* Image from URL (coupon/promo) */}
+                    {!m.attachment && m.attachmentUrl && m.attachmentType === 'image' && (
+                      <img src={m.attachmentUrl} alt="Cupón" style={{ maxWidth: '100%', borderRadius: 6, display: 'block', marginBottom: 4 }} />
                     )}
                     {m.attachment && m.attachmentType !== 'image' && (
                       <div className={styles.fileAttach}>

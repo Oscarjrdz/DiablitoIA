@@ -1280,6 +1280,23 @@ NUNCA omitas la opción de Pedido a Domicilio y SIEMPRE debe ser la primera de l
                                                         if (gwRes.ok) {
                                                             await redis.set(`promo_pos_${cleanPhone}`, 'naranja');
                                                             console.log(`[Bot] Cupón de bienvenida enviado a ${cleanPhone}`);
+                                                            // Save coupon message to chat history for dashboard visibility
+                                                            const couponHistEntry = {
+                                                                role: 'model',
+                                                                parts: [{
+                                                                    text: promoText,
+                                                                    ts: Date.now(),
+                                                                    ...(welcomePromo.image ? {
+                                                                        attachmentType: 'image',
+                                                                        hasAttachment: true,
+                                                                        attachmentUrl: `https://global-sales-prediction.vercel.app/api/promotions/image?id=${welcomePromo.id}`
+                                                                    } : {})
+                                                                }]
+                                                            };
+                                                            parsed.push(couponHistEntry);
+                                                            await redis.set(historyKey, JSON.stringify(parsed));
+                                                            await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
+                                                            await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
                                                         }
                                                         await redis.del(mutexKey);
                                                     }
