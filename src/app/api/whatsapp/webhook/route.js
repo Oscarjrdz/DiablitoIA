@@ -247,7 +247,7 @@ export async function POST(req) {
               parts: [{
                   text: bubbleText,
                   msgId: payload.data.id || Date.now().toString(),
-                  ts: payload.data.timestamp || Math.floor(Date.now() / 1000),
+                  ts: payload.data.timestamp ? payload.data.timestamp * 1000 : Date.now(),
                   status: 'delivered'
               }]
           });
@@ -256,7 +256,7 @@ export async function POST(req) {
               role: 'model',
               parts: [{
                   text: msgCliente,
-                  ts: Math.floor(Date.now() / 1000)
+                  ts: Date.now()
               }]
           });
 
