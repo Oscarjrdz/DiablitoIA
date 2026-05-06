@@ -1072,7 +1072,7 @@ export async function POST(req) {
         const geminiContents = [];
 
         const clientPhone10 = cleanPhone.slice(-10);
-        let systemContext = botPrompt + '\n\n# REGLAS DE FORMATO Y ESTILO OBLIGATORIAS:\n1. NUNCA respondas con texto plano o aburrido.\n2. Usa abundantes emojis relacionados a comida (🍔, 🍟, 🌶️, 🔥, 🎁, 🎉).\n3. Usa saltos de línea constantes para que el texto respire y no sea un bloque enorme.\n4. Usa *negritas* para resaltar las palabras clave (como *Gratis*, *Descuentos*, *Nombre*, *Dirección*).\n5. Usa listas con viñetas reales (• o 🟢 o ➡️) si tienes que enumerar cosas.\nTu tono es enérgico, relajado, súper amigable y antojadizo.\n\n# CONTEXTO AUTOMÁTICO\n';
+        let systemContext = botPrompt + '\n\n# REGLAS DE FORMATO Y ESTILO OBLIGATORIAS:\n1. NUNCA respondas con texto plano o aburrido.\n2. Usa abundantes emojis relacionados a comida (🍔, 🍟, 🌶️, 🔥, 🎁, 🎉).\n3. Usa saltos de línea constantes para que el texto respire y no sea un bloque enorme.\n4. Usa *negritas* para resaltar las palabras clave (como *Gratis*, *Descuentos*, *Nombre*, *Dirección*).\n5. Usa listas con viñetas reales (• o 🟢 o ➡️) si tienes que enumerar cosas.\n6. NUNCA digas que no puedes mostrar el menú. Si el cliente pregunta por el menú o no sabe qué pedir, invítalo a ver nuestro catálogo completo dando clic en el ícono de la tiendita/catálogo aquí en el chat de WhatsApp 🛍️.\nTu tono es enérgico, relajado, súper amigable y antojadizo.\n\n# CONTEXTO AUTOMÁTICO\n';
         
         if (isRegistered) {
             systemContext += `El cliente YA ESTÁ REGISTRADO. Se llama ${clientName || 'Cliente'} y actualmente tiene ${clientPoints} PUNTOS acumulados.
