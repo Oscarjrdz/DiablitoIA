@@ -1,49 +1,37 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
+import { randomUUID } from 'crypto';
 
-const GW = 'https://gatewaywapp-production.up.railway.app';
+const CATALOG_KEY = 'catalog_products';
 
-async function getCfg() {
-  const s = await redis.get('wapp_config');
-  return typeof s === 'string' ? JSON.parse(s) : (s || {});
+async function getAll() {
+  const raw = await redis.get(CATALOG_KEY);
+  if (!raw) return [];
+  return typeof raw === 'string' ? JSON.parse(raw) : (Array.isArray(raw) ? raw : []);
+}
+
+async function saveAll(products) {
+  await redis.set(CATALOG_KEY, JSON.stringify(products));
 }
 
 // ── GET — Listar catálogo (o producto por ID con ?productId=) ──
 export async function GET(req) {
   try {
-    const cfg = await getCfg();
-    if (!cfg.wappInstance || !cfg.wappToken)
-      return NextResponse.json({ success: false, error: 'Sin configuración de WhatsApp' });
-
+    const products = await getAll();
     const { searchParams } = new URL(req.url);
     const productId = searchParams.get('productId');
 
-    // GET single product by ID
     if (productId) {
-      const res = await fetch(
-        `${GW}/${cfg.wappInstance}/catalog/${productId}?token=${cfg.wappToken}`,
-        { cache: 'no-store' }
-      );
-      const data = await res.json();
-      if (!res.ok) return NextResponse.json({ success: false, error: data?.message || 'Error', raw: data });
-      return NextResponse.json({ success: true, product: data.product || data });
+      const product = products.find(p => p.id === productId);
+      if (!product) return NextResponse.json({ success: false, error: 'Producto no encontrado' });
+      return NextResponse.json({ success: true, product });
     }
-
-    // GET full catalog with pagination
-    const limit = searchParams.get('limit') || '100';
-    const cursor = searchParams.get('cursor') || '';
-    let url = `${GW}/${cfg.wappInstance}/catalog?token=${cfg.wappToken}&limit=${limit}`;
-    if (cursor) url += `&cursor=${cursor}`;
-
-    const res = await fetch(url, { cache: 'no-store' });
-    const data = await res.json();
-    if (!res.ok) return NextResponse.json({ success: false, error: data?.message || 'Error', raw: data });
 
     return NextResponse.json({
       success: true,
-      products: data.products || [],
-      count: data.count || 0,
-      nextPageCursor: data.nextPageCursor || null,
+      products,
+      count: products.length,
+      nextPageCursor: null,
     });
   } catch (e) {
     console.error('Catalog GET error:', e);
@@ -54,31 +42,29 @@ export async function GET(req) {
 // ── POST — Crear producto ──
 export async function POST(req) {
   try {
-    const cfg = await getCfg();
-    if (!cfg.wappInstance || !cfg.wappToken)
-      return NextResponse.json({ success: false, error: 'Sin configuración de WhatsApp' });
-
     const body = await req.json();
-    const payload = {
-      token: cfg.wappToken,
-      name: body.name,
-      description: body.description || '',
+    if (!body.name?.trim()) {
+      return NextResponse.json({ success: false, error: 'El nombre es requerido' });
+    }
+
+    const products = await getAll();
+
+    const newProduct = {
+      id: randomUUID(),
+      name: body.name.trim(),
+      description: body.description?.trim() || '',
       price: body.price != null ? Math.round(Number(body.price)) : 0,
-      currency: body.currency || 'MXN',
+      currencyCode: body.currency || 'MXN',
+      retailerId: body.retailerId?.trim() || '',
+      images: (body.images || []).map(url => (typeof url === 'string' ? { url } : url)),
+      isHidden: body.isHidden || false,
+      createdAt: new Date().toISOString(),
     };
-    if (body.images) payload.images = body.images;
-    if (body.retailerId) payload.retailerId = body.retailerId;
-    if (body.isHidden != null) payload.isHidden = body.isHidden;
 
-    const res = await fetch(`${GW}/${cfg.wappInstance}/catalog`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    if (!res.ok) return NextResponse.json({ success: false, error: data?.message || 'Error al crear', raw: data });
+    products.push(newProduct);
+    await saveAll(products);
 
-    return NextResponse.json({ success: true, product: data.product || data });
+    return NextResponse.json({ success: true, product: newProduct });
   } catch (e) {
     console.error('Catalog POST error:', e);
     return NextResponse.json({ success: false, error: e.message });
@@ -88,31 +74,27 @@ export async function POST(req) {
 // ── PATCH — Actualizar producto existente ──
 export async function PATCH(req) {
   try {
-    const cfg = await getCfg();
-    if (!cfg.wappInstance || !cfg.wappToken)
-      return NextResponse.json({ success: false, error: 'Sin configuración de WhatsApp' });
-
     const body = await req.json();
     const { productId, ...fields } = body;
     if (!productId) return NextResponse.json({ success: false, error: 'productId requerido' });
 
-    const payload = { token: cfg.wappToken };
-    if (fields.name != null) payload.name = fields.name;
-    if (fields.description != null) payload.description = fields.description;
-    if (fields.price != null) payload.price = Math.round(Number(fields.price));
-    if (fields.images) payload.images = fields.images;
-    if (fields.isHidden != null) payload.isHidden = fields.isHidden;
-    if (fields.retailerId != null) payload.retailerId = fields.retailerId;
+    const products = await getAll();
+    const idx = products.findIndex(p => p.id === productId);
+    if (idx === -1) return NextResponse.json({ success: false, error: 'Producto no encontrado' });
 
-    const res = await fetch(`${GW}/${cfg.wappInstance}/catalog/${productId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    if (!res.ok) return NextResponse.json({ success: false, error: data?.message || 'Error al actualizar', raw: data });
+    const product = products[idx];
+    if (fields.name != null) product.name = fields.name.trim();
+    if (fields.description != null) product.description = fields.description.trim();
+    if (fields.price != null) product.price = Math.round(Number(fields.price));
+    if (fields.images) product.images = fields.images.map(url => (typeof url === 'string' ? { url } : url));
+    if (fields.isHidden != null) product.isHidden = fields.isHidden;
+    if (fields.retailerId != null) product.retailerId = fields.retailerId.trim();
+    product.updatedAt = new Date().toISOString();
 
-    return NextResponse.json({ success: true, product: data.product || data });
+    products[idx] = product;
+    await saveAll(products);
+
+    return NextResponse.json({ success: true, product });
   } catch (e) {
     console.error('Catalog PATCH error:', e);
     return NextResponse.json({ success: false, error: e.message });
@@ -122,20 +104,17 @@ export async function PATCH(req) {
 // ── DELETE — Eliminar productos por IDs ──
 export async function DELETE(req) {
   try {
-    const cfg = await getCfg();
-    if (!cfg.wappInstance || !cfg.wappToken)
-      return NextResponse.json({ success: false, error: 'Sin configuración de WhatsApp' });
-
     const body = await req.json();
-    const res = await fetch(`${GW}/${cfg.wappInstance}/catalog`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: cfg.wappToken, productIds: body.productIds || [] })
-    });
-    const data = await res.json();
-    if (!res.ok) return NextResponse.json({ success: false, error: data?.message || 'Error al eliminar', raw: data });
+    const idsToDelete = body.productIds || [];
+    if (idsToDelete.length === 0) return NextResponse.json({ success: false, error: 'productIds requerido' });
 
-    return NextResponse.json({ success: true, deleted: data.deleted || 0 });
+    const products = await getAll();
+    const filtered = products.filter(p => !idsToDelete.includes(p.id));
+    const deleted = products.length - filtered.length;
+
+    await saveAll(filtered);
+
+    return NextResponse.json({ success: true, deleted });
   } catch (e) {
     console.error('Catalog DELETE error:', e);
     return NextResponse.json({ success: false, error: e.message });
