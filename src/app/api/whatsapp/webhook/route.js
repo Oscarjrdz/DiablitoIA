@@ -155,6 +155,41 @@ export async function POST(req) {
     const fromMe = payload.data.fromMe !== undefined ? payload.data.fromMe : payload.data.key?.fromMe;
     if (fromMe) return NextResponse.json({ success: true });
 
+    // ── 🛒 INTERCEPCIÓN DE PEDIDOS DEL CATÁLOGO (CARRITO) ──
+    if (payload.data.type === 'order') {
+      const pedido = payload.data.order;
+      if (pedido) {
+          const total = (pedido.totalAmount1000 / 1000).toFixed(2);
+          const pushName = payload.data.pushName || 'Cliente';
+          let fromJid = payload.data.from || '';
+          if (fromJid.includes('@s.whatsapp.net')) fromJid = fromJid.replace('@s.whatsapp.net', '@c.us');
+          
+          console.log('🛒 NUEVO PEDIDO DEL CATÁLOGO');
+          console.log('Cliente:', pushName, fromJid);
+          console.log('Productos:', pedido.itemCount);
+          console.log('Total: $' + total, pedido.totalCurrencyCode);
+          console.log('Nota:', pedido.message || 'Sin nota');
+
+          const configStr = await redis.get('wapp_config');
+          const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
+          
+          // 1. Notificar al dueño
+          let msgDueno = `🛒 *NUEVO PEDIDO RECIBIDO (CATÁLOGO)*\n\n`;
+          msgDueno += `👤 *Cliente:* ${pushName} (${fromJid.replace('@c.us', '')})\n`;
+          msgDueno += `📦 *Productos:* ${pedido.itemCount}\n`;
+          msgDueno += `💰 *Total:* $${total} ${pedido.totalCurrencyCode}\n`;
+          if (pedido.message) msgDueno += `📝 *Nota:* ${pedido.message}\n`;
+          
+          await sendWhatsApp('5218116038195@c.us', msgDueno, cfg);
+          
+          // 2. Responder al cliente
+          let msgCliente = `🍔 ¡Hola ${pushName}! Hemos recibido tu pedido de WhatsApp por *$${total} ${pedido.totalCurrencyCode}*.\n\n`;
+          msgCliente += `En un momento un agente se comunicará contigo para confirmar los detalles y el envío. ¡Gracias por tu preferencia! 🚀`;
+          await sendWhatsApp(fromJid, msgCliente, cfg);
+      }
+      return NextResponse.json({ success: true, note: 'order_processed' });
+    }
+
     let bodyStr = payload.data.body || payload.data.__raw?.message?.conversation || payload.data.__raw?.message?.extendedTextMessage?.text || '';
     
     // Si mandan un Sticker pero no hay texto, lo tratamos como un saludo inicial (HOLA) para que el Bot despierte
