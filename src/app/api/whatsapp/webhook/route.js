@@ -842,8 +842,9 @@ export async function POST(req) {
 
     let cleanPhone = '52' + phoneId.replace(/\D/g, '').slice(-10);
 
-    let historyKey = `chat_hist_${phoneId}`;
-    let history = await redis.get(historyKey);
+    // Siempre usar clave normalizada con país para evitar duplicados
+    let historyKey = `chat_hist_${cleanPhone}@c.us`;
+    let history = await redis.get(historyKey) || await redis.get(`chat_hist_${phoneId}`);
     let parsed = typeof history === 'string' ? JSON.parse(history) : (history || []);
     parsed.push({ role: 'user', parts: [{ text: bodyStr, ts: Date.now() }] });
     await redis.incr(`chat_unread_${cleanPhone}`);

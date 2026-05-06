@@ -41,15 +41,21 @@ export async function GET() {
 export async function DELETE(req) {
   try {
     const { searchParams } = new URL(req.url);
-    let phone = (searchParams.get('phone') || '').replace(/\D/g, '');
-    if (!phone.startsWith('52')) phone = '52' + phone;
-    if (!phone) return NextResponse.json({ success: false, error: 'phone requerido' });
+    const rawPhone = (searchParams.get('phone') || '').replace(/\D/g, '');
+    if (!rawPhone) return NextResponse.json({ success: false, error: 'phone requerido' });
 
+    // Normalizar para limpiar claves secundarias (unread, typing)
+    let normPhone = rawPhone;
+    if (!normPhone.startsWith('52')) normPhone = '52' + normPhone;
+
+    // Borra la clave exacta del key (rawPhone) + la normalizada + auxiliares
     await Promise.all([
-      redis.del(`chat_hist_${phone}@c.us`),
-      redis.del(`chat_hist_${phone}`),
-      redis.del(`chat_unread_${phone}`),
-      redis.del(`typing_${phone}`)
+      redis.del(`chat_hist_${rawPhone}@c.us`),
+      redis.del(`chat_hist_${rawPhone}`),
+      redis.del(`chat_hist_${normPhone}@c.us`),
+      redis.del(`chat_hist_${normPhone}`),
+      redis.del(`chat_unread_${normPhone}`),
+      redis.del(`typing_${normPhone}`)
     ]);
 
     return NextResponse.json({ success: true });
