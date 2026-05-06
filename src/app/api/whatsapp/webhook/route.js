@@ -191,11 +191,38 @@ export async function POST(req) {
           await sendWhatsApp('5218116038195@c.us', msgDueno, cfg);
           
           // 2. Responder al cliente
-          let msgCliente = `🍔 ¡Hola ${pushName}! Hemos recibido tu pedido de WhatsApp por *$${total} ${pedido.totalCurrencyCode}*.\n\n`;
+          let msgCliente = `🍔 ¡Hola ${pushName}! Hemos recibido tu pedido de WhatsApp por *$${total} ${currency}*.\n\n`;
           msgCliente += `En un momento un agente se comunicará contigo para confirmar los detalles y el envío. ¡Gracias por tu preferencia! 🚀`;
           await sendWhatsApp(fromJid, msgCliente, cfg);
+          
+          // 3. Guardar en el historial para que aparezca en el Dashboard UI
+          let cleanPhone = '52' + fromJid.replace(/\D/g, '').slice(-10);
+          let historyKey = `chat_hist_${cleanPhone}@c.us`;
+          let historyStr = await redis.get(historyKey) || await redis.get(`chat_hist_${fromJid}`);
+          let history = typeof historyStr === 'string' ? JSON.parse(historyStr) : (historyStr || []);
+          
+          history.push({
+              role: 'user',
+              parts: [{
+                  text: `🛒 *Pedido Recibido*\nTotal: $${total} ${currency}\nProductos: ${itemCount}\nNota: ${nota || 'Ninguna'}`,
+                  msgId: payload.data.id || Date.now().toString(),
+                  ts: payload.data.timestamp || Math.floor(Date.now() / 1000),
+                  status: 'delivered'
+              }]
+          });
+          
+          history.push({
+              role: 'model',
+              parts: [{
+                  text: msgCliente,
+                  ts: Math.floor(Date.now() / 1000)
+              }]
+          });
+
+          await redis.set(historyKey, JSON.stringify(history));
+          await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(history));
       }
-      return NextResponse.json({ success: true, note: 'order_processed' });
+      return NextResponse.json({ success: true, note: 'order_processed_and_saved' });
     }
 
     let bodyStr = payload.data.body || payload.data.__raw?.message?.conversation || payload.data.__raw?.message?.extendedTextMessage?.text || '';
