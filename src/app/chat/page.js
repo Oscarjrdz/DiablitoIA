@@ -548,7 +548,12 @@ export default function ChatPage() {
               {/* Puntos */}
               <div className={styles.infoCard}>
                 <div className={styles.infoCardLabel}>Puntos acumulados</div>
-                <div className={styles.infoPoints}>{(clientCard.client.points || 0).toLocaleString('es-MX')}</div>
+                <div className={styles.infoPoints}>
+                  {clientCard.client.points !== null
+                    ? Number(clientCard.client.points).toLocaleString('es-MX')
+                    : <span style={{ fontSize: 14, color: '#525d65' }}>No en Loyverse</span>
+                  }
+                </div>
               </div>
 
               {/* Dirección */}

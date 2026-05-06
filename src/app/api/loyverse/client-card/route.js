@@ -3,13 +3,44 @@ import { redis } from '@/lib/redis';
 
 const BASE = 'https://api.loyverse.com/v1.0';
 
+// Busca el cliente en Loyverse por los últimos 10 dígitos del teléfono.
+// Primero prueba el filtro rápido de la API; si no hay match verificado,
+// hace un scan paginado completo (igual que el endpoint de reset).
+async function findCustomerByPhone(phone10, headers) {
+  const tryMatch = (list) =>
+    list.find(c => c.phone_number && c.phone_number.replace(/\D/g, '').endsWith(phone10));
+
+  // ── Intento rápido: filtro nativo de Loyverse ──
+  for (const q of [phone10, '52' + phone10]) {
+    const res = await fetch(`${BASE}/customers?phone_number=${encodeURIComponent(q)}&limit=10`, { headers });
+    if (!res.ok) continue;
+    const data = await res.json();
+    const match = tryMatch(data.customers || []);
+    if (match) return match;
+  }
+
+  // ── Fallback: scan paginado completo ──
+  let cursor = null;
+  do {
+    let url = `${BASE}/customers?limit=250`;
+    if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+    const res = await fetch(url, { headers });
+    if (!res.ok) break;
+    const data = await res.json();
+    const match = tryMatch(data.customers || []);
+    if (match) return match;
+    cursor = data.cursor || null;
+  } while (cursor);
+
+  return null;
+}
+
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
     let phone = (searchParams.get('phone') || '').replace(/\D/g, '');
     if (!phone) return NextResponse.json({ success: false, error: 'phone requerido' }, { status: 400 });
 
-    // Normalize to 52XXXXXXXXXX
     if (!phone.startsWith('52')) phone = '52' + phone;
     const phone10 = phone.slice(-10);
 
@@ -17,48 +48,48 @@ export async function GET(req) {
     if (!loyverseToken) return NextResponse.json({ success: false, error: 'No token' }, { status: 500 });
     const headers = { 'Authorization': `Bearer ${loyverseToken}` };
 
-    // ── 1. Buscar cliente en Loyverse por teléfono ──
-    const custRes = await fetch(`${BASE}/customers?phone_number=${encodeURIComponent(phone10)}&limit=5`, { headers });
-    const custData = custRes.ok ? await custRes.json() : {};
-    let customer = (custData.customers || [])[0] || null;
+    // ── 1. Encontrar cliente correcto en Loyverse ──
+    const customer = await findCustomerByPhone(phone10, headers);
 
-    // Si no encontró con 10 dígitos, intenta con el número completo 52...
-    if (!customer) {
-      const custRes2 = await fetch(`${BASE}/customers?phone_number=${encodeURIComponent(phone)}&limit=5`, { headers });
-      const custData2 = custRes2.ok ? await custRes2.json() : {};
-      customer = (custData2.customers || [])[0] || null;
-    }
-
-    // ── 2. Datos de Redis ──
+    // ── 2. Datos de Redis (caché) ──
     const [cachedName, storedStore, promoStatus] = await Promise.all([
       redis.get(`client_name_${phone}`),
       redis.get(`client_store_${phone}`),
       redis.get(`promo_pos_${phone}`)
     ]);
 
-    // ── 3. Parsear nota del cliente para extraer dirección/tienda ──
+    // ── 3. Dirección y tienda desde nota de Loyverse ──
     let tienda = storedStore || '';
     let address = '';
     if (customer?.note) {
       const note = customer.note;
       const tiendaM = note.match(/Tienda:\s*(.+?)(?:\n|$)/);
       if (tiendaM) tienda = tiendaM[1].trim();
-      const calleM = note.match(/Calle:\s*(.+?)(?:\n|$)/);
-      const numM = note.match(/Número:\s*(.+?)(?:\n|$)/);
-      const colM = note.match(/Colonia:\s*(.+?)(?:\n|$)/);
-      const munM = note.match(/Municipio:\s*(.+?)(?:\n|$)/);
-      const parts = [calleM?.[1], numM?.[1], colM?.[1], munM?.[1]].filter(Boolean);
+      const parts = [
+        note.match(/Calle:\s*(.+?)(?:\n|$)/)?.[1],
+        note.match(/Número:\s*(.+?)(?:\n|$)/)?.[1],
+        note.match(/Colonia:\s*(.+?)(?:\n|$)/)?.[1],
+        note.match(/Municipio:\s*(.+?)(?:\n|$)/)?.[1],
+      ].filter(Boolean);
       address = parts.join(', ');
     }
 
-    // ── 4. Compras recientes (receipts) ──
+    // ── 4. Compras del cliente (filtradas por su customer_id) ──
     let receipts = [];
     if (customer?.id) {
-      const recRes = await fetch(`${BASE}/receipts?customer_id=${customer.id}&limit=15`, { headers });
+      // El filtro customer_id es soportado por Loyverse v1.0
+      const recRes = await fetch(
+        `${BASE}/receipts?customer_id=${encodeURIComponent(customer.id)}&limit=50&order=DESC`,
+        { headers }
+      );
       if (recRes.ok) {
         const recData = await recRes.json();
-        // Obtener nombres de stores
-        const storeIds = [...new Set((recData.receipts || []).map(r => r.store_id).filter(Boolean))];
+        const rawReceipts = (recData.receipts || [])
+          // Doble verificación: solo compras de este cliente
+          .filter(r => r.customer_id === customer.id);
+
+        // Obtener nombres de sucursales
+        const storeIds = [...new Set(rawReceipts.map(r => r.store_id).filter(Boolean))];
         let storeMap = {};
         if (storeIds.length) {
           const sRes = await fetch(`${BASE}/stores`, { headers });
@@ -67,35 +98,44 @@ export async function GET(req) {
             for (const s of sData.stores || []) storeMap[s.id] = s.name;
           }
         }
-        receipts = (recData.receipts || []).map(r => ({
-          date: r.receipt_date || r.created_at || null,
-          store: storeMap[r.store_id] || r.store_id || 'Sucursal',
-          total: r.total_money ?? r.total ?? 0,
-          items: (r.line_items || []).length
-        })).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        receipts = rawReceipts
+          .map(r => ({
+            date: r.receipt_date || r.created_at || null,
+            store: storeMap[r.store_id] || 'Sucursal',
+            total: r.total_money ?? 0,
+            items: (r.line_items || []).length
+          }))
+          .sort((a, b) => new Date(b.date) - new Date(a.date))
+          .slice(0, 15);
       }
     }
 
-    // ── 5. Cupones canjeados (filtrar log global por teléfono) ──
+    // ── 5. Cupones canjeados (log en Redis filtrado por teléfono) ──
     const allLogs = await redis.lrange('redeemed_coupons_log', 0, 500);
     const coupons = allLogs
       .map(l => { try { return typeof l === 'string' ? JSON.parse(l) : l; } catch { return null; } })
-      .filter(l => {
-        if (!l) return false;
-        const lPhone = (l.phone || l.clientPhone || '').replace(/\D/g, '');
-        return lPhone.endsWith(phone10);
-      })
+      .filter(l => l && (l.phone || l.clientPhone || '').replace(/\D/g, '').endsWith(phone10))
       .sort((a, b) => new Date(b.receiptDate || 0) - new Date(a.receiptDate || 0))
       .slice(0, 20);
 
+    // ── 6. Puntos: del objeto customer de Loyverse (fuente de verdad) ──
+    const points = customer?.total_points ?? null;
     const name = cachedName || customer?.name || phone10;
-    const points = customer?.total_points ?? 0;
-    const email = customer?.email || '';
-    const customerId = customer?.id || null;
 
     return NextResponse.json({
       success: true,
-      client: { name, phone, phone10, points, email, tienda, address, customerId, promoStatus },
+      client: {
+        name,
+        phone,
+        phone10,
+        points,
+        email: customer?.email || '',
+        tienda,
+        address,
+        customerId: customer?.id || null,
+        promoStatus
+      },
       receipts,
       coupons
     });
