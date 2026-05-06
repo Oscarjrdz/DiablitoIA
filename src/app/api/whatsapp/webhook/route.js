@@ -969,6 +969,7 @@ export async function POST(req) {
     // ── 🔍 IDENTIFICACIÓN: Buscar cliente en Loyverse por teléfono ──
     let clientName = null;
     let clientPoints = 0;
+    let clientAddress = '';
     let isRegistered = false;
     const cachedName = await redis.get(`client_name_${cleanPhone}`);
     if (cachedName) {
@@ -976,6 +977,8 @@ export async function POST(req) {
         isRegistered = true;
         const cachedPoints = await redis.get(`client_points_${cleanPhone}`);
         clientPoints = parseInt(cachedPoints || '0');
+        const cachedAddr = await redis.get(`client_address_${cleanPhone}`);
+        if (cachedAddr) clientAddress = cachedAddr;
     } else {
         // FIX#7: Buscar en Loyverse con paginación completa
         try {
@@ -1005,10 +1008,15 @@ export async function POST(req) {
                     clientName = match.name;
                     clientPoints = match.total_points || 0;
                     isRegistered = true;
+                    // Extract address
+                    let addr = match.address || '';
+                    if (match.city) addr += (addr ? ', ' : '') + match.city;
+                    clientAddress = addr.trim();
                     // Cachear en Redis para no buscar cada vez
                     await redis.set(`client_name_${cleanPhone}`, clientName);
                     await redis.set(`client_points_${cleanPhone}`, String(clientPoints));
                     await redis.set(`client_registered_${cleanPhone}`, '1');
+                    if (clientAddress) await redis.set(`client_address_${cleanPhone}`, clientAddress);
                 }
             }
         } catch(lookupErr) { console.error('[Bot] Loyverse lookup error:', lookupErr); }
@@ -1061,7 +1069,7 @@ Su número es: ${clientPhone10}. (No pidas su número).
 NUNCA le ofrezcas registrarse de nuevo ni le ofrezcas el Cupón de Bienvenida (ya lo usó).
 
 INTERACCIÓN FRECUENTE (MENÚ PRINCIPAL):
-1) Pedido a Domicilio: Si el cliente selecciona la opción 1 o pide un pedido a domicilio, solicítale qué productos desea ordenar y su dirección de entrega, y dile que en breve un asesor confirmará su pedido.
+1) Pedido a Domicilio: Si el cliente selecciona la opción 1 o pide un pedido a domicilio, pregúntale qué productos/delicias se le antojan hoy.${clientAddress ? ` Además, confírmale su dirección guardada diciéndole: "¿Te lo enviamos a *${clientAddress}*? 📍". Si el cliente dice que sí o no corrige, usa esa dirección.` : ' Como no tiene dirección guardada, también pídele su dirección de entrega.'} NO menciones que un asesor confirmará el pedido.
 2) Revisar Puntos: Si el cliente selecciona la opción 2 o pregunta por sus puntos, confírmale amablemente que tiene exactamente "${clientPoints} puntos" e infórmale que puede canjearlos como dinero o descuentos al comprar en sucursal.
 3) Editar Datos: Si el cliente selecciona la opción 3 o pide cambiar su domicilio, pregúntale cuál será su nueva dirección y su nombre, y actualízalo usando la etiqueta secreta de actualización.
 
