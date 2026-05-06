@@ -64,25 +64,18 @@ export async function POST(req) {
 
     keysToDelete = [...new Set([...keysToDelete, ...manualKeys])];
 
-    for (const key of keysToDelete) {
-        if (key.includes('reset_lock_')) continue;
-        await redis.del(key);
-    }
-    
-    // REPELLER FANTASMAS 5 minutos (Evita cupon de bienvenida de webhooks viejos)
-    await redis.setex(`reset_lock_${cleanPhone}`, 15, '1');
-
+    // ── 1. PRIMERO: borrar de Loyverse ──
     const loyverseToken = await redis.get('loyverse_token');
     let deletedFromLoyverse = false;
 
     if (loyverseToken) {
        try {
           if (id) {
-               await fetch(`https://api.loyverse.com/v1.0/customers/${id}`, {
+               const delRes = await fetch(`https://api.loyverse.com/v1.0/customers/${id}`, {
                   method: 'DELETE',
                   headers: { Authorization: `Bearer ${loyverseToken}` }
                });
-               deletedFromLoyverse = true;
+               if (delRes.ok) deletedFromLoyverse = true;
           } else {
               let cursor = null;
               let keepSearching = true;
@@ -94,19 +87,17 @@ export async function POST(req) {
                   });
                   if (!searchRes.ok) break;
                   const searchData = await searchRes.json();
+                  const last10 = cleanPhone.slice(-10);
                   const matches = (searchData.customers || []).filter(c => {
                       if (!c.phone_number) return false;
-                      const cand = c.phone_number.replace(/\D/g, '');
-                      const last10 = cleanPhone.slice(-10);
-                      return cand.endsWith(last10);
+                      return c.phone_number.replace(/\D/g, '').endsWith(last10);
                   });
-                  
                   for (const match of matches) {
-                      await fetch(`https://api.loyverse.com/v1.0/customers/${match.id}`, {
+                      const delRes = await fetch(`https://api.loyverse.com/v1.0/customers/${match.id}`, {
                           method: 'DELETE',
                           headers: { Authorization: `Bearer ${loyverseToken}` }
                       });
-                      deletedFromLoyverse = true;
+                      if (delRes.ok) deletedFromLoyverse = true;
                   }
                   cursor = searchData.cursor || null;
                   keepSearching = !!cursor;
@@ -114,6 +105,15 @@ export async function POST(req) {
           }
        } catch(e) { console.error('Reset delete customer error:', e); }
     }
+
+    // ── 2. DESPUÉS: borrar de nuestro sistema (Redis) ──
+    for (const key of keysToDelete) {
+        if (key.includes('reset_lock_')) continue;
+        await redis.del(key);
+    }
+
+    // Repeler webhooks viejos durante 15 s para evitar que se re-registre
+    await redis.setex(`reset_lock_${cleanPhone}`, 15, '1');
 
     return NextResponse.json({ success: true, message: 'Deep reset completed', deletedFromLoyverse });
   } catch (err) {
