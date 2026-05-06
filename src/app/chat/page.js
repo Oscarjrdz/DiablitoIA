@@ -374,25 +374,18 @@ export default function ChatPage() {
         </div>
 
         {/* ── Filtro por sucursal ── */}
-        {stores.length > 0 && (
-          <div className={styles.storeFilterBar}>
-            <button
-              className={`${styles.storeChip} ${storeFilter === '' ? styles.storeChipActive : ''}`}
-              onClick={() => setStoreFilter('')}
-            >
-              Todas
-            </button>
+        <div className={styles.storeFilterBar}>
+          <select
+            className={styles.storeSelect}
+            value={storeFilter}
+            onChange={e => setStoreFilter(e.target.value)}
+          >
+            <option value="">Todas las sucursales</option>
             {stores.map(s => (
-              <button
-                key={s}
-                className={`${styles.storeChip} ${storeFilter === s ? styles.storeChipActive : ''}`}
-                onClick={() => setStoreFilter(prev => prev === s ? '' : s)}
-              >
-                {s}
-              </button>
+              <option key={s} value={s}>{s}</option>
             ))}
-          </div>
-        )}
+          </select>
+        </div>
 
         <div className={styles.chatList}>
           {loadingChats && <p className={styles.tip}>Cargando chats...</p>}
