@@ -543,6 +543,11 @@ export default function ChatPage() {
                 {clientCard.client.tienda && (
                   <div className={styles.infoStore}>{clientCard.client.tienda}</div>
                 )}
+                {clientCard.client.duplicateRecords && (
+                  <div className={styles.infoDuplicateWarn}>
+                    ⚠️ {clientCard.client.loyverseRecords} registros en Loyverse — puntos y compras sumados
+                  </div>
+                )}
               </div>
 
               {/* Puntos */}
