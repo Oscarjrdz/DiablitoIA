@@ -1,234 +1,282 @@
 'use client';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styles from './page.module.css';
-import { Search, MoreVertical, Paperclip, Smile, Mic, Send, Image as ImageIcon, MessageSquare } from 'lucide-react';
+import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, CheckCheck } from 'lucide-react';
 
-class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, errorStr: '' };
-  }
-  static getDerivedStateFromError(error) {
-    return { hasError: true, errorStr: error.toString() };
-  }
-  componentDidCatch(error, info) {
-    console.error("Chat Crashed:", error, info);
-  }
-  render() {
-    if (this.state.hasError) {
-      return <div style={{padding: 50, color: 'red', background: '#fff', fontSize: 20}}>
-          CRASH EN EL CHAT: {this.state.errorStr}
-        </div>;
-    }
-    return this.props.children;
-  }
+// ── Avatar con iniciales y color consistente ──
+const AVATAR_COLORS = [
+  '#e53935','#d81b60','#8e24aa','#5e35b1','#1e88e5',
+  '#039be5','#00acc1','#00897b','#43a047','#c0ca33',
+  '#f4511e','#f09300'
+];
+
+function hashColor(str = '') {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h);
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 
-function ChatWebCore() {
-  const [clients, setClients] = useState([]);
-  const [filteredClients, setFilteredClients] = useState([]);
+function initials(name = '') {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function Avatar({ name = '', phone = '', size = 49 }) {
+  const key = name || phone;
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      background: hashColor(key), flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: '#fff', fontWeight: 700, fontSize: Math.round(size * 0.37),
+      letterSpacing: 0.5, userSelect: 'none'
+    }}>
+      {initials(name || phone.slice(-4))}
+    </div>
+  );
+}
+
+// ── Formato de tiempo relativo para la lista ──
+function relativeTime(ts) {
+  if (!ts) return '';
+  const now = new Date();
+  const d = new Date(ts);
+  const toLocal = x => x.toLocaleDateString('en-CA', { timeZone: 'America/Monterrey' });
+  const nowStr = toLocal(now);
+  const dStr = toLocal(d);
+  if (nowStr === dStr)
+    return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Monterrey' });
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (dStr === toLocal(yesterday)) return 'Ayer';
+  if (now - d < 7 * 86400000) return ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][d.getDay()];
+  return d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: '2-digit' });
+}
+
+// ── Separador de fecha en el área de mensajes ──
+function dateSeparator(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  const now = new Date();
+  const toLocal = x => x.toLocaleDateString('en-CA', { timeZone: 'America/Monterrey' });
+  if (toLocal(d) === toLocal(now)) return 'Hoy';
+  const yest = new Date(now); yest.setDate(yest.getDate() - 1);
+  if (toLocal(d) === toLocal(yest)) return 'Ayer';
+  return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Monterrey' });
+}
+
+export default function ChatPage() {
+  const [chats, setChats] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [storeFilter, setStoreFilter] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [attachmentBase64, setAttachmentBase64] = useState(null);
-  const [attachmentType, setAttachmentType] = useState(null);
-  const fileInputRef = useRef(null);
-  const messagesEndRef = useRef(null);
+  const [search, setSearch] = useState('');
+  const [loadingChats, setLoadingChats] = useState(true);
+  const [attachment, setAttachment] = useState(null); // { base64, type, name }
 
-  // Poll chats periodically
-  useEffect(() => {
-    fetchClients();
-    const inv = setInterval(fetchClients, 10000);
-    return () => clearInterval(inv);
+  const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const activeChatRef = useRef(null);
+  const msgPollRef = useRef(null);
+  const listPollRef = useRef(null);
+
+  useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
+
+  // ── Cargar lista de chats ──
+  const fetchChats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/whatsapp/chats');
+      const data = await res.json();
+      if (data.success) setChats(data.chats || []);
+    } catch {}
+    setLoadingChats(false);
   }, []);
 
-  const fetchClients = async () => {
-    try {
-      const token = localStorage.getItem('loyverse_api_token');
-      if (!token) return;
-      const res = await fetch('/api/loyverse/clients', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (data.success && data.data) {
-        // En un escenario real, los chats vienen de Wapp. Usamos clientes como Chats.
-        
-        const formatName = (n) => {
-           if (!n) return '';
-           return n.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-        };
-
-        const chatList = data.data.filter(c => c.phone_number).map(c => {
-           let dateStr = 'Reciente';
-           if (c.last_visit) {
-              const d = new Date(c.last_visit);
-              dateStr = d.toLocaleDateString();
-           } else if (c.created_at) {
-              const d = new Date(c.created_at);
-              dateStr = d.toLocaleDateString();
-           }
-           
-           return {
-              id: c.phone_number,
-              name: formatName(c.name || c.phone_number),
-              phone: c.phone_number,
-              lastTime: dateStr,
-              preview: 'Toca para abrir el chat...',
-              tienda: c.tienda || 'No Asig.',
-              puntos: Math.floor(c.total_points || c.points_balance || 0),
-              visitas: c.total_visits || 0
-           };
-        });
-        setClients(chatList);
-        if (!activeChat) setFilteredClients(chatList);
-      }
-    } catch(e) {}
-    setLoading(false);
-  };
-
   useEffect(() => {
-    let res = clients;
-    if (storeFilter) {
-       res = res.filter(c => c.tienda === storeFilter);
-    }
-    if (searchQuery) {
-      res = res.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.phone.includes(searchQuery));
-    }
-    setFilteredClients(res);
-  }, [searchQuery, storeFilter, clients]);
+    fetchChats();
+    listPollRef.current = setInterval(fetchChats, 8000);
+    return () => clearInterval(listPollRef.current);
+  }, [fetchChats]);
 
-  const loadChatHistory = async (phone) => {
-     // Fetch from our new API route to get redis history
-     try {
-       const res = await fetch(`/api/whatsapp/history?phone=${encodeURIComponent(phone)}`);
-       const data = await res.json();
-       if (data.success) {
-          setMessages(data.messages || []);
-       }
-     } catch (e) {
-       console.error(e);
-     }
-  };
+  // ── Cargar mensajes del chat activo ──
+  const fetchMessages = useCallback(async (phone) => {
+    if (!phone) return;
+    try {
+      const res = await fetch(`/api/whatsapp/history?phone=${encodeURIComponent(phone)}`);
+      const data = await res.json();
+      if (data.success) {
+        setMessages(data.messages || []);
+        // Actualizar badge de unread en la lista
+        setChats(prev => prev.map(c => c.phone === phone ? { ...c, unread: 0 } : c));
+      }
+    } catch {}
+  }, []);
 
-  const handleChatSelect = (chat) => {
+  const openChat = useCallback((chat) => {
     setActiveChat(chat);
     setMessages([]);
-    if (window.activeChatLoader) clearInterval(window.activeChatLoader);
-    loadChatHistory(chat.phone);
-    // Poll this active chat carefully
-    window.activeChatLoader = setInterval(() => loadChatHistory(chat.phone), 4000);
+    setInputText('');
+    setAttachment(null);
+    clearInterval(msgPollRef.current);
+    fetchMessages(chat.phone);
+    msgPollRef.current = setInterval(() => {
+      if (activeChatRef.current?.phone === chat.phone) fetchMessages(chat.phone);
+    }, 2000);
+  }, [fetchMessages]);
+
+  useEffect(() => () => clearInterval(msgPollRef.current), []);
+
+  // ── Auto-scroll al último mensaje ──
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // ── Auto-resize del textarea ──
+  const autoResize = () => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
   };
 
-  useEffect(() => {
-    return () => {
-      if (window.activeChatLoader) clearInterval(window.activeChatLoader);
-    };
-  }, []);
-
+  // ── Adjunto ──
   const handleFileSelect = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
-    
     const reader = new FileReader();
-    reader.onload = (ev) => {
-       setAttachmentBase64(ev.target.result);
-       if (file.type.startsWith('image/')) setAttachmentType('image');
-       else if (file.type.startsWith('audio/')) setAttachmentType('audio');
-       else setAttachmentType('document');
+    reader.onload = ev => {
+      const type = file.type.startsWith('image/') ? 'image'
+        : file.type.startsWith('audio/') ? 'audio' : 'document';
+      setAttachment({ base64: ev.target.result, type, name: file.name });
     };
     reader.readAsDataURL(file);
   };
 
+  const clearAttachment = () => {
+    setAttachment(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // ── Enviar mensaje ──
   const handleSend = async () => {
-    if ((!inputText.trim() && !attachmentBase64) || !activeChat) return;
-    
-    // Optimistic UI
-    const newMsg = { 
-       text: inputText, 
-       attachment: attachmentBase64,
-       attachmentType: attachmentType,
-       fromMe: true, 
-       time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) 
-    };
-    setMessages([...messages, newMsg]);
-    
-    const bodyStr = JSON.stringify({ 
-        to: activeChat.phone, 
-        text: inputText, 
-        attachment: attachmentBase64,
-        attachmentType: attachmentType
+    const text = inputText.trim();
+    if (!text && !attachment) return;
+    if (!activeChat) return;
+
+    const now = Date.now();
+    const timeStr = new Date(now).toLocaleTimeString('es-MX', {
+      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Monterrey'
     });
 
+    // Optimistic UI
+    const optimistic = {
+      text,
+      attachment: attachment?.base64 || null,
+      attachmentType: attachment?.type || null,
+      fromMe: true,
+      ts: now,
+      time: timeStr
+    };
+    setMessages(prev => [...prev, optimistic]);
     setInputText('');
-    setAttachmentBase64(null);
-    setAttachmentType(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    clearAttachment();
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+
+    // Actualizar preview en la lista
+    setChats(prev => prev.map(c =>
+      c.phone === activeChat.phone
+        ? { ...c, lastText: text || '📎 Archivo', lastTs: now, fromMe: true }
+        : c
+    ));
 
     try {
       await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: bodyStr
+        body: JSON.stringify({
+          to: activeChat.phone,
+          text,
+          attachment: attachment?.base64 || null,
+          attachmentType: attachment?.type || null
+        })
       });
-    } catch (e) {
-      console.error(e);
-    }
+    } catch {}
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  // ── Filtrar chats ──
+  const filtered = search
+    ? chats.filter(c =>
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
+        c.phone.includes(search)
+      )
+    : chats;
+
+  // ── Separadores de fecha en mensajes ──
+  const msgsWithSeparators = [];
+  let lastDateLabel = null;
+  for (const m of messages) {
+    const label = dateSeparator(m.ts);
+    if (label && label !== lastDateLabel) {
+      msgsWithSeparators.push({ _sep: true, label });
+      lastDateLabel = label;
+    }
+    msgsWithSeparators.push(m);
+  }
 
   return (
-    <div className={styles.whatsappWebContainer}>
-      
-      <div className={styles.leftPane}>
-        <div className={styles.paneHeader}>
-          <div className={styles.avatar} style={{width: 40, height: 40}}>
-             <img src="https://i.postimg.cc/Wb7S1N2S/diablito.png" alt="Profile" style={{width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover'}} />
-          </div>
-          <div style={{display: 'flex', gap: 15, color: '#54656f'}}>
-            <MessageSquare size={20} />
-            <MoreVertical size={20} />
-          </div>
+    <div className={styles.root}>
+
+      {/* ══ PANEL IZQUIERDO ══ */}
+      <div className={`${styles.left} ${activeChat ? styles.leftHidden : ''}`}>
+        <div className={styles.leftHeader}>
+          <Avatar name="El Diablito" size={40} />
+          <span className={styles.leftTitle}>Chats</span>
+          <MoreVertical size={20} color="#aebac1" style={{ cursor: 'pointer' }} />
         </div>
-        <div className={styles.searchContainer}>
-          <div className={styles.searchInputWrapper}>
-             <Search size={16} color="#54656f" />
-             <input type="text" placeholder="Busca un chat o inicia uno nuevo" className={styles.searchInput} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-          </div>
-          <div style={{marginTop: 8}}>
-             <select style={{width:'100%', padding: '8px 12px', borderRadius: 8, border: 'none', backgroundColor: '#f0f2f5', color: '#54656f', outline: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', appearance: 'none'}} value={storeFilter} onChange={(e) => setStoreFilter(e.target.value)}>
-                <option value="">Filtro: Todas las sucursales</option>
-                {Array.from(new Set(clients.map(c => c.tienda).filter(t => t && t !== 'No Asig.'))).sort().map(s => <option key={s} value={s}>{s}</option>)}
-             </select>
-          </div>
+
+        <div className={styles.searchBar}>
+          <Search size={15} color="#8696a0" />
+          <input
+            className={styles.searchInput}
+            placeholder="Buscar o empezar chat"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && (
+            <button style={{ background: 'none', border: 'none', color: '#8696a0', cursor: 'pointer', padding: 0 }} onClick={() => setSearch('')}>
+              <X size={14} />
+            </button>
+          )}
         </div>
+
         <div className={styles.chatList}>
-          {filteredClients.map((chat) => (
-            <div key={chat.id} className={`${styles.chatItem} ${activeChat?.id === chat.id ? styles.active : ''}`} onClick={() => handleChatSelect(chat)}>
-              <div className={styles.avatar} style={{ overflow: 'hidden' }}>
-                 <img src="https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png" alt="dp" style={{width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8}} />
-              </div>
-              <div className={styles.chatInfo}>
-                <div className={styles.chatNameRow}>
-                  <span className={styles.chatName}>{String(chat.name || '')}</span>
-                  <span className={styles.chatTime}>{chat.lastTime}</span>
+          {loadingChats && <p className={styles.tip}>Cargando chats...</p>}
+          {!loadingChats && filtered.length === 0 && <p className={styles.tip}>Sin chats</p>}
+          {filtered.map(chat => (
+            <div
+              key={chat.phone}
+              className={`${styles.chatItem} ${activeChat?.phone === chat.phone ? styles.chatActive : ''}`}
+              onClick={() => openChat(chat)}
+            >
+              <Avatar name={chat.name} phone={chat.phone} size={49} />
+              <div className={styles.chatMeta}>
+                <div className={styles.chatRow1}>
+                  <span className={styles.chatName}>{chat.name}</span>
+                  <span className={styles.chatTime}>{relativeTime(chat.lastTs)}</span>
                 </div>
-                <div style={{fontSize: 12, color: '#667781', display: 'flex', gap: '8px', marginTop: 4, flexWrap: 'wrap'}}>
-                  <span style={{background: 'rgba(0,0,0,0.05)', padding: '2px 6px', borderRadius: 4}}>🏪 {chat.tienda}</span>
-                  <span style={{background: 'rgba(255,165,0,0.1)', color: '#cc8400', padding: '2px 6px', borderRadius: 4}}>⭐ {chat.puntos}</span>
-                  <span style={{background: 'rgba(0,128,0,0.1)', color: 'green', padding: '2px 6px', borderRadius: 4}}>🚶 {chat.visitas}</span>
+                <div className={styles.chatRow2}>
+                  <span className={styles.chatPreview}>
+                    {chat.fromMe && <CheckCheck size={14} color="#8696a0" style={{ marginRight: 3, verticalAlign: 'middle', flexShrink: 0 }} />}
+                    {chat.lastText || <em style={{ opacity: 0.5 }}>Sin mensajes</em>}
+                  </span>
+                  {chat.unread > 0 && <span className={styles.badge}>{chat.unread}</span>}
                 </div>
               </div>
             </div>
@@ -236,81 +284,103 @@ function ChatWebCore() {
         </div>
       </div>
 
+      {/* ══ PANEL DERECHO ══ */}
       {activeChat ? (
-        <div className={styles.rightPane}>
-          <div className={styles.chatHeader}>
-              <div className={styles.avatar} style={{ overflow: 'hidden' }}>
-                 <img src="https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png" alt="dp" style={{width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8}} />
-              </div>
-            <div className={styles.chatHeaderInfo}>
-              <span className={styles.chatHeaderName}>{activeChat ? String(activeChat.name) : ''}</span>
-              <span className={styles.chatHeaderStatus}>en línea</span>
+        <div className={styles.right}>
+          {/* Header */}
+          <div className={styles.rightHeader}>
+            <button className={styles.backBtn} onClick={() => { setActiveChat(null); clearInterval(msgPollRef.current); }}>
+              <ArrowLeft size={22} />
+            </button>
+            <Avatar name={activeChat.name} phone={activeChat.phone} size={40} />
+            <div className={styles.headerInfo}>
+              <span className={styles.headerName}>{activeChat.name}</span>
+              <span className={styles.headerSub}>{activeChat.phone.replace(/^52/, '').replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3')}</span>
             </div>
-            <div style={{marginLeft: 'auto', display: 'flex', gap: 15, color: '#54656f'}}>
-              <Search size={22} />
-              <MoreVertical size={22} />
+            <div className={styles.headerIcons}>
+              <Search size={20} />
+              <MoreVertical size={20} />
             </div>
-          </div>
-          
-          <div className={styles.messageArea}>
-             {Array.isArray(messages) && messages.map((m, idx) => (
-                <div key={idx} className={`${styles.messageRow} ${m.fromMe ? styles.out : styles.in}`}>
-                   <div className={styles.messageBubble}>
-                      {m.attachment && m.attachmentType === 'image' && <img src={m.attachment} style={{maxWidth: '100%', borderRadius: 5, marginBottom: 5}} />}
-                      {m.attachment && m.attachmentType !== 'image' && <div style={{background: 'rgba(0,0,0,0.05)', padding: 10, borderRadius: 5, fontSize: 12, marginBottom: 5}}>📎 Archivo Adjunto ({m.attachmentType})</div>}
-                      <span style={{whiteSpace: 'pre-wrap'}}>{m ? String(m.text || '') : ''}</span>
-                      <div className={styles.messageFooter}>
-                         <span className={styles.messageTime}>{m.time}</span>
-                         {m.fromMe && <span className={styles.messageTick}>✓✓</span>}
-                      </div>
-                   </div>
-                </div>
-             ))}
-             <div ref={messagesEndRef} />
           </div>
 
-          <div className={styles.inputArea}>
-            <button className={styles.iconBtn}><Smile size={24} /></button>
-            <button className={styles.iconBtn} onClick={() => fileInputRef.current?.click()}><Paperclip size={22} /></button>
-            <input type="file" ref={fileInputRef} style={{display: 'none'}} onChange={handleFileSelect} />
-            <div className={styles.inputWrapper}>
-              {attachmentBase64 && (
-                 <div style={{position: 'absolute', bottom: '60px', left: '70px', background: '#fff', padding: '10px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.2)'}}>
-                    {attachmentType === 'image' && <img src={attachmentBase64} style={{maxHeight: 100, borderRadius: 5}} />}
-                    {attachmentType !== 'image' && <div>📎 File ready to send</div>}
-                    <div style={{textAlign: 'center', cursor: 'pointer', color: 'red', marginTop: 5, fontSize: 12}} onClick={() => setAttachmentBase64(null)}>Quitar</div>
-                 </div>
-              )}
-              <textarea 
-                className={styles.messageInput} 
-                placeholder="Escribe un mensaje aquí"
+          {/* Mensajes */}
+          <div className={styles.messages}>
+            {msgsWithSeparators.map((item, i) => {
+              if (item._sep) {
+                return (
+                  <div key={'sep' + i} className={styles.dateSep}>
+                    <span>{item.label}</span>
+                  </div>
+                );
+              }
+              const m = item;
+              return (
+                <div key={i} className={m.fromMe ? styles.rowOut : styles.rowIn}>
+                  {!m.fromMe && <Avatar name={activeChat.name} phone={activeChat.phone} size={28} />}
+                  <div className={m.fromMe ? styles.bubbleOut : styles.bubbleIn}>
+                    {m.attachment && m.attachmentType === 'image' && (
+                      <img src={m.attachment} alt="" style={{ maxWidth: '100%', borderRadius: 6, display: 'block', marginBottom: 4 }} />
+                    )}
+                    {m.attachment && m.attachmentType !== 'image' && (
+                      <div className={styles.fileAttach}>
+                        <Paperclip size={16} />
+                        <span>Archivo adjunto</span>
+                      </div>
+                    )}
+                    {m.text && <span className={styles.msgText}>{m.text}</span>}
+                    <div className={styles.msgMeta}>
+                      {m.time && <span className={styles.msgTime}>{m.time}</span>}
+                      {m.fromMe && <CheckCheck size={14} color="#8696a0" />}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Preview adjunto */}
+          {attachment && (
+            <div className={styles.attachBar}>
+              {attachment.type === 'image'
+                ? <img src={attachment.base64} alt="" style={{ height: 72, borderRadius: 6, objectFit: 'cover' }} />
+                : <div className={styles.filePreview}><Paperclip size={16} />{attachment.name}</div>
+              }
+              <button className={styles.removeAttach} onClick={clearAttachment}><X size={14} /></button>
+            </div>
+          )}
+
+          {/* Input */}
+          <div className={styles.inputRow}>
+            <button className={styles.iconBtn} onClick={() => fileInputRef.current?.click()}>
+              <Paperclip size={22} />
+            </button>
+            <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileSelect} />
+            <div className={styles.inputWrap}>
+              <textarea
+                ref={textareaRef}
+                className={styles.msgInput}
+                placeholder="Escribe un mensaje"
                 rows={1}
                 value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
+                onChange={e => { setInputText(e.target.value); autoResize(); }}
                 onKeyDown={handleKeyDown}
               />
             </div>
-            {inputText.trim() ? (
-              <button className={styles.iconBtn} onClick={handleSend}><Send size={24} color="#54656f" style={{marginLeft: 2, transform: 'translateX(2px)'}} /></button>
-            ) : (
-              <button className={styles.iconBtn}><Mic size={24} /></button>
-            )}
+            <button className={styles.sendBtn} onClick={handleSend}>
+              {(inputText.trim() || attachment) ? <Send size={20} /> : <Mic size={20} />}
+            </button>
           </div>
         </div>
       ) : (
-        <div className={styles.emptyState}>
-           <img src="https://logolook.net/wp-content/uploads/2021/07/WhatsApp-Logo.png" style={{height: 100, opacity: 0.3, filter: 'grayscale(100%)', marginBottom: 20}} alt="WhatsApp Web" />
-           <h1 className={styles.emptyStateTitle}>WhatsApp Web</h1>
-           <p className={styles.emptyStateSubtitle}>
-              Envía y recibe mensajes sin conectar tu teléfono.<br/>
-              Usa WhatsApp hasta en 4 dispositivos vinculados y 1 teléfono a la vez.
-           </p>
+        <div className={styles.emptyPane}>
+          <div className={styles.emptyBox}>
+            <div style={{ fontSize: 72, marginBottom: 16, opacity: 0.12 }}>💬</div>
+            <h2 className={styles.emptyTitle}>Diablito Chat</h2>
+            <p className={styles.emptySub}>Selecciona un chat para comenzar a escribir</p>
+          </div>
         </div>
       )}
     </div>
   );
-}
-
-export default function ChatWebPage() {
-   return <ErrorBoundary><ChatWebCore /></ErrorBoundary>;
 }

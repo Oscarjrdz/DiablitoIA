@@ -17,9 +17,9 @@ export async function POST(req) {
     // Add to redis history
     let history = await redis.get(`chat_hist_${cleanTo}@c.us`) || await redis.get(`chat_hist_${cleanTo}`);
     let parsed = typeof history === 'string' ? JSON.parse(history) : (history || []);
-    let histEntry = { text: text || '' };
+    let histEntry = { text: text || '', ts: Date.now() };
     if (attachment) { histEntry.attachmentType = attachmentType; histEntry.hasAttachment = true; }
-    
+
     parsed.push({ role: 'model', parts: [histEntry] });
     await redis.set(`chat_hist_${cleanTo}@c.us`, JSON.stringify(parsed));
     await redis.set(`chat_hist_${cleanTo}`, JSON.stringify(parsed));

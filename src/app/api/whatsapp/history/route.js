@@ -5,27 +5,32 @@ export async function GET(req) {
   const { searchParams } = new URL(req.url);
   let phone = searchParams.get('phone');
   if (!phone) return NextResponse.json({ success: false });
-  
+
   phone = phone.replace(/\D/g, '');
   if (!phone.startsWith('52')) phone = '52' + phone;
 
   try {
-     const histData = await redis.get(`chat_hist_${phone}@c.us`) || await redis.get(`chat_hist_${phone}`);
-     const parsed = typeof histData === 'string' ? JSON.parse(histData) : (histData || []);
-     
-     // El motor usa roles 'user' y 'model'. Lo convertimos a formato visual wapp:
-     const messages = parsed.map(m => {
-        return {
-           text: m.parts?.[0]?.text || '',
-           attachment: m.parts?.[0]?.attachment || null,
-           attachmentType: m.parts?.[0]?.attachmentType || null,
-           fromMe: m.role === 'model',
-           time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-        };
-     });
-     
-     return NextResponse.json({ success: true, messages });
+    const [histData] = await Promise.all([
+      redis.get(`chat_hist_${phone}@c.us`) || redis.get(`chat_hist_${phone}`),
+      redis.del(`chat_unread_${phone}`)
+    ]);
+
+    const parsed = typeof histData === 'string' ? JSON.parse(histData) : (histData || []);
+
+    const messages = parsed.map(m => {
+      const ts = m.parts?.[0]?.ts || null;
+      return {
+        text: m.parts?.[0]?.text || '',
+        fromMe: m.role === 'model',
+        ts,
+        time: ts
+          ? new Date(ts).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Monterrey' })
+          : ''
+      };
+    });
+
+    return NextResponse.json({ success: true, messages });
   } catch (e) {
-     return NextResponse.json({ success: false });
+    return NextResponse.json({ success: false });
   }
 }

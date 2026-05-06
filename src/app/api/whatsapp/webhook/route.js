@@ -793,7 +793,8 @@ export async function POST(req) {
     let historyKey = `chat_hist_${phoneId}`;
     let history = await redis.get(historyKey);
     let parsed = typeof history === 'string' ? JSON.parse(history) : (history || []);
-    parsed.push({ role: 'user', parts: [{ text: bodyStr }] });
+    parsed.push({ role: 'user', parts: [{ text: bodyStr, ts: Date.now() }] });
+    await redis.incr(`chat_unread_${cleanPhone}`);
 
     if (parsed.length > 40) {
         parsed = parsed.slice(-40);
@@ -854,7 +855,7 @@ export async function POST(req) {
             await sendWhatsApp(phoneId, `¡Hola *${clientName}*! 👋🍔`, cfg);
             await new Promise(r => setTimeout(r, 800));
             await sendWhatsApp(phoneId, `Qué gusto verte de vuelta en *El Diablito* 🌶️\n\n¿En qué te ayudo?\n1️⃣ Revisar tus puntos 🎁 (tienes *${clientPoints}*)\n2️⃣ Editar tus datos 📝`, cfg);
-            parsed.push({ role: 'model', parts: [{ text: `¡Hola ${clientName}! Qué gusto verte de vuelta. ¿En qué te ayudo? 1) Puntos 2) Editar datos` }] });
+            parsed.push({ role: 'model', parts: [{ text: `¡Hola ${clientName}! Qué gusto verte de vuelta. ¿En qué te ayudo? 1) Puntos 2) Editar datos`, ts: Date.now() }] });
             await redis.set(historyKey, JSON.stringify(parsed));
             await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
             await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
@@ -864,7 +865,7 @@ export async function POST(req) {
             await sendWhatsApp(phoneId, '¡Hola! 👋🍔 Bienvenido a *El Diablito Boneless & Burgers*', cfg);
             await new Promise(r => setTimeout(r, 800));
             await sendWhatsApp(phoneId, 'Regístrate y recibe una *🍔 BURGER GRATIS* 🎁\n\nSolo necesito tu *nombre* y *dirección* (calle, número, colonia, municipio).', cfg);
-            parsed.push({ role: 'model', parts: [{ text: 'Hola! Bienvenido al Diablito. Regístrate y recibe una burger gratis. Solo necesito tu nombre y dirección.' }] });
+            parsed.push({ role: 'model', parts: [{ text: 'Hola! Bienvenido al Diablito. Regístrate y recibe una burger gratis. Solo necesito tu nombre y dirección.', ts: Date.now() }] });
             await redis.set(historyKey, JSON.stringify(parsed));
             await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
             await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
@@ -943,7 +944,7 @@ Ejemplo: "¡Perfecto, ya te he registrado! [REGISTRO_OK:Oscar R|Cirros 102 Col L
             if (reply) {
                 // Limpiar tag antes de enviar al usuario
                 const cleanReply = reply.replace(/\[REGISTRO_OK:[^\]]*\]/g, '').trim();
-                parsed.push({ role: 'model', parts: [{ text: cleanReply }] });
+                parsed.push({ role: 'model', parts: [{ text: cleanReply, ts: Date.now() }] });
                 await redis.set(historyKey, JSON.stringify(parsed));
                 await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
                 await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
