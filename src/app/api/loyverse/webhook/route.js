@@ -2,6 +2,24 @@ import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
 import { generateFolio, buildPromoText } from '@/lib/folio';
 
+// Guarda un mensaje del bot en el historial de chat de Redis
+async function saveBotMessage(phone, text, name) {
+  if (!phone || !text) return;
+  let cleanPhone = phone.replace(/\D/g, '');
+  if (!cleanPhone.startsWith('52')) cleanPhone = '52' + cleanPhone;
+  const histKey = `chat_hist_${cleanPhone}@c.us`;
+  try {
+    const raw = await redis.get(histKey);
+    const parsed = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : [];
+    parsed.push({ role: 'model', parts: [{ text, ts: Date.now() }] });
+    if (parsed.length > 40) parsed.splice(0, parsed.length - 40);
+    await redis.set(histKey, JSON.stringify(parsed));
+    await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+    // Asegurarse de que el nombre esté en caché para que aparezca en la lista
+    if (name) await redis.set(`client_name_${cleanPhone}`, name);
+  } catch (e) { console.error('[saveBotMessage]', e); }
+}
+
 export async function POST(req) {
   try {
     const payload = await req.json();
@@ -112,6 +130,7 @@ export async function POST(req) {
                                          await resW.text().catch(()=>null);
                                          await redis.set(`promo_pos_${rPhone}`, 'naranja');
                                          await redis.del(mutexKey);
+                                         await saveBotMessage(rPhone, promoTextW, custData.name);
                                          console.log(`[Receipt] Cupón de bienvenida enviado a ${rPhone} (nuevo cliente)`);
                                       }
                                    }
@@ -138,6 +157,7 @@ export async function POST(req) {
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({ token: wappToken, to: rPhone + '@c.us', body: msgText })
                                });
+                               await saveBotMessage(rPhone, msgText, nameToUse);
 
                                // ---- TRIGGER PROMOTIONS ENGINE ----
                                const promosInfo = await redis.get('promotions');
@@ -232,6 +252,7 @@ export async function POST(req) {
                                          });
                                      }
                                      await resPromo.text().catch(()=>null);
+                                     await saveBotMessage(rPhone, promoText, custData.name);
                                      limiteVentas = true; // Activar el candado, no se enviarán más promos iterables este turno
                                   }
                                }
@@ -444,6 +465,7 @@ export async function POST(req) {
       await redis.set(`promo_pos_${cleanPhone}`, 'naranja');
       const msgId = sendRes.messageId || sendRes?.key?.id || sendRes?.data?.key?.id;
       if (msgId) await redis.set(`promo_msg_${msgId}`, cleanPhone);
+      await saveBotMessage(cleanPhone, promoText, customerData?.name);
     } else {
       await redis.set(`promo_pos_${cleanPhone}`, 'rojo');
     }
