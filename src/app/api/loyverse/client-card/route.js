@@ -112,42 +112,46 @@ export async function GET(req) {
     const address = extractAddress(primary);
     const tienda = extractTienda(primary, storedStore);
 
-    // ── 4. Compras: buscar en TODOS los registros del cliente ──
+    // ── 4. Compras: paginar recibos recientes y filtrar por customer_id ──
+    // Loyverse no garantiza filtrado server-side por customer_id, así que
+    // traemos los últimos 250 recibos y filtramos en nuestra lógica.
     let receipts = [];
     let storeMap = {};
 
-    // Cargar nombres de sucursales una sola vez
-    const sRes = await fetch(`${BASE}/stores`, { headers });
+    const [sRes, recRes] = await Promise.all([
+      fetch(`${BASE}/stores`, { headers }),
+      fetch(`${BASE}/receipts?limit=250`, { headers })
+    ]);
+
     if (sRes.ok) {
       const sData = await sRes.json();
       for (const s of sData.stores || []) storeMap[s.id] = s.name;
     }
 
-    const allReceipts = [];
-    for (const custId of allIds) {
-      const recRes = await fetch(
-        `${BASE}/receipts?customer_id=${encodeURIComponent(custId)}&limit=50&order=DESC`,
-        { headers }
-      );
-      if (!recRes.ok) continue;
+    if (recRes.ok && allIds.length > 0) {
       const recData = await recRes.json();
-      for (const r of recData.receipts || []) {
-        // Solo incluir si pertenece a este cliente
-        if (r.customer_id === custId && !allReceipts.find(x => x.receipt_number === r.receipt_number)) {
-          allReceipts.push(r);
+      const allReceipts = (recData.receipts || []).filter(r => allIds.includes(r.customer_id));
+
+      // Si no encontramos nada en los últimos 250, paginar una página más
+      let extraReceipts = [];
+      if (allReceipts.length === 0 && recData.cursor) {
+        const recRes2 = await fetch(`${BASE}/receipts?limit=250&cursor=${encodeURIComponent(recData.cursor)}`, { headers });
+        if (recRes2.ok) {
+          const recData2 = await recRes2.json();
+          extraReceipts = (recData2.receipts || []).filter(r => allIds.includes(r.customer_id));
         }
       }
-    }
 
-    receipts = allReceipts
-      .map(r => ({
-        date: r.receipt_date || r.created_at || null,
-        store: storeMap[r.store_id] || 'Sucursal',
-        total: r.total_money ?? 0,
-        items: (r.line_items || []).length
-      }))
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .slice(0, 15);
+      receipts = [...allReceipts, ...extraReceipts]
+        .map(r => ({
+          date: r.receipt_date || r.created_at || null,
+          store: storeMap[r.store_id] || 'Sucursal',
+          total: r.total_money ?? 0,
+          items: (r.line_items || []).length
+        }))
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .slice(0, 15);
+    }
 
     // ── 5. Cupones canjeados ──
     const allLogs = await redis.lrange('redeemed_coupons_log', 0, 500);
