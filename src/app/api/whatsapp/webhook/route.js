@@ -156,19 +156,27 @@ export async function POST(req) {
     if (fromMe) return NextResponse.json({ success: true });
 
     // ── 🛒 INTERCEPCIÓN DE PEDIDOS DEL CATÁLOGO (CARRITO) ──
-    if (payload.data.type === 'order') {
-      const pedido = payload.data.order;
-      if (pedido) {
-          const total = (pedido.totalAmount1000 / 1000).toFixed(2);
+    if (payload.data.type === 'order' || payload.data.__raw?.message?.orderMessage) {
+      const pedidoRaw = payload.data.__raw?.message?.orderMessage;
+      
+      if (pedidoRaw) {
+          // Extraer amount asegurando que si es un objeto {low, high} use low
+          let rawAmount = typeof pedidoRaw.totalAmount1000 === 'object' ? pedidoRaw.totalAmount1000.low : pedidoRaw.totalAmount1000;
+          const total = (Number(rawAmount) / 1000).toFixed(2);
+          
+          const itemCount = pedidoRaw.itemCount || 0;
+          const currency = pedidoRaw.totalCurrencyCode || 'MXN';
+          const nota = pedidoRaw.message || '';
+
           const pushName = payload.data.pushName || 'Cliente';
           let fromJid = payload.data.from || '';
           if (fromJid.includes('@s.whatsapp.net')) fromJid = fromJid.replace('@s.whatsapp.net', '@c.us');
           
           console.log('🛒 NUEVO PEDIDO DEL CATÁLOGO');
           console.log('Cliente:', pushName, fromJid);
-          console.log('Productos:', pedido.itemCount);
-          console.log('Total: $' + total, pedido.totalCurrencyCode);
-          console.log('Nota:', pedido.message || 'Sin nota');
+          console.log('Productos:', itemCount);
+          console.log('Total: $' + total, currency);
+          console.log('Nota:', nota || 'Sin nota');
 
           const configStr = await redis.get('wapp_config');
           const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
@@ -176,9 +184,9 @@ export async function POST(req) {
           // 1. Notificar al dueño
           let msgDueno = `🛒 *NUEVO PEDIDO RECIBIDO (CATÁLOGO)*\n\n`;
           msgDueno += `👤 *Cliente:* ${pushName} (${fromJid.replace('@c.us', '')})\n`;
-          msgDueno += `📦 *Productos:* ${pedido.itemCount}\n`;
-          msgDueno += `💰 *Total:* $${total} ${pedido.totalCurrencyCode}\n`;
-          if (pedido.message) msgDueno += `📝 *Nota:* ${pedido.message}\n`;
+          msgDueno += `📦 *Productos:* ${itemCount}\n`;
+          msgDueno += `💰 *Total:* $${total} ${currency}\n`;
+          if (nota) msgDueno += `📝 *Nota:* ${nota}\n`;
           
           await sendWhatsApp('5218116038195@c.us', msgDueno, cfg);
           
