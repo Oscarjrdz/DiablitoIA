@@ -196,7 +196,7 @@ export async function GET(req) {
 // Actualiza dirección o sucursal en Loyverse + Redis
 export async function PATCH(req) {
   try {
-    const { id, address, note, _storeRedis, _phone } = await req.json();
+    const { id, name, address, note, _storeRedis, _phone } = await req.json();
     if (!id) return NextResponse.json({ success: false, error: 'id requerido' }, { status: 400 });
 
     const loyverseToken = await redis.get('loyverse_token');
@@ -209,7 +209,7 @@ export async function PATCH(req) {
     if (!custRes.ok) return NextResponse.json({ success: false, error: 'Cliente no encontrado' }, { status: 404 });
     const cust = await custRes.json();
 
-    const payload = { id, name: cust.name };
+    const payload = { id, name: name !== undefined ? name : cust.name };
     if (address !== undefined) payload.address = address;
     if (note !== undefined) payload.note = note;
     if (cust.phone_number) payload.phone_number = cust.phone_number;
@@ -226,11 +226,12 @@ export async function PATCH(req) {
       return NextResponse.json({ success: false, error: err }, { status: 500 });
     }
 
-    // Actualizar Redis si se cambió la sucursal
-    if (_storeRedis !== undefined && _phone) {
+    // Actualizar Redis según campo modificado
+    if (_phone) {
       let cleanPhone = _phone.replace(/\D/g, '');
       if (!cleanPhone.startsWith('52')) cleanPhone = '52' + cleanPhone;
-      await redis.set(`client_store_${cleanPhone}`, _storeRedis);
+      if (_storeRedis !== undefined) await redis.set(`client_store_${cleanPhone}`, _storeRedis);
+      if (name !== undefined) await redis.set(`client_name_${cleanPhone}`, name);
     }
 
     return NextResponse.json({ success: true });

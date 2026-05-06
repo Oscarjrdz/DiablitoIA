@@ -727,12 +727,41 @@
   border: 1px solid #1f2c34;
 }
 
+.infoNameRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .infoName {
   font-size: 15px;
   font-weight: 700;
   color: #e9edef;
   text-align: center;
   line-height: 1.3;
+}
+
+.infoNameEditRow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.infoNameInput {
+  background: #2a3942;
+  border: 1px solid #00a884;
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: #e9edef;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  outline: none;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .infoPhone {

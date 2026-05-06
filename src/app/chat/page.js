@@ -113,7 +113,8 @@ export default function ChatPage() {
   const [storeFilter, setStoreFilter] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [editStore, setEditStore] = useState('');
-  const [editingField, setEditingField] = useState(null); // 'address' | 'store' | null
+  const [editName, setEditName] = useState('');
+  const [editingField, setEditingField] = useState(null); // 'name' | 'address' | 'store' | null
   const [savingField, setSavingField] = useState(false);
 
   const messagesEndRef = useRef(null);
@@ -187,6 +188,7 @@ export default function ChatPage() {
     setSavingField(true);
     try {
       const body = { id: clientCard.client.customerId };
+      if (field === 'name') { body.name = editName; body._phone = clientCard.client.phone; }
       if (field === 'address') body.address = editAddress;
       if (field === 'store') {
         const currentNote = clientCard.client._note || '';
@@ -206,10 +208,14 @@ export default function ChatPage() {
           ...prev,
           client: {
             ...prev.client,
+            name: field === 'name' ? editName : prev.client.name,
             address: field === 'address' ? editAddress : prev.client.address,
             tienda: field === 'store' ? editStore : prev.client.tienda
           }
         }));
+        if (field === 'name') {
+          setChats(prev => prev.map(c => c.phone === activeChat?.phone ? { ...c, name: editName } : c));
+        }
         showToast('Actualizado correctamente', 'success');
         setEditingField(null);
       } else {
@@ -604,7 +610,33 @@ export default function ChatPage() {
                   size={56}
                   picUrl={profilePics[activeChat.phone]}
                 />
-                <div className={styles.infoName}>{clientCard?.client?.name || activeChat.name}</div>
+                {editingField === 'name' ? (
+                  <div className={styles.infoNameEditRow}>
+                    <input
+                      className={styles.infoNameInput}
+                      value={editName}
+                      onChange={e => setEditName(e.target.value)}
+                      autoFocus
+                      placeholder="Nombre del cliente"
+                    />
+                    <div className={styles.infoEditActions} style={{ justifyContent: 'center' }}>
+                      <button className={styles.infoSaveBtn} onClick={() => saveClientField('name')} disabled={savingField || !editName.trim()}>
+                        {savingField ? '...' : 'Guardar'}
+                      </button>
+                      <button className={styles.infoCancelBtn} onClick={() => setEditingField(null)}>Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.infoNameRow}>
+                    <div className={styles.infoName}>{clientCard?.client?.name || activeChat.name}</div>
+                    {clientCard?.client?.customerId && (
+                      <button className={styles.infoEditBtn} onClick={() => {
+                        setEditName(clientCard?.client?.name || activeChat.name);
+                        setEditingField('name');
+                      }}>Editar</button>
+                    )}
+                  </div>
+                )}
                 <div className={styles.infoPhone}>
                   {(clientCard?.client?.phone10 || activeChat.phone.slice(-10)).replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3')}
                 </div>
