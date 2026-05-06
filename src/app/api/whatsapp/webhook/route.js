@@ -167,32 +167,66 @@ export async function POST(req) {
           const itemCount = pedidoRaw.itemCount || 0;
           const currency = pedidoRaw.totalCurrencyCode || 'MXN';
           const nota = pedidoRaw.message || '';
+          const orderId = pedidoRaw.orderId || '';
+          const orderToken = pedidoRaw.token || '';
 
           const pushName = payload.data.pushName || 'Cliente';
           let fromJid = payload.data.from || '';
           if (fromJid.includes('@s.whatsapp.net')) fromJid = fromJid.replace('@s.whatsapp.net', '@c.us');
-          
+
+          const configStr = await redis.get('wapp_config');
+          const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
+
+          // Intentar obtener los detalles de cada producto del Gateway
+          let productLines = '';
+          let productLinesBubble = '';
+          try {
+              if (orderId && orderToken && cfg.wappInstance && cfg.wappToken) {
+                  const detailRes = await fetch(
+                      `https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/order/${orderId}?token=${cfg.wappToken}&orderToken=${encodeURIComponent(orderToken)}`,
+                      { signal: AbortSignal.timeout(8000) }
+                  );
+                  if (detailRes.ok) {
+                      const detailData = await detailRes.json();
+                      const products = detailData.order?.products || [];
+                      if (products.length > 0) {
+                          products.forEach((p, i) => {
+                              const pPrice = (p.price / 1000).toFixed(2);
+                              productLines += `   ${i + 1}. ${p.name} x${p.quantity} — $${pPrice} ${p.currency || currency}\n`;
+                              productLinesBubble += `• ${p.name} x${p.quantity} — $${pPrice}\n`;
+                          });
+                      }
+                  }
+              }
+          } catch (detailErr) {
+              console.error('[Order] Error fetching details:', detailErr.message);
+          }
+
           console.log('🛒 NUEVO PEDIDO DEL CATÁLOGO');
           console.log('Cliente:', pushName, fromJid);
           console.log('Productos:', itemCount);
           console.log('Total: $' + total, currency);
-          console.log('Nota:', nota || 'Sin nota');
-
-          const configStr = await redis.get('wapp_config');
-          const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
           
           // 1. Notificar al dueño
-          let msgDueno = `🛒 *NUEVO PEDIDO RECIBIDO (CATÁLOGO)*\n\n`;
+          let msgDueno = `🛒 *NUEVO PEDIDO RECIBIDO*\n\n`;
           msgDueno += `👤 *Cliente:* ${pushName} (${fromJid.replace('@c.us', '')})\n`;
-          msgDueno += `📦 *Productos:* ${itemCount}\n`;
+          if (productLines) {
+              msgDueno += `📋 *Detalle:*\n${productLines}`;
+          } else {
+              msgDueno += `📦 *Productos:* ${itemCount}\n`;
+          }
           msgDueno += `💰 *Total:* $${total} ${currency}\n`;
           if (nota) msgDueno += `📝 *Nota:* ${nota}\n`;
           
           await sendWhatsApp('5218116038195@c.us', msgDueno, cfg);
           
           // 2. Responder al cliente
-          let msgCliente = `🍔 ¡Hola ${pushName}! Hemos recibido tu pedido de WhatsApp por *$${total} ${currency}*.\n\n`;
-          msgCliente += `En un momento un agente se comunicará contigo para confirmar los detalles y el envío. ¡Gracias por tu preferencia! 🚀`;
+          let msgCliente = `🍔 ¡Hola ${pushName}! Hemos recibido tu pedido:\n\n`;
+          if (productLinesBubble) {
+              msgCliente += `${productLinesBubble}\n`;
+          }
+          msgCliente += `💰 *Total: $${total} ${currency}*\n\n`;
+          msgCliente += `En un momento un agente se comunicará contigo para confirmar los detalles. ¡Gracias por tu preferencia! 🚀`;
           await sendWhatsApp(fromJid, msgCliente, cfg);
           
           // 3. Guardar en el historial para que aparezca en el Dashboard UI
@@ -201,10 +235,17 @@ export async function POST(req) {
           let historyStr = await redis.get(historyKey) || await redis.get(`chat_hist_${fromJid}`);
           let history = typeof historyStr === 'string' ? JSON.parse(historyStr) : (historyStr || []);
           
+          let bubbleText = `🛒 *Pedido Recibido*\n`;
+          if (productLinesBubble) {
+              bubbleText += `\n${productLinesBubble}`;
+          }
+          bubbleText += `\n💰 Total: $${total} ${currency}`;
+          if (nota) bubbleText += `\n📝 Nota: ${nota}`;
+
           history.push({
               role: 'user',
               parts: [{
-                  text: `🛒 *Pedido Recibido*\nTotal: $${total} ${currency}\nProductos: ${itemCount}\nNota: ${nota || 'Ninguna'}`,
+                  text: bubbleText,
                   msgId: payload.data.id || Date.now().toString(),
                   ts: payload.data.timestamp || Math.floor(Date.now() / 1000),
                   status: 'delivered'
