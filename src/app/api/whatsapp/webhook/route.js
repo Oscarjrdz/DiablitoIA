@@ -1101,9 +1101,28 @@ Aquí tienes tus opciones:
 NUNCA omitas la opción de Pedido a Domicilio y SIEMPRE debe ser la primera de la lista.`;
         }
 
+        // ── 📦 INYECTAR CATÁLOGO DE PRODUCTOS AL CONTEXTO DEL BOT ──
+        try {
+            const catalogRaw = await redis.get('catalog_products');
+            const catalog = catalogRaw ? (typeof catalogRaw === 'string' ? JSON.parse(catalogRaw) : catalogRaw) : [];
+            const visibleProducts = (Array.isArray(catalog) ? catalog : []).filter(p => !p.isHidden);
+            if (visibleProducts.length > 0) {
+                systemContext += '\n\n# 📋 MENÚ / CATÁLOGO DE PRODUCTOS DISPONIBLES:\n';
+                systemContext += 'Cuando el cliente pregunte por el menú, productos, precios o qué hay disponible, usa ESTA lista actualizada:\n\n';
+                visibleProducts.forEach((p, i) => {
+                    const price = p.price > 0 ? `$${(p.price / 100).toFixed(2)} MXN` : 'Precio no disponible';
+                    systemContext += `${i + 1}. *${p.name}* — ${price}`;
+                    if (p.description) systemContext += ` (${p.description})`;
+                    if (p.retailerId) systemContext += ` [SKU: ${p.retailerId}]`;
+                    systemContext += '\n';
+                });
+                systemContext += '\nSi el cliente pide algo que NO está en esta lista, dile amablemente que por el momento solo manejas estos productos.\n';
+            }
+        } catch (catErr) { console.error('[Bot] Error loading catalog:', catErr); }
+
         // System instruction va aparte en Gemini, pero lo metemos como primer user+model exchange
         geminiContents.push({ role: 'user', parts: [{ text: 'Instrucciones del sistema: ' + systemContext }] });
-        geminiContents.push({ role: 'model', parts: [{ text: 'Entendido, seguiré estas instrucciones al pie de la letra. Ya tengo el número del cliente.' }] });
+        geminiContents.push({ role: 'model', parts: [{ text: 'Entendido, seguiré estas instrucciones al pie de la letra. Ya tengo el número del cliente y el menú actualizado.' }] });
 
         for (const entry of parsed) {
             const role = entry.role === 'user' ? 'user' : 'model';
