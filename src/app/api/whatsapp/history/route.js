@@ -8,14 +8,19 @@ export async function GET(req) {
   if (!phone.startsWith('52')) phone = '52' + phone;
   if (!phone) return NextResponse.json({ success: false });
 
+  // Only clear unread when explicitly requested (on chat open, not polls)
+  const clearUnread = searchParams.get('clearUnread');
+  if (clearUnread) {
+    await redis.del(`chat_unread_${phone}`);
+  }
+
   try {
-    const [histData, unreadDel, typingRaw] = await Promise.all([
+    const [histData, typingRaw] = await Promise.all([
       (async () => {
         const a = await redis.get(`chat_hist_${phone}@c.us`);
         if (a) return a;
         return redis.get(`chat_hist_${phone}`);
       })(),
-      redis.del(`chat_unread_${phone}`),
       redis.get(`typing_${phone}`)
     ]);
 
@@ -38,7 +43,8 @@ export async function GET(req) {
       };
     });
 
-    return NextResponse.json({ success: true, messages, isTyping: !!typingRaw });
+    const lastTs = messages.length > 0 ? messages[messages.length - 1].ts : 0;
+    return NextResponse.json({ success: true, messages, msgCount: messages.length, lastTs, isTyping: !!typingRaw });
   } catch (e) {
     return NextResponse.json({ success: false, messages: [], isTyping: false });
   }

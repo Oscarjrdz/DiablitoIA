@@ -6,17 +6,32 @@ export async function GET() {
     const keys = await redis.keys('chat_hist_*@c.us');
     if (!keys || keys.length === 0) return NextResponse.json({ success: true, chats: [] });
 
-    const chats = await Promise.all(keys.map(async (key) => {
-      const phone = key.replace('chat_hist_', '').replace('@c.us', '');
+    const phones = keys.map(k => k.replace('chat_hist_', '').replace('@c.us', ''));
+
+    // Batch: build all metadata keys and fetch in one mget
+    const metaKeys = phones.flatMap(p => [
+      `client_name_${p}`,
+      `chat_unread_${p}`,
+      `client_store_${p}`,
+      `human_read_${p}`,
+      `delivery_mode_${p}`
+    ]);
+
+    const [histResults, metaResults] = await Promise.all([
+      Promise.all(keys.map(k => redis.get(k))),
+      metaKeys.length > 0 ? redis.mget(...metaKeys) : []
+    ]);
+
+    const chats = phones.map((phone, i) => {
       try {
-        const [histData, cachedName, unreadRaw, cachedStore, humanRead, deliveryMode] = await Promise.all([
-          redis.get(key),
-          redis.get(`client_name_${phone}`),
-          redis.get(`chat_unread_${phone}`),
-          redis.get(`client_store_${phone}`),
-          redis.get(`human_read_${phone}`),
-          redis.get(`delivery_mode_${phone}`)
-        ]);
+        const histData = histResults[i];
+        const base = i * 5;
+        const cachedName = metaResults[base] || null;
+        const unreadRaw = metaResults[base + 1] || '0';
+        const cachedStore = metaResults[base + 2] || '';
+        const humanRead = metaResults[base + 3] || null;
+        const deliveryMode = metaResults[base + 4] || null;
+
         const parsed = typeof histData === 'string' ? JSON.parse(histData) : (histData || []);
         const lastMsg = parsed.length > 0 ? parsed[parsed.length - 1] : null;
         return {
@@ -32,9 +47,9 @@ export async function GET() {
           deliveryMode: !!deliveryMode
         };
       } catch {
-        return { phone, name: phone.slice(-10), lastText: '', lastTs: 0, fromMe: false, unread: 0, msgCount: 0, store: '' };
+        return { phone, name: phone.slice(-10), lastText: '', lastTs: 0, fromMe: false, unread: 0, msgCount: 0, store: '', needsHuman: false, deliveryMode: false };
       }
-    }));
+    });
 
     chats.sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
     return NextResponse.json({ success: true, chats });

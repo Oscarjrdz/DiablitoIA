@@ -130,6 +130,13 @@ export default function ChatPage() {
   const msgPollRef = useRef(null);
   const listPollRef = useRef(null);
   const typingTimerRef = useRef(null);
+  const lastMsgCountRef = useRef(0);
+  const lastTsRef = useRef(0);
+  const isAtBottomRef = useRef(true);
+  const failCountRef = useRef(0);
+  const [isOffline, setIsOffline] = useState(false);
+  const picQueueRef = useRef([]);
+  const picLoadingRef = useRef(0);
 
   useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
 
@@ -140,15 +147,40 @@ export default function ChatPage() {
       const data = await res.json();
       if (data.success) {
         setChats(data.chats || []);
-        // Cargar fotos de perfil en background para los primeros 20
+        failCountRef.current = 0;
+        setIsOffline(false);
+        // Queue profile pics (max 3 concurrent)
         const toLoad = (data.chats || []).slice(0, 20);
-        toLoad.forEach(c => {
-          if (!profilePics[c.phone]) fetchProfilePic(c.phone);
-        });
+        toLoad.forEach(c => queueProfilePic(c.phone));
       }
-    } catch {}
+    } catch {
+      failCountRef.current++;
+      if (failCountRef.current >= 3) setIsOffline(true);
+    }
     setLoadingChats(false);
   }, []); // eslint-disable-line
+
+  // ── Profile pic queue (max 3 concurrent) ──
+  const queueProfilePic = useCallback((phone) => {
+    setProfilePics(prev => {
+      if (prev[phone] !== undefined) return prev; // already loaded or loading
+      return { ...prev, [phone]: null }; // mark as queued
+    });
+    picQueueRef.current.push(phone);
+    drainPicQueue();
+  }, []);
+
+  const drainPicQueue = useCallback(() => {
+    while (picQueueRef.current.length > 0 && picLoadingRef.current < 3) {
+      const phone = picQueueRef.current.shift();
+      picLoadingRef.current++;
+      fetch(`/api/whatsapp/profile-pic?phone=${encodeURIComponent(phone)}`)
+        .then(r => r.json())
+        .then(data => setProfilePics(prev => ({ ...prev, [phone]: data.url || null })))
+        .catch(() => {})
+        .finally(() => { picLoadingRef.current--; drainPicQueue(); });
+    }
+  }, []);
 
   const fetchProfilePic = useCallback(async (phone) => {
     try {
@@ -164,16 +196,20 @@ export default function ChatPage() {
     return () => clearInterval(listPollRef.current);
   }, [fetchChats]);
 
-  // ── Cargar mensajes del chat activo ──
+  // ── Cargar mensajes del chat activo (delta-aware) ──
   const fetchMessages = useCallback(async (phone) => {
     if (!phone) return;
     try {
       const res = await fetch(`/api/whatsapp/history?phone=${encodeURIComponent(phone)}`);
       const data = await res.json();
       if (data.success) {
-        setMessages(data.messages || []);
+        // Only update if message count or last timestamp changed (delta check)
+        if (data.msgCount !== lastMsgCountRef.current || data.lastTs !== lastTsRef.current) {
+          setMessages(data.messages || []);
+          lastMsgCountRef.current = data.msgCount || 0;
+          lastTsRef.current = data.lastTs || 0;
+        }
         setIsTyping(!!data.isTyping);
-        setChats(prev => prev.map(c => c.phone === phone ? { ...c, unread: 0 } : c));
       }
     } catch {}
   }, []);
@@ -237,10 +273,21 @@ export default function ChatPage() {
     setIsTyping(false);
     setInputText('');
     setAttachment(null);
+    lastMsgCountRef.current = 0;
+    lastTsRef.current = 0;
     clearInterval(msgPollRef.current);
     fetchMessages(chat.phone);
     fetchClientCard(chat.phone);
-    // Cargar foto si no la tenemos
+    // Clear unread badge once on open
+    setChats(prev => prev.map(c => c.phone === chat.phone ? { ...c, unread: 0 } : c));
+    fetch(`/api/whatsapp/mark-read`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: chat.phone, read: false })
+    }).catch(() => {});
+    // Reset unread counter in Redis
+    fetch(`/api/whatsapp/history?phone=${encodeURIComponent(chat.phone)}&clearUnread=1`).catch(() => {});
+    // Load profile pic if needed
     if (!profilePics[chat.phone]) fetchProfilePic(chat.phone);
     msgPollRef.current = setInterval(() => {
       if (activeChatRef.current?.phone === chat.phone) fetchMessages(chat.phone);
@@ -249,8 +296,18 @@ export default function ChatPage() {
 
   useEffect(() => () => clearInterval(msgPollRef.current), []);
 
+  // ── Smart scroll: only auto-scroll when user is at bottom ──
+  const messagesContainerRef = useRef(null);
+  const handleScroll = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }, []);
+
   useEffect(() => {
-    if (messages.length) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messages.length && isAtBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   // ── Auto-resize textarea ──
@@ -370,12 +427,21 @@ export default function ChatPage() {
         : c
     ));
     try {
-      await fetch('/api/whatsapp/send', {
+      const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: activeChat.phone, text, attachment: attachment?.base64 || null, attachmentType: attachment?.type || null })
       });
-    } catch {}
+      const data = await res.json();
+      if (!data.success) {
+        // Mark optimistic message as failed
+        setMessages(prev => prev.map((m, i) => i === prev.length - 1 && m.ts === now ? { ...m, status: 'error' } : m));
+        showToast('Error al enviar mensaje', 'error');
+      }
+    } catch {
+      setMessages(prev => prev.map((m, i) => i === prev.length - 1 && m.ts === now ? { ...m, status: 'error' } : m));
+      showToast('Error de conexión', 'error');
+    }
   }, [inputText, attachment, activeChat, sendTypingStatus]);
 
   const handleKeyDown = (e) => {
@@ -418,6 +484,12 @@ export default function ChatPage() {
 
       {/* ══ PANEL IZQUIERDO ══ */}
       <div className={`${styles.left} ${activeChat ? styles.leftHidden : ''}`}>
+
+        {isOffline && (
+          <div className={styles.offlineBanner}>
+            ⚠️ Sin conexión — reintentando...
+          </div>
+        )}
 
         <div className={styles.leftHeader}>
           <Avatar name="El Diablito" size={40} />
@@ -636,7 +708,7 @@ export default function ChatPage() {
             </div>
           </div>
 
-          <div className={styles.messages}>
+          <div className={styles.messages} ref={messagesContainerRef} onScroll={handleScroll}>
             {msgsWithSeps.map((item, i) => {
               if (item._sep) {
                 return (
@@ -670,6 +742,9 @@ export default function ChatPage() {
                     <div className={styles.msgMeta}>
                       {m.time && <span className={styles.msgTime}>{m.time}</span>}
                       {m.fromMe && <Ticks status={m.status} />}
+                      {m.status === 'error' && (
+                        <span title="Error al enviar" style={{ color: '#ef4444', fontSize: 12, marginLeft: 2 }}>⚠️</span>
+                      )}
                     </div>
                   </div>
                 </div>
