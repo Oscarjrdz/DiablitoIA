@@ -105,6 +105,9 @@ export default function ChatPage() {
   const [loadingChats, setLoadingChats] = useState(true);
   const [attachment, setAttachment] = useState(null);
   const [profilePics, setProfilePics] = useState({});
+  const [chatToDelete, setChatToDelete] = useState(null);
+  const [deletingChat, setDeletingChat] = useState(false);
+  const [toast, setToast] = useState(null);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -198,6 +201,36 @@ export default function ChatPage() {
       body: JSON.stringify({ phone, typing })
     }).catch(() => {});
   }, []);
+
+  // ── Toast helper ──
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3200);
+  };
+
+  // ── Borrar chat ──
+  const confirmDeleteChat = async () => {
+    if (!chatToDelete) return;
+    setDeletingChat(true);
+    try {
+      const res = await fetch(`/api/whatsapp/chats?phone=${encodeURIComponent(chatToDelete.phone)}`, { method: 'DELETE' });
+      if (res.ok) {
+        setChats(prev => prev.filter(c => c.phone !== chatToDelete.phone));
+        if (activeChat?.phone === chatToDelete.phone) {
+          setActiveChat(null);
+          clearInterval(msgPollRef.current);
+        }
+        showToast(`Chat de ${chatToDelete.name} eliminado.`, 'success');
+      } else {
+        showToast('Error al eliminar el chat.', 'error');
+      }
+    } catch {
+      showToast('Error de conexión.', 'error');
+    } finally {
+      setDeletingChat(false);
+      setChatToDelete(null);
+    }
+  };
 
   const handleInputChange = (e) => {
     setInputText(e.target.value);
@@ -346,6 +379,18 @@ export default function ChatPage() {
                   {chat.unread > 0 && <span className={styles.badge}>{chat.unread > 99 ? '99+' : chat.unread}</span>}
                 </div>
               </div>
+              <button
+                className={styles.chatDeleteBtn}
+                onClick={e => { e.stopPropagation(); setChatToDelete(chat); }}
+                title="Eliminar chat"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <path d="M10 11v6M14 11v6" />
+                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                </svg>
+              </button>
             </div>
           ))}
         </div>
@@ -459,6 +504,50 @@ export default function ChatPage() {
             <h2 className={styles.emptyTitle}>Diablito Chat</h2>
             <p className={styles.emptySub}>Selecciona un chat para comenzar</p>
           </div>
+        </div>
+      )}
+
+      {/* ── Modal confirmación borrar chat ── */}
+      {chatToDelete && (
+        <div className={styles.deleteOverlay} onClick={() => !deletingChat && setChatToDelete(null)}>
+          <div className={styles.deleteModal} onClick={e => e.stopPropagation()}>
+            <div className={styles.deleteIconWrap}>
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                <path d="M10 11v6M14 11v6" />
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+              </svg>
+            </div>
+            <h3 className={styles.deleteTitle}>¿Eliminar conversación?</h3>
+            <p className={styles.deleteName}>{chatToDelete.name}</p>
+            <p className={styles.deleteNote}>
+              Se borrará el historial completo de este chat.<br />Esta acción no se puede deshacer.
+            </p>
+            <div className={styles.deleteActions}>
+              <button
+                className={styles.deleteCancelBtn}
+                onClick={() => setChatToDelete(null)}
+                disabled={deletingChat}
+              >
+                Cancelar
+              </button>
+              <button
+                className={styles.deleteConfirmBtn}
+                onClick={confirmDeleteChat}
+                disabled={deletingChat}
+              >
+                {deletingChat ? 'Eliminando...' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div className={`${styles.toast} ${toast.type === 'error' ? styles.toastError : styles.toastSuccess}`}>
+          {toast.type === 'success' ? '✅' : '❌'} {toast.msg}
         </div>
       )}
     </div>

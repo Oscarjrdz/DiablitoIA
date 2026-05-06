@@ -481,6 +481,148 @@
   margin: 0;
 }
 
+/* ── Botón basura en tarjeta de chat ── */
+.chatDeleteBtn {
+  background: none;
+  border: none;
+  color: #374045;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+  line-height: 0;
+}
+.chatDeleteBtn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+.chatItem:hover .chatDeleteBtn { display: flex; }
+.chatActive .chatDeleteBtn { display: flex; }
+
+/* ── Modal de confirmación ── */
+.deleteOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  backdrop-filter: blur(4px);
+}
+
+.deleteModal {
+  background: #1a2730;
+  border: 1px solid #2a3942;
+  border-radius: 20px;
+  padding: 2rem 1.75rem 1.75rem;
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+  animation: modalIn 0.22s ease-out forwards;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.deleteIconWrap {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.12);
+  border: 2px solid rgba(239, 68, 68, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.2rem;
+}
+
+.deleteTitle {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #e9edef;
+  margin: 0 0 0.3rem;
+}
+
+.deleteName {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ef4444;
+  margin: 0 0 0.9rem;
+}
+
+.deleteNote {
+  font-size: 0.82rem;
+  color: #8696a0;
+  margin: 0 0 1.5rem;
+  line-height: 1.5;
+}
+
+.deleteActions {
+  display: flex;
+  gap: 10px;
+}
+
+.deleteCancelBtn {
+  flex: 1;
+  background: #2a3942;
+  color: #e9edef;
+  border: none;
+  padding: 11px 16px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.deleteCancelBtn:hover:not(:disabled) { background: #374045; }
+.deleteCancelBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.deleteConfirmBtn {
+  flex: 1;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  padding: 11px 16px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.deleteConfirmBtn:hover:not(:disabled) { background: #dc2626; }
+.deleteConfirmBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 22px;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  z-index: 300;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+  white-space: nowrap;
+  animation: toastIn 0.25s ease-out;
+}
+.toastSuccess { background: #202c33; color: #e9edef; border: 1px solid #2a3942; }
+.toastError   { background: #ef4444; color: #fff; }
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
 /* ── Header izquierdo ── */
 .headerIconsLeft {
   display: flex;

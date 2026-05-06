@@ -36,3 +36,24 @@ export async function GET() {
     return NextResponse.json({ success: false, error: e.message, chats: [] });
   }
 }
+
+// Elimina el historial de un chat por teléfono
+export async function DELETE(req) {
+  try {
+    const { searchParams } = new URL(req.url);
+    let phone = (searchParams.get('phone') || '').replace(/\D/g, '');
+    if (!phone.startsWith('52')) phone = '52' + phone;
+    if (!phone) return NextResponse.json({ success: false, error: 'phone requerido' });
+
+    await Promise.all([
+      redis.del(`chat_hist_${phone}@c.us`),
+      redis.del(`chat_hist_${phone}`),
+      redis.del(`chat_unread_${phone}`),
+      redis.del(`typing_${phone}`)
+    ]);
+
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+  }
+}
