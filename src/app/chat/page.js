@@ -1,80 +1,110 @@
 'use client';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styles from './page.module.css';
-import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, CheckCheck } from 'lucide-react';
+import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, Check } from 'lucide-react';
 
 // ── Avatar con iniciales y color consistente ──
 const AVATAR_COLORS = [
   '#e53935','#d81b60','#8e24aa','#5e35b1','#1e88e5',
-  '#039be5','#00acc1','#00897b','#43a047','#c0ca33',
+  '#039be5','#00acc1','#00897b','#43a047','#7cb342',
   '#f4511e','#f09300'
 ];
-
-function hashColor(str = '') {
+function hashColor(s = '') {
   let h = 0;
-  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h);
+  for (let i = 0; i < s.length; i++) h = s.charCodeAt(i) + ((h << 5) - h);
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
-
 function initials(name = '') {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return '?';
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  const p = name.trim().split(/\s+/).filter(Boolean);
+  if (!p.length) return '?';
+  if (p.length === 1) return p[0][0].toUpperCase();
+  return (p[0][0] + p[p.length - 1][0]).toUpperCase();
 }
 
-function Avatar({ name = '', phone = '', size = 49 }) {
+function Avatar({ name = '', phone = '', size = 49, picUrl = null }) {
+  const [imgOk, setImgOk] = useState(!!picUrl);
+  useEffect(() => setImgOk(!!picUrl), [picUrl]);
   const key = name || phone;
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%',
-      background: hashColor(key), flexShrink: 0,
+      background: imgOk ? 'transparent' : hashColor(key),
+      flexShrink: 0, overflow: 'hidden',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       color: '#fff', fontWeight: 700, fontSize: Math.round(size * 0.37),
-      letterSpacing: 0.5, userSelect: 'none'
+      letterSpacing: 0.5, userSelect: 'none', position: 'relative'
     }}>
-      {initials(name || phone.slice(-4))}
+      {picUrl && imgOk
+        ? <img src={picUrl} alt="" onError={() => setImgOk(false)}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+        : initials(name || phone.slice(-4))
+      }
     </div>
   );
 }
 
-// ── Formato de tiempo relativo para la lista ──
-function relativeTime(ts) {
+// ── Palomitas dinámicas ──
+function Ticks({ status }) {
+  if (!status) return null;
+  if (status === 'sent') {
+    return <Check size={14} color="#8696a0" strokeWidth={2.5} />;
+  }
+  // delivered o read → CheckCheck manual (dos ✓)
+  const color = status === 'read' ? '#53bdeb' : '#8696a0';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>
+      <svg width="16" height="11" viewBox="0 0 16 11" fill="none">
+        <path d="M1 5.5L4.5 9L10 3" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M6 5.5L9.5 9L15 3" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </span>
+  );
+}
+
+// ── Formato de tiempo relativo (lista) ──
+function relTime(ts) {
   if (!ts) return '';
-  const now = new Date();
-  const d = new Date(ts);
-  const toLocal = x => x.toLocaleDateString('en-CA', { timeZone: 'America/Monterrey' });
-  const nowStr = toLocal(now);
-  const dStr = toLocal(d);
-  if (nowStr === dStr)
+  const now = new Date(), d = new Date(ts);
+  const toStr = x => x.toLocaleDateString('en-CA', { timeZone: 'America/Monterrey' });
+  const nowS = toStr(now), dS = toStr(d);
+  if (nowS === dS)
     return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Monterrey' });
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (dStr === toLocal(yesterday)) return 'Ayer';
+  const y = new Date(now); y.setDate(y.getDate() - 1);
+  if (dS === toStr(y)) return 'Ayer';
   if (now - d < 7 * 86400000) return ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][d.getDay()];
   return d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: '2-digit' });
 }
 
-// ── Separador de fecha en el área de mensajes ──
-function dateSeparator(ts) {
+// ── Separador de fecha en mensajes ──
+function dayLabel(ts) {
   if (!ts) return null;
-  const d = new Date(ts);
-  const now = new Date();
-  const toLocal = x => x.toLocaleDateString('en-CA', { timeZone: 'America/Monterrey' });
-  if (toLocal(d) === toLocal(now)) return 'Hoy';
-  const yest = new Date(now); yest.setDate(yest.getDate() - 1);
-  if (toLocal(d) === toLocal(yest)) return 'Ayer';
+  const d = new Date(ts), now = new Date();
+  const toStr = x => x.toLocaleDateString('en-CA', { timeZone: 'America/Monterrey' });
+  if (toStr(d) === toStr(now)) return 'Hoy';
+  const y = new Date(now); y.setDate(y.getDate() - 1);
+  if (toStr(d) === toStr(y)) return 'Ayer';
   return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Monterrey' });
+}
+
+// ── Animación de tres puntos (typing) ──
+function TypingDots() {
+  return (
+    <span className={styles.typingDots}>
+      <span /><span /><span />
+    </span>
+  );
 }
 
 export default function ChatPage() {
   const [chats, setChats] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [isTyping, setIsTyping] = useState(false);
   const [inputText, setInputText] = useState('');
   const [search, setSearch] = useState('');
   const [loadingChats, setLoadingChats] = useState(true);
-  const [attachment, setAttachment] = useState(null); // { base64, type, name }
+  const [attachment, setAttachment] = useState(null);
+  const [profilePics, setProfilePics] = useState({});
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -82,6 +112,7 @@ export default function ChatPage() {
   const activeChatRef = useRef(null);
   const msgPollRef = useRef(null);
   const listPollRef = useRef(null);
+  const typingTimerRef = useRef(null);
 
   useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
 
@@ -90,9 +121,24 @@ export default function ChatPage() {
     try {
       const res = await fetch('/api/whatsapp/chats');
       const data = await res.json();
-      if (data.success) setChats(data.chats || []);
+      if (data.success) {
+        setChats(data.chats || []);
+        // Cargar fotos de perfil en background para los primeros 20
+        const toLoad = (data.chats || []).slice(0, 20);
+        toLoad.forEach(c => {
+          if (!profilePics[c.phone]) fetchProfilePic(c.phone);
+        });
+      }
     } catch {}
     setLoadingChats(false);
+  }, []); // eslint-disable-line
+
+  const fetchProfilePic = useCallback(async (phone) => {
+    try {
+      const res = await fetch(`/api/whatsapp/profile-pic?phone=${encodeURIComponent(phone)}`);
+      const data = await res.json();
+      setProfilePics(prev => ({ ...prev, [phone]: data.url || null }));
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -109,7 +155,7 @@ export default function ChatPage() {
       const data = await res.json();
       if (data.success) {
         setMessages(data.messages || []);
-        // Actualizar badge de unread en la lista
+        setIsTyping(!!data.isTyping);
         setChats(prev => prev.map(c => c.phone === phone ? { ...c, unread: 0 } : c));
       }
     } catch {}
@@ -118,28 +164,48 @@ export default function ChatPage() {
   const openChat = useCallback((chat) => {
     setActiveChat(chat);
     setMessages([]);
+    setIsTyping(false);
     setInputText('');
     setAttachment(null);
     clearInterval(msgPollRef.current);
     fetchMessages(chat.phone);
+    // Cargar foto si no la tenemos
+    if (!profilePics[chat.phone]) fetchProfilePic(chat.phone);
     msgPollRef.current = setInterval(() => {
       if (activeChatRef.current?.phone === chat.phone) fetchMessages(chat.phone);
     }, 2000);
-  }, [fetchMessages]);
+  }, [fetchMessages, fetchProfilePic, profilePics]);
 
   useEffect(() => () => clearInterval(msgPollRef.current), []);
 
-  // ── Auto-scroll al último mensaje ──
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messages.length) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // ── Auto-resize del textarea ──
+  // ── Auto-resize textarea ──
   const autoResize = () => {
     const ta = textareaRef.current;
     if (!ta) return;
     ta.style.height = 'auto';
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+  };
+
+  // ── Enviar estado "escribiendo" al contacto con debounce ──
+  const sendTypingStatus = useCallback((phone, typing) => {
+    fetch('/api/whatsapp/typing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, typing })
+    }).catch(() => {});
+  }, []);
+
+  const handleInputChange = (e) => {
+    setInputText(e.target.value);
+    autoResize();
+    if (!activeChat) return;
+    sendTypingStatus(activeChat.phone, true);
+    clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => sendTypingStatus(activeChat.phone, false), 3000);
   };
 
   // ── Adjunto ──
@@ -161,50 +227,38 @@ export default function ChatPage() {
   };
 
   // ── Enviar mensaje ──
-  const handleSend = async () => {
+  const handleSend = useCallback(async () => {
     const text = inputText.trim();
     if (!text && !attachment) return;
     if (!activeChat) return;
-
+    clearTimeout(typingTimerRef.current);
+    sendTypingStatus(activeChat.phone, false);
     const now = Date.now();
     const timeStr = new Date(now).toLocaleTimeString('es-MX', {
       hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Monterrey'
     });
-
-    // Optimistic UI
     const optimistic = {
-      text,
-      attachment: attachment?.base64 || null,
+      text, attachment: attachment?.base64 || null,
       attachmentType: attachment?.type || null,
-      fromMe: true,
-      ts: now,
-      time: timeStr
+      fromMe: true, ts: now, time: timeStr, status: 'sent'
     };
     setMessages(prev => [...prev, optimistic]);
     setInputText('');
     clearAttachment();
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
-
-    // Actualizar preview en la lista
     setChats(prev => prev.map(c =>
       c.phone === activeChat.phone
         ? { ...c, lastText: text || '📎 Archivo', lastTs: now, fromMe: true }
         : c
     ));
-
     try {
       await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: activeChat.phone,
-          text,
-          attachment: attachment?.base64 || null,
-          attachmentType: attachment?.type || null
-        })
+        body: JSON.stringify({ to: activeChat.phone, text, attachment: attachment?.base64 || null, attachmentType: attachment?.type || null })
       });
     } catch {}
-  };
+  }, [inputText, attachment, activeChat, sendTypingStatus]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -212,22 +266,16 @@ export default function ChatPage() {
 
   // ── Filtrar chats ──
   const filtered = search
-    ? chats.filter(c =>
-        c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.phone.includes(search)
-      )
+    ? chats.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search))
     : chats;
 
-  // ── Separadores de fecha en mensajes ──
-  const msgsWithSeparators = [];
-  let lastDateLabel = null;
+  // ── Inyectar separadores de fecha en mensajes ──
+  const msgsWithSeps = [];
+  let lastLabel = null;
   for (const m of messages) {
-    const label = dateSeparator(m.ts);
-    if (label && label !== lastDateLabel) {
-      msgsWithSeparators.push({ _sep: true, label });
-      lastDateLabel = label;
-    }
-    msgsWithSeparators.push(m);
+    const label = dayLabel(m.ts);
+    if (label && label !== lastLabel) { msgsWithSeps.push({ _sep: true, label }); lastLabel = label; }
+    msgsWithSeps.push(m);
   }
 
   return (
@@ -235,48 +283,55 @@ export default function ChatPage() {
 
       {/* ══ PANEL IZQUIERDO ══ */}
       <div className={`${styles.left} ${activeChat ? styles.leftHidden : ''}`}>
+
         <div className={styles.leftHeader}>
           <Avatar name="El Diablito" size={40} />
           <span className={styles.leftTitle}>Chats</span>
-          <MoreVertical size={20} color="#aebac1" style={{ cursor: 'pointer' }} />
+          <div className={styles.headerIconsLeft}>
+            <MoreVertical size={20} />
+          </div>
         </div>
 
         <div className={styles.searchBar}>
-          <Search size={15} color="#8696a0" />
-          <input
-            className={styles.searchInput}
-            placeholder="Buscar o empezar chat"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          {search && (
-            <button style={{ background: 'none', border: 'none', color: '#8696a0', cursor: 'pointer', padding: 0 }} onClick={() => setSearch('')}>
-              <X size={14} />
-            </button>
-          )}
+          <div className={styles.searchWrap}>
+            <Search size={15} color="#8696a0" />
+            <input
+              className={styles.searchInput}
+              placeholder="Buscar o empezar chat"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {search && (
+              <button style={{ background: 'none', border: 'none', color: '#8696a0', cursor: 'pointer', padding: 0, lineHeight: 0 }}
+                onClick={() => setSearch('')}><X size={14} /></button>
+            )}
+          </div>
         </div>
 
         <div className={styles.chatList}>
           {loadingChats && <p className={styles.tip}>Cargando chats...</p>}
-          {!loadingChats && filtered.length === 0 && <p className={styles.tip}>Sin chats</p>}
+          {!loadingChats && filtered.length === 0 && <p className={styles.tip}>Sin chats aún</p>}
           {filtered.map(chat => (
             <div
               key={chat.phone}
               className={`${styles.chatItem} ${activeChat?.phone === chat.phone ? styles.chatActive : ''}`}
               onClick={() => openChat(chat)}
             >
-              <Avatar name={chat.name} phone={chat.phone} size={49} />
+              <Avatar name={chat.name} phone={chat.phone} size={49} picUrl={profilePics[chat.phone]} />
               <div className={styles.chatMeta}>
                 <div className={styles.chatRow1}>
                   <span className={styles.chatName}>{chat.name}</span>
-                  <span className={styles.chatTime}>{relativeTime(chat.lastTs)}</span>
+                  <span className={chat.unread > 0 ? styles.chatTimeUnread : styles.chatTime}>
+                    {relTime(chat.lastTs)}
+                  </span>
                 </div>
                 <div className={styles.chatRow2}>
                   <span className={styles.chatPreview}>
-                    {chat.fromMe && <CheckCheck size={14} color="#8696a0" style={{ marginRight: 3, verticalAlign: 'middle', flexShrink: 0 }} />}
-                    {chat.lastText || <em style={{ opacity: 0.5 }}>Sin mensajes</em>}
+                    {chat.fromMe && <Ticks status="delivered" />}
+                    {chat.fromMe && ' '}
+                    {chat.lastText || <em style={{ opacity: 0.4 }}>Sin mensajes</em>}
                   </span>
-                  {chat.unread > 0 && <span className={styles.badge}>{chat.unread}</span>}
+                  {chat.unread > 0 && <span className={styles.badge}>{chat.unread > 99 ? '99+' : chat.unread}</span>}
                 </div>
               </div>
             </div>
@@ -287,15 +342,19 @@ export default function ChatPage() {
       {/* ══ PANEL DERECHO ══ */}
       {activeChat ? (
         <div className={styles.right}>
-          {/* Header */}
+
           <div className={styles.rightHeader}>
             <button className={styles.backBtn} onClick={() => { setActiveChat(null); clearInterval(msgPollRef.current); }}>
               <ArrowLeft size={22} />
             </button>
-            <Avatar name={activeChat.name} phone={activeChat.phone} size={40} />
+            <Avatar name={activeChat.name} phone={activeChat.phone} size={40} picUrl={profilePics[activeChat.phone]} />
             <div className={styles.headerInfo}>
               <span className={styles.headerName}>{activeChat.name}</span>
-              <span className={styles.headerSub}>{activeChat.phone.replace(/^52/, '').replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3')}</span>
+              <span className={styles.headerSub}>
+                {isTyping
+                  ? <span className={styles.typingLabel}>escribiendo<TypingDots /></span>
+                  : activeChat.phone.replace(/^52/, '').replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3')}
+              </span>
             </div>
             <div className={styles.headerIcons}>
               <Search size={20} />
@@ -303,12 +362,11 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Mensajes */}
           <div className={styles.messages}>
-            {msgsWithSeparators.map((item, i) => {
+            {msgsWithSeps.map((item, i) => {
               if (item._sep) {
                 return (
-                  <div key={'sep' + i} className={styles.dateSep}>
+                  <div key={'s' + i} className={styles.dateSep}>
                     <span>{item.label}</span>
                   </div>
                 );
@@ -316,41 +374,50 @@ export default function ChatPage() {
               const m = item;
               return (
                 <div key={i} className={m.fromMe ? styles.rowOut : styles.rowIn}>
-                  {!m.fromMe && <Avatar name={activeChat.name} phone={activeChat.phone} size={28} />}
+                  {!m.fromMe && (
+                    <Avatar name={activeChat.name} phone={activeChat.phone} size={28} picUrl={profilePics[activeChat.phone]} />
+                  )}
                   <div className={m.fromMe ? styles.bubbleOut : styles.bubbleIn}>
                     {m.attachment && m.attachmentType === 'image' && (
                       <img src={m.attachment} alt="" style={{ maxWidth: '100%', borderRadius: 6, display: 'block', marginBottom: 4 }} />
                     )}
                     {m.attachment && m.attachmentType !== 'image' && (
                       <div className={styles.fileAttach}>
-                        <Paperclip size={16} />
+                        <Paperclip size={14} />
                         <span>Archivo adjunto</span>
                       </div>
                     )}
                     {m.text && <span className={styles.msgText}>{m.text}</span>}
                     <div className={styles.msgMeta}>
                       {m.time && <span className={styles.msgTime}>{m.time}</span>}
-                      {m.fromMe && <CheckCheck size={14} color="#8696a0" />}
+                      {m.fromMe && <Ticks status={m.status} />}
                     </div>
                   </div>
                 </div>
               );
             })}
+            {/* Indicador "escribiendo" al final de los mensajes */}
+            {isTyping && (
+              <div className={styles.rowIn}>
+                <Avatar name={activeChat.name} phone={activeChat.phone} size={28} picUrl={profilePics[activeChat.phone]} />
+                <div className={styles.bubbleIn} style={{ padding: '10px 14px' }}>
+                  <TypingDots />
+                </div>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Preview adjunto */}
           {attachment && (
             <div className={styles.attachBar}>
               {attachment.type === 'image'
                 ? <img src={attachment.base64} alt="" style={{ height: 72, borderRadius: 6, objectFit: 'cover' }} />
-                : <div className={styles.filePreview}><Paperclip size={16} />{attachment.name}</div>
+                : <div className={styles.filePreview}><Paperclip size={15} /> {attachment.name}</div>
               }
-              <button className={styles.removeAttach} onClick={clearAttachment}><X size={14} /></button>
+              <button className={styles.removeAttach} onClick={clearAttachment}><X size={13} /></button>
             </div>
           )}
 
-          {/* Input */}
           <div className={styles.inputRow}>
             <button className={styles.iconBtn} onClick={() => fileInputRef.current?.click()}>
               <Paperclip size={22} />
@@ -363,7 +430,7 @@ export default function ChatPage() {
                 placeholder="Escribe un mensaje"
                 rows={1}
                 value={inputText}
-                onChange={e => { setInputText(e.target.value); autoResize(); }}
+                onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
               />
             </div>
@@ -371,13 +438,14 @@ export default function ChatPage() {
               {(inputText.trim() || attachment) ? <Send size={20} /> : <Mic size={20} />}
             </button>
           </div>
+
         </div>
       ) : (
         <div className={styles.emptyPane}>
           <div className={styles.emptyBox}>
-            <div style={{ fontSize: 72, marginBottom: 16, opacity: 0.12 }}>💬</div>
+            <div style={{ fontSize: 80, opacity: 0.1, marginBottom: 20 }}>💬</div>
             <h2 className={styles.emptyTitle}>Diablito Chat</h2>
-            <p className={styles.emptySub}>Selecciona un chat para comenzar a escribir</p>
+            <p className={styles.emptySub}>Selecciona un chat para comenzar</p>
           </div>
         </div>
       )}

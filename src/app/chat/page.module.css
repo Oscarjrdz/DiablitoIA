@@ -473,3 +473,51 @@
   color: #8696a0;
   margin: 0;
 }
+
+/* ── Header izquierdo ── */
+.headerIconsLeft {
+  display: flex;
+  gap: 12px;
+  color: #aebac1;
+  cursor: pointer;
+}
+
+/* ── Chat list: tiempo con no-leídos ── */
+.chatTimeUnread {
+  font-size: 12px;
+  color: #00a884;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ── Typing label en header ── */
+.typingLabel {
+  color: #00a884;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ── Animación tres puntos ── */
+.typingDots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 2px;
+}
+.typingDots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8696a0;
+  animation: typing-bounce 1.2s infinite ease-in-out;
+}
+.typingDots span:nth-child(1) { animation-delay: 0s; }
+.typingDots span:nth-child(2) { animation-delay: 0.2s; }
+.typingDots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}

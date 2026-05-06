@@ -82,12 +82,64 @@ export async function POST(req) {
     await redis.set('DEBUG_LAST_PAYLOAD', payload);
 
 
-    // Ack → semaphore verde
+    // ── Typing / Presence ──
+    if (payload.event_type === 'presence_update' || payload.event_type === 'chat_state' || payload.event_type === 'typing') {
+      const fromJid = payload.data?.from || payload.data?.id || payload.data?.chatId || '';
+      if (fromJid && !fromJid.includes('@g.us')) {
+        const tPhone = '52' + fromJid.replace(/\D/g, '').slice(-10);
+        const isTyping = payload.data?.presence === 'composing'
+          || payload.data?.state === 'composing'
+          || payload.data?.type === 'composing'
+          || payload.data?.typing === true;
+        if (isTyping) {
+          await redis.setex(`typing_${tPhone}`, 8, '1');
+        } else {
+          await redis.del(`typing_${tPhone}`);
+        }
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    // ── ACK → palomitas y semáforo de promo ──
     if (payload.event_type === 'message_ack' || payload.event_type === 'messages.update') {
       const msgData = payload.data || {};
       const msgKey = msgData.key || (Array.isArray(msgData) ? msgData[0]?.key : null);
       if (msgKey?.id) {
-        const statusId = msgData.update?.status || (Array.isArray(msgData) ? msgData[0]?.update?.status : null);
+        const statusId = msgData.update?.status ?? (Array.isArray(msgData) ? msgData[0]?.update?.status : null);
+
+        // Mapa de status numérico → string
+        let newStatus = null;
+        if ([1, 2, 'SERVER_ACK'].includes(statusId)) newStatus = 'sent';
+        if ([3, 'DELIVERY_ACK', 'DELIVERED'].includes(statusId)) newStatus = 'delivered';
+        if ([4, 'READ', 'READ_ACK'].includes(statusId)) newStatus = 'read';
+
+        // Actualizar estado en historial del chat
+        if (newStatus) {
+          const chatPhone = await redis.get(`chat_msg_${msgKey.id}`);
+          if (chatPhone) {
+            const hKey = `chat_hist_${chatPhone}@c.us`;
+            try {
+              const hData = await redis.get(hKey);
+              if (hData) {
+                const hist = typeof hData === 'string' ? JSON.parse(hData) : hData;
+                const STATUS_ORDER = { sent: 1, delivered: 2, read: 3 };
+                for (let i = hist.length - 1; i >= 0; i--) {
+                  const p = hist[i].parts?.[0];
+                  if (p?.msgId === msgKey.id) {
+                    if ((STATUS_ORDER[newStatus] || 0) > (STATUS_ORDER[p.status] || 0)) {
+                      p.status = newStatus;
+                    }
+                    break;
+                  }
+                }
+                await redis.set(hKey, JSON.stringify(hist));
+                await redis.set(`chat_hist_${chatPhone}`, JSON.stringify(hist));
+              }
+            } catch {}
+          }
+        }
+
+        // Semáforo de promo (lógica existente)
         if ([3, 4, 'READ'].includes(statusId)) {
           const phone = await redis.get(`promo_msg_${msgKey.id}`);
           if (phone) await redis.set(`promo_pos_${phone}`, 'verde');
