@@ -904,10 +904,9 @@ export async function POST(req) {
     if (parsed.length === 1) {
         if (isRegistered && clientName) {
             // Cliente ya registrado: saludar por nombre
-            await sendWhatsApp(phoneId, `¡Hola *${clientName}*! 👋🍔`, cfg);
-            await new Promise(r => setTimeout(r, 800));
-            await sendWhatsApp(phoneId, `Qué gusto verte de vuelta en *El Diablito* 🌶️\n\n¿En qué te ayudo?\n1️⃣ Revisar tus puntos 🎁 (tienes *${clientPoints}*)\n2️⃣ Editar tus datos 📝`, cfg);
-            parsed.push({ role: 'model', parts: [{ text: `¡Hola ${clientName}! Qué gusto verte de vuelta. ¿En qué te ayudo? 1) Puntos 2) Editar datos`, ts: Date.now() }] });
+            const welcomeMsg = `¡Hola *${clientName}*! Qué gusto verte de vuelta. 😊\n\n¿En qué te ayudo?\n\n1️⃣ Pedido a Domicilio\n2️⃣ Revisar Puntos\n3️⃣ Editar datos`;
+            await sendWhatsApp(phoneId, welcomeMsg, cfg);
+            parsed.push({ role: 'model', parts: [{ text: `¡Hola ${clientName}! Qué gusto verte de vuelta. ¿En qué te ayudo? 1) Pedido a Domicilio 2) Revisar Puntos 3) Editar datos`, ts: Date.now() }] });
             await redis.set(historyKey, JSON.stringify(parsed));
             await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
             await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
@@ -948,8 +947,9 @@ Su número es: ${clientPhone10}. (No pidas su número).
 NUNCA le ofrezcas registrarse de nuevo ni le ofrezcas el Cupón de Bienvenida (ya lo usó).
 
 INTERACCIÓN FRECUENTE (MENÚ PRINCIPAL):
-1) Revisar Puntos: Si el cliente selecciona la opción 1 o pregunta por sus puntos, confírmale amablemente que tiene exactamente "${clientPoints} puntos" e infórmale que puede canjearlos como dinero o descuentos al comprar en sucursal.
-2) Editar Datos: Si el cliente selecciona la opción 2 o pide cambiar su domicilio, pregúntale cuál será su nueva dirección y su nombre, y actualízalo usando la etiqueta secreta de actualización.
+1) Pedido a Domicilio: Si el cliente selecciona la opción 1 o pide un pedido a domicilio, solicítale qué productos desea ordenar y su dirección de entrega, y dile que en breve un asesor confirmará su pedido.
+2) Revisar Puntos: Si el cliente selecciona la opción 2 o pregunta por sus puntos, confírmale amablemente que tiene exactamente "${clientPoints} puntos" e infórmale que puede canjearlos como dinero o descuentos al comprar en sucursal.
+3) Editar Datos: Si el cliente selecciona la opción 3 o pide cambiar su domicilio, pregúntale cuál será su nueva dirección y su nombre, y actualízalo usando la etiqueta secreta de actualización.
 
 # REGLA PARA ACTUALIZAR DATOS:
 Cuando el cliente te haya dado nuevos datos (nombre y nueva dirección) para actualizar su perfil, DEBES confirmar el cambio añadiendo exactamente esta línea invisible al final de tu mensaje:
