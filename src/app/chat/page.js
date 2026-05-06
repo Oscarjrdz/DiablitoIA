@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styles from './page.module.css';
-import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, Check } from 'lucide-react';
+import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, Check, Plus, Phone, User } from 'lucide-react';
 
 // ── Avatar con iniciales y color consistente ──
 const AVATAR_COLORS = [
@@ -116,6 +116,12 @@ export default function ChatPage() {
   const [editName, setEditName] = useState('');
   const [editingField, setEditingField] = useState(null); // 'name' | 'address' | 'store' | null
   const [savingField, setSavingField] = useState(false);
+
+  // New chat
+  const [showNewChat, setShowNewChat] = useState(false);
+  const [newPhone, setNewPhone] = useState('');
+  const [newName, setNewName] = useState('');
+  const [creatingChat, setCreatingChat] = useState(false);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -449,6 +455,92 @@ export default function ChatPage() {
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
+        </div>
+
+        {/* ── Botón Agregar Chat ── */}
+        <div className={styles.newChatSection}>
+          <button
+            className={`${styles.newChatToggle} ${showNewChat ? styles.newChatToggleActive : ''}`}
+            onClick={() => setShowNewChat(!showNewChat)}
+          >
+            <Plus size={16} />
+            <span>Agregar Chat</span>
+            {showNewChat && <X size={14} style={{ marginLeft: 'auto' }} />}
+          </button>
+
+          {showNewChat && (
+            <div className={styles.newChatForm}>
+              <div className={styles.newChatInputRow}>
+                <Phone size={16} color="#8696a0" />
+                <input
+                  className={styles.newChatInput}
+                  placeholder="Número WhatsApp (ej: 8112345678)"
+                  value={newPhone}
+                  onChange={e => setNewPhone(e.target.value.replace(/\D/g, ''))}
+                  maxLength={10}
+                />
+              </div>
+              <div className={styles.newChatInputRow}>
+                <User size={16} color="#8696a0" />
+                <input
+                  className={styles.newChatInput}
+                  placeholder="Nombre del contacto"
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                />
+              </div>
+              <button
+                className={styles.newChatBtn}
+                disabled={creatingChat || newPhone.length < 10}
+                onClick={async () => {
+                  setCreatingChat(true);
+                  try {
+                    const cleanPhone = '52' + newPhone.slice(-10);
+                    // Check if chat already exists
+                    const existing = chats.find(c => c.phone === cleanPhone);
+                    if (existing) {
+                      openChat(existing);
+                      setShowNewChat(false);
+                      setNewPhone('');
+                      setNewName('');
+                      showToast('Chat ya existe, abriendo...');
+                      setCreatingChat(false);
+                      return;
+                    }
+                    // Create in Redis
+                    await fetch('/api/whatsapp/create-chat', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ phone: cleanPhone, name: newName.trim() })
+                    });
+                    const newChat = {
+                      phone: cleanPhone,
+                      name: newName.trim() || newPhone.slice(-10),
+                      lastText: '',
+                      lastTs: Date.now(),
+                      fromMe: false,
+                      unread: 0,
+                      msgCount: 0,
+                      store: '',
+                      needsHuman: false
+                    };
+                    setChats(prev => [newChat, ...prev]);
+                    openChat(newChat);
+                    setShowNewChat(false);
+                    setNewPhone('');
+                    setNewName('');
+                    showToast('Chat creado');
+                  } catch {
+                    showToast('Error al crear chat', 'error');
+                  }
+                  setCreatingChat(false);
+                }}
+              >
+                <Plus size={16} />
+                {creatingChat ? 'Creando...' : 'Crear Chat'}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className={styles.chatList}>

@@ -105,6 +105,103 @@
 .storeSelect:focus { border-color: #00a884; }
 .storeSelect option { background: #202c33; color: #e9edef; }
 
+/* ── Sección Agregar Chat ── */
+.newChatSection {
+  padding: 0 12px 0;
+  flex-shrink: 0;
+}
+
+.newChatToggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: transparent;
+  border: 1px dashed #2a3942;
+  border-radius: 10px;
+  color: #00a884;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.newChatToggle:hover {
+  background: rgba(0, 168, 132, 0.08);
+  border-color: #00a884;
+}
+.newChatToggleActive {
+  background: rgba(0, 168, 132, 0.08);
+  border-color: #00a884;
+  border-style: solid;
+}
+
+.newChatForm {
+  padding: 10px 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: newChatSlide 0.2s ease-out;
+}
+@keyframes newChatSlide {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.newChatInputRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #202c33;
+  border: 1px solid #2a3942;
+  border-radius: 10px;
+  padding: 0 12px;
+  transition: border-color 0.15s;
+}
+.newChatInputRow:focus-within {
+  border-color: #00a884;
+}
+
+.newChatInput {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #e9edef;
+  font-size: 14px;
+  font-family: inherit;
+  padding: 10px 0;
+  outline: none;
+}
+.newChatInput::placeholder {
+  color: #8696a0;
+}
+
+.newChatBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: #00a884;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.newChatBtn:hover:not(:disabled) {
+  background: #06cf9c;
+}
+.newChatBtn:disabled {
+  background: #2a3942;
+  color: #8696a0;
+  cursor: not-allowed;
+}
+
 /* Chat list */
 .chatList {
   flex: 1;
