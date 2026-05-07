@@ -1020,15 +1020,58 @@ export async function POST(req) {
         } catch(lookupErr) { console.error('[Bot] Loyverse lookup error:', lookupErr); }
     }
 
-    // ── 🟢 CLIENTE REGISTRADO: SIEMPRE responde con menú determinístico ──
+    // ── 🟢 CLIENTE REGISTRADO: Respuestas determinísticas con estados ──
     if (isRegistered && clientName) {
-        const welcomeMsg = `¡Hola *${clientName}*! 🍔 Qué gusto verte de vuelta. 😊\n\n¿En qué te ayudo hoy?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Revisar Puntos 🎁\n4️⃣ Editar datos 📝`;
-        await sendWhatsApp(phoneId, welcomeMsg, cfg);
-        parsed.push({ role: 'model', parts: [{ text: `¡Hola ${clientName}! Qué gusto verte de vuelta. ¿En qué te ayudo hoy? 1) Ver Menú 2) Pedido a Domicilio 3) Revisar Puntos 4) Editar datos`, ts: Date.now() }] });
-        if (parsed.length > 40) parsed = parsed.slice(-40);
-        await redis.set(historyKey, JSON.stringify(parsed));
-        await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
-        await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+        const menuMsg = `¿En qué te puedo ayudar? 😊\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Revisar Puntos 🎁\n4️⃣ Editar datos 📝`;
+        const userText = bodyStr.trim().toLowerCase();
+        const botState = await redis.get(`bot_state_${cleanPhone}`);
+        let botReply = '';
+
+        // ── Sub-flujo: Confirmación de menú ──
+        if (botState === 'awaiting_menu_confirm') {
+            await redis.del(`bot_state_${cleanPhone}`);
+            const isSi = /^(s[iíì]|si|sí|yes|ok|va|dale|claro|porfa|por favor|manda|1)$/i.test(userText) || userText.includes('si') || userText.includes('sí');
+            const isNo = /^(no|nel|nop|nah|2)$/i.test(userText);
+
+            if (isNo) {
+                botReply = `Ok 👍 Entonces dime, ¿en qué te puedo ayudar?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Revisar Puntos 🎁\n4️⃣ Editar datos 📝`;
+            } else {
+                // Sí o cualquier otra cosa → enviar imagen del menú
+                const menuImageUrl = 'https://global-sales-prediction.vercel.app/menu-bot.jpg';
+                const menuCaption = '🍔🌶️ ¡Aquí tienes nuestro menú *El Diablito*! 😈\n\n¿Se te antoja algo? Escribe *2* para hacer un pedido a domicilio 🛵';
+                try {
+                    await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/messages/image`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: cfg.wappToken, to: phoneId, image: menuImageUrl, caption: menuCaption })
+                    });
+                } catch(e) { console.error('[Bot] Error enviando imagen menú:', e); }
+                parsed.push({ role: 'model', parts: [{ text: menuCaption, ts: Date.now(), attachmentType: 'image', hasAttachment: true, attachmentUrl: menuImageUrl }] });
+                if (parsed.length > 40) parsed = parsed.slice(-40);
+                await redis.set(historyKey, JSON.stringify(parsed));
+                await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
+                await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+                return NextResponse.json({ success: true });
+            }
+        }
+        // ── Opción 1: Ver Menú → preguntar confirmación ──
+        else if (textMsg === '1' || /\bmen[uú]\b/i.test(userText) || /\bver men/i.test(userText) || /\bcarta\b/i.test(userText)) {
+            botReply = `📋 ¿Quieres que te mande el *Menú*? 🍔\n\n👉 Responde *Sí* o *No*`;
+            await redis.setex(`bot_state_${cleanPhone}`, 300, 'awaiting_menu_confirm');
+        }
+        // ── Default: Saludo + menú de opciones ──
+        else {
+            botReply = `¡Hola *${clientName}*! 🍔 Qué gusto verte de vuelta. 😊\n\n${menuMsg}`;
+        }
+
+        if (botReply) {
+            await sendWhatsApp(phoneId, botReply, cfg);
+            parsed.push({ role: 'model', parts: [{ text: botReply, ts: Date.now() }] });
+            if (parsed.length > 40) parsed = parsed.slice(-40);
+            await redis.set(historyKey, JSON.stringify(parsed));
+            await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
+            await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+        }
         return NextResponse.json({ success: true });
     }
 
