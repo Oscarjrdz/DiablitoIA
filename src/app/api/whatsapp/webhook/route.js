@@ -1059,16 +1059,43 @@ export async function POST(req) {
             botReply = `📋 ¿Quieres que te mande el *Menú*?\n\n👉 Responde *Sí* o *No*`;
             await redis.setex(`bot_state_${cleanPhone}`, 300, 'awaiting_menu_confirm');
         }
-        // ── Opción 2: Pedido a Domicilio → aro naranja + silencio 1h ──
-        else if (textMsg === '2' || /\bdomicilio\b/i.test(userText) || /\bpedir\b/i.test(userText) || /\bordenar\b/i.test(userText) || /\bpedido\b/i.test(userText) || /\bquiero (pedir|ordenar)\b/i.test(userText) || /\ba domicilio\b/i.test(userText) || /\benviar\b/i.test(userText) || /\benvío\b/i.test(userText)) {
+        // ── Opción 2 explícita: Pedido a Domicilio ──
+        else if (textMsg === '2') {
             botReply = `🛵 Muy bien *${clientName}*, ¿entonces quieres pedir a domicilio verdad? 🍔🔥`;
             await redis.set(`delivery_mode_${cleanPhone}`, '1');
             await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1');
-            console.log(`[Bot] Delivery mode activado para ${cleanPhone} - aro naranja + silencio 1h`);
+            console.log(`[Bot] Delivery mode activado para ${cleanPhone} - opción 2 explícita`);
         }
-        // ── Default: Saludo + menú de opciones ──
+        // ── Default: IA clasifica si es intención de domicilio o no ──
         else {
-            botReply = `¡Hola *${clientName}*! 🍔 Qué gusto verte de vuelta. 😊\n\n${menuMsg}`;
+            let isDeliveryIntent = false;
+            try {
+                const aiToken = cfg.aiToken;
+                if (aiToken) {
+                    const classifyRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${aiToken}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ role: 'user', parts: [{ text: `Eres un clasificador. El cliente de una hamburguesería escribió este mensaje: "${bodyStr}"\n\n¿El cliente quiere hacer un PEDIDO A DOMICILIO o ORDENAR COMIDA? Responde SOLO con "SI" o "NO". Nada más.` }] }],
+                            generationConfig: { maxOutputTokens: 5, temperature: 0.1 }
+                        })
+                    });
+                    if (classifyRes.ok) {
+                        const classifyData = await classifyRes.json();
+                        const answer = (classifyData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim().toUpperCase();
+                        isDeliveryIntent = answer.includes('SI') || answer.includes('SÍ');
+                    }
+                }
+            } catch(e) { console.error('[Bot] Error clasificando intención:', e); }
+
+            if (isDeliveryIntent) {
+                botReply = `🛵 Muy bien *${clientName}*, ¿entonces quieres pedir a domicilio verdad? 🍔🔥`;
+                await redis.set(`delivery_mode_${cleanPhone}`, '1');
+                await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1');
+                console.log(`[Bot] Delivery mode activado para ${cleanPhone} - IA detectó intención de pedido`);
+            } else {
+                botReply = `¡Hola *${clientName}*! 🍔 Qué gusto verte de vuelta. 😊\n\n${menuMsg}`;
+            }
         }
 
         if (botReply) {
