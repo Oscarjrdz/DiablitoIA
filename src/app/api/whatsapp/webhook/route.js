@@ -1020,29 +1020,31 @@ export async function POST(req) {
         } catch(lookupErr) { console.error('[Bot] Loyverse lookup error:', lookupErr); }
     }
 
-    // ── 💬 PRIMER CONTACTO: 2 burbujas separadas ──
-    if (parsed.length === 1) {
-        if (isRegistered && clientName) {
-            // Cliente ya registrado: saludar por nombre
-            const welcomeMsg = `¡Hola *${clientName}*! 🍔 Qué gusto verte de vuelta. 😊\n\n¿En qué te ayudo hoy?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Revisar Puntos 🎁\n4️⃣ Editar datos 📝`;
-            await sendWhatsApp(phoneId, welcomeMsg, cfg);
-            parsed.push({ role: 'model', parts: [{ text: `¡Hola ${clientName}! Qué gusto verte de vuelta. ¿En qué te ayudo hoy? 1) Ver Menú 2) Pedido a Domicilio 3) Revisar Puntos 4) Editar datos`, ts: Date.now() }] });
-            await redis.set(historyKey, JSON.stringify(parsed));
-            await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
-            await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
-            return NextResponse.json({ success: true });
-        } else {
-            // Cliente nuevo: invitar a registrarse
-            await sendWhatsApp(phoneId, '¡Hola! 👋🍔 Bienvenido a *El Diablito Boneless & Burgers*', cfg);
-            await new Promise(r => setTimeout(r, 800));
-            await sendWhatsApp(phoneId, 'Veo que en nuestro sistema aún no estás registrado. Nos tomará 1 minuto ⏱️, solo compárteme tu *Nombre Completo* 🙋 y tu *Dirección* 📍, al completar tu registro recibes una 🍔 *BURGER GRATIS* 🎁', cfg);
-            parsed.push({ role: 'model', parts: [{ text: 'Hola! Bienvenido al Diablito. Veo que en nuestro sistema aún no estás registrado. Para comenzar debes registrarte y además recibes una burger gratis. Solo necesito tu nombre apellido y tu dirección.', ts: Date.now() }] });
-            await redis.set(historyKey, JSON.stringify(parsed));
-            await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
-            await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
-            return NextResponse.json({ success: true });
-        }
+    // ── 🟢 CLIENTE REGISTRADO: SIEMPRE responde con menú determinístico ──
+    if (isRegistered && clientName) {
+        const welcomeMsg = `¡Hola *${clientName}*! 🍔 Qué gusto verte de vuelta. 😊\n\n¿En qué te ayudo hoy?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Revisar Puntos 🎁\n4️⃣ Editar datos 📝`;
+        await sendWhatsApp(phoneId, welcomeMsg, cfg);
+        parsed.push({ role: 'model', parts: [{ text: `¡Hola ${clientName}! Qué gusto verte de vuelta. ¿En qué te ayudo hoy? 1) Ver Menú 2) Pedido a Domicilio 3) Revisar Puntos 4) Editar datos`, ts: Date.now() }] });
+        if (parsed.length > 40) parsed = parsed.slice(-40);
+        await redis.set(historyKey, JSON.stringify(parsed));
+        await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
+        await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+        return NextResponse.json({ success: true });
     }
+
+    // ── 🔴 CLIENTE NO REGISTRADO: Primer contacto ──
+    if (parsed.length === 1) {
+        await sendWhatsApp(phoneId, '¡Hola! 👋🍔 Bienvenido a *El Diablito Boneless & Burgers*', cfg);
+        await new Promise(r => setTimeout(r, 800));
+        await sendWhatsApp(phoneId, 'Veo que en nuestro sistema aún no estás registrado. Nos tomará 1 minuto ⏱️, solo compárteme tu *Nombre Completo* 🙋 y tu *Dirección* 📍, al completar tu registro recibes una 🍔 *BURGER GRATIS* 🎁', cfg);
+        parsed.push({ role: 'model', parts: [{ text: 'Hola! Bienvenido al Diablito. Veo que en nuestro sistema aún no estás registrado. Nos tomará 1 minuto, solo compárteme tu Nombre Completo y tu Dirección, al completar tu registro recibes una BURGER GRATIS.', ts: Date.now() }] });
+        await redis.set(historyKey, JSON.stringify(parsed));
+        await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
+        await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+        return NextResponse.json({ success: true });
+    }
+
+    // ── 🔴 CLIENTE NO REGISTRADO: Seguimiento (IA para extraer nombre+dirección) ──
 
     try {
         const botPrompt = await redis.get('bot_prompt') || '';
