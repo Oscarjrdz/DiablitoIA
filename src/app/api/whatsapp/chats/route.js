@@ -14,7 +14,8 @@ export async function GET() {
       `chat_unread_${p}`,
       `client_store_${p}`,
       `human_read_${p}`,
-      `delivery_mode_${p}`
+      `delivery_mode_${p}`,
+      `delivery_bot_silence_${p}`
     ]);
 
     const [histResults, metaResults] = await Promise.all([
@@ -25,12 +26,13 @@ export async function GET() {
     const chats = phones.map((phone, i) => {
       try {
         const histData = histResults[i];
-        const base = i * 5;
+        const base = i * 6;
         const cachedName = metaResults[base] || null;
         const unreadRaw = metaResults[base + 1] || '0';
         const cachedStore = metaResults[base + 2] || '';
         const humanRead = metaResults[base + 3] || null;
         const deliveryMode = metaResults[base + 4] || null;
+        const botSilence = metaResults[base + 5] || null;
 
         const parsed = typeof histData === 'string' ? JSON.parse(histData) : (histData || []);
         const lastMsg = parsed.length > 0 ? parsed[parsed.length - 1] : null;
@@ -44,10 +46,11 @@ export async function GET() {
           msgCount: parsed.length,
           store: cachedStore || '',
           needsHuman: !humanRead && parsed.length > 0,
-          deliveryMode: !!deliveryMode
+          deliveryMode: !!deliveryMode,
+          botSilent: !!botSilence
         };
       } catch {
-        return { phone, name: phone.slice(-10), lastText: '', lastTs: 0, fromMe: false, unread: 0, msgCount: 0, store: '', needsHuman: false, deliveryMode: false };
+        return { phone, name: phone.slice(-10), lastText: '', lastTs: 0, fromMe: false, unread: 0, msgCount: 0, store: '', needsHuman: false, deliveryMode: false, botSilent: false };
       }
     });
 

@@ -116,6 +116,7 @@ export default function ChatPage() {
   const [editName, setEditName] = useState('');
   const [editingField, setEditingField] = useState(null); // 'name' | 'address' | 'store' | null
   const [savingField, setSavingField] = useState(false);
+  const [botSilent, setBotSilent] = useState(false);
 
   // New chat
   const [showNewChat, setShowNewChat] = useState(false);
@@ -210,6 +211,7 @@ export default function ChatPage() {
           lastTsRef.current = data.lastTs || 0;
         }
         setIsTyping(!!data.isTyping);
+        setBotSilent(!!data.botSilent);
       }
     } catch {}
   }, []);
@@ -643,6 +645,7 @@ export default function ChatPage() {
                     {chat.lastText || <em style={{ opacity: 0.4 }}>Sin mensajes</em>}
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                    {chat.botSilent && <span className={styles.botSilentBadge} title="Bot silenciado">🤖💤</span>}
                     {chat.needsHuman && <span className={styles.needsHumanBadge} title="Sin atención humana">●</span>}
                     {chat.unread > 0 && <span className={styles.badge}>{chat.unread > 99 ? '99+' : chat.unread}</span>}
                   </div>
@@ -703,6 +706,21 @@ export default function ChatPage() {
               </span>
             </div>
             <div className={styles.headerIcons}>
+              <button
+                className={`${styles.botToggle} ${botSilent ? styles.botToggleSilent : styles.botToggleActive}`}
+                title={botSilent ? 'Bot silenciado — clic para reactivar' : 'Bot activo — clic para silenciar'}
+                onClick={async () => {
+                  const newSilent = !botSilent;
+                  setBotSilent(newSilent);
+                  await fetch('/api/whatsapp/bot-silence', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: activeChat.phone, silent: newSilent })
+                  });
+                }}
+              >
+                🤖 {botSilent ? 'Silenciado' : 'Activo'}
+              </button>
               <Search size={20} />
               <MoreVertical size={20} />
             </div>
