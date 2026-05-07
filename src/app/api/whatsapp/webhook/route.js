@@ -1056,7 +1056,7 @@ export async function POST(req) {
         }
         // ── Opción 1: Ver Menú → preguntar confirmación ──
         else if (textMsg === '1' || /\bmen[uú]\b/i.test(userText) || /\bver men/i.test(userText) || /\bcarta\b/i.test(userText)) {
-            botReply = `📋 ¿Quieres que te mande el *Menú*? 🍔\n\n👉 Responde *Sí* o *No*`;
+            botReply = `📋 ¿Quieres que te mande el *Menú*?\n\n👉 Responde *Sí* o *No*`;
             await redis.setex(`bot_state_${cleanPhone}`, 300, 'awaiting_menu_confirm');
         }
         // ── Default: Saludo + menú de opciones ──
