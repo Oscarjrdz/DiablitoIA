@@ -1022,7 +1022,7 @@ export async function POST(req) {
 
     // ── 🟢 CLIENTE REGISTRADO: Respuestas determinísticas con estados ──
     if (isRegistered && clientName) {
-        const menuMsg = `¿En qué te puedo ayudar? 😊\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Revisar Puntos 🎁\n4️⃣ Editar datos 📝`;
+        const menuMsg = `¿En qué te puedo ayudar? 😊\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
         const userText = bodyStr.trim().toLowerCase();
         const botState = await redis.get(`bot_state_${cleanPhone}`);
         let botReply = '';
@@ -1034,11 +1034,11 @@ export async function POST(req) {
             const isNo = /^(no|nel|nop|nah|2)$/i.test(userText);
 
             if (isNo) {
-                botReply = `Ok 👍 Entonces dime, ¿en qué te puedo ayudar?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Revisar Puntos 🎁\n4️⃣ Editar datos 📝`;
+                botReply = `Ok 👍 Entonces dime, ¿en qué te puedo ayudar?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
             } else {
                 // Sí o cualquier otra cosa → enviar imagen del menú
                 const menuImageUrl = 'https://global-sales-prediction.vercel.app/menu-bot.jpg';
-                const menuCaption = '🍔🌶️ ¡Aquí tienes nuestro menú *El Diablito*! 😈\n\n¿Se te antoja algo? Escribe *2* para hacer un pedido a domicilio 🛵';
+                const menuCaption = '🍔🌶️ ¡Aquí tienes nuestro menú *El Diablito*! 😈\n\n¿Se te antoja algo?\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃';
                 try {
                     await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/messages/image`, {
                         method: 'POST',
@@ -1066,9 +1066,16 @@ export async function POST(req) {
             await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1');
             console.log(`[Bot] Delivery mode activado para ${cleanPhone} - opción 2 explícita`);
         }
-        // ── Default: IA clasifica si es intención de domicilio o no ──
+        // ── Opción 3 explícita: Pedir para Pasar ──
+        else if (textMsg === '3') {
+            botReply = `🏃 Muy bien *${clientName}*, ¿entonces quieres pedir para pasar a recoger verdad? 🍔🔥`;
+            await redis.set(`delivery_mode_${cleanPhone}`, '1');
+            await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1');
+            console.log(`[Bot] Pickup mode activado para ${cleanPhone} - opción 3 explícita`);
+        }
+        // ── Default: IA clasifica intención (domicilio / pasar a recoger / ninguno) ──
         else {
-            let isDeliveryIntent = false;
+            let orderType = 'none'; // none, delivery, pickup
             try {
                 const aiToken = cfg.aiToken;
                 if (aiToken) {
@@ -1076,23 +1083,29 @@ export async function POST(req) {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            contents: [{ role: 'user', parts: [{ text: `Eres un clasificador. El cliente de una hamburguesería escribió este mensaje: "${bodyStr}"\n\n¿El cliente quiere hacer un PEDIDO A DOMICILIO o ORDENAR COMIDA? Responde SOLO con "SI" o "NO". Nada más.` }] }],
+                            contents: [{ role: 'user', parts: [{ text: `Eres un clasificador de una hamburguesería. El cliente escribió: "${bodyStr}"\n\nClasifica la intención del cliente:\n- Si quiere PEDIR A DOMICILIO (que le lleven comida a su casa), responde: DOMICILIO\n- Si quiere PEDIR PARA PASAR A RECOGER (pickup, pasar por su comida), responde: PASAR\n- Si quiere ORDENAR COMIDA pero no especifica cómo, responde: DOMICILIO\n- Si NO quiere ordenar comida, responde: NINGUNO\n\nResponde SOLO con una palabra: DOMICILIO, PASAR o NINGUNO.` }] }],
                             generationConfig: { maxOutputTokens: 5, temperature: 0.1 }
                         })
                     });
                     if (classifyRes.ok) {
                         const classifyData = await classifyRes.json();
                         const answer = (classifyData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim().toUpperCase();
-                        isDeliveryIntent = answer.includes('SI') || answer.includes('SÍ');
+                        if (answer.includes('DOMICILIO')) orderType = 'delivery';
+                        else if (answer.includes('PASAR')) orderType = 'pickup';
                     }
                 }
             } catch(e) { console.error('[Bot] Error clasificando intención:', e); }
 
-            if (isDeliveryIntent) {
+            if (orderType === 'delivery') {
                 botReply = `🛵 Muy bien *${clientName}*, ¿entonces quieres pedir a domicilio verdad? 🍔🔥`;
                 await redis.set(`delivery_mode_${cleanPhone}`, '1');
                 await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1');
-                console.log(`[Bot] Delivery mode activado para ${cleanPhone} - IA detectó intención de pedido`);
+                console.log(`[Bot] Delivery mode activado para ${cleanPhone} - IA detectó domicilio`);
+            } else if (orderType === 'pickup') {
+                botReply = `🏃 Muy bien *${clientName}*, ¿entonces quieres pedir para pasar a recoger verdad? 🍔🔥`;
+                await redis.set(`delivery_mode_${cleanPhone}`, '1');
+                await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1');
+                console.log(`[Bot] Pickup mode activado para ${cleanPhone} - IA detectó pasar a recoger`);
             } else {
                 botReply = `¡Hola *${clientName}*! 🍔 Qué gusto verte de vuelta. 😊\n\n${menuMsg}`;
             }
@@ -1180,8 +1193,7 @@ Si sí te dieron ciudad: [REGISTRO_OK:Oscar R|Cirros 102 Col Las Nubes|Santa Cat
 Cuando confirmes el registro del cliente, SIEMPRE presenta las opciones disponibles como lista numerada con la siguiente estructura EXACTA:
 1️⃣ Ver Menú 📋
 2️⃣ Pedido a Domicilio 🛵
-3️⃣ Revisar Puntos 🎁
-4️⃣ Editar datos 📝
+3️⃣ Pedir para Pasar 🏃
 
 Ejemplo completo de respuesta tras registro:
 "¡Perfecto, *Oscar*! 🎉
@@ -1191,9 +1203,8 @@ Ejemplo completo de respuesta tras registro:
 ¿En qué te ayudo hoy?
 1️⃣ Ver Menú 📋
 2️⃣ Pedido a Domicilio 🛵
-3️⃣ Revisar Puntos 🎁
-4️⃣ Editar datos 📝"
-NUNCA omitas las 4 opciones y SIEMPRE deben estar en este orden.`;
+3️⃣ Pedir para Pasar 🏃"
+NUNCA omitas las 3 opciones y SIEMPRE deben estar en este orden.`;
         }
 
         // ── 📦 INYECTAR CATÁLOGO DE PRODUCTOS AL CONTEXTO DEL BOT ──
@@ -1247,7 +1258,7 @@ NUNCA omitas las 4 opciones y SIEMPRE deben estar en este orden.`;
             if (regMatch) {
                 // ── ✅ REGISTRO DETECTADO: Mensaje determinístico de confirmación ──
                 const clientData = { name: regMatch[1].trim(), address: regMatch[2].trim(), city: regMatch[3].trim() };
-                const confirmMsg = `¡Perfecto *${clientData.name}*! 🎉🔥\n\n¡Ya estás registrado! 🚀 Tu 🍔 *BURGER GRATIS* de bienvenida te espera.\n\n¿En qué te ayudo hoy?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Revisar Puntos 🎁\n4️⃣ Editar datos 📝`;
+                const confirmMsg = `¡Perfecto *${clientData.name}*! 🎉🔥\n\n¡Ya estás registrado! 🚀 Tu 🍔 *BURGER GRATIS* de bienvenida te espera.\n\n¿En qué te ayudo hoy?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
                 
                 parsed.push({ role: 'model', parts: [{ text: confirmMsg, ts: Date.now() }] });
                 await redis.set(historyKey, JSON.stringify(parsed));
