@@ -1184,27 +1184,24 @@ Si el cliente te pregunta cualquier otra cosa, te dice piropos, muestra enojo o 
 # REGLA DE REGISTRO CRÍTICA:
 Para registrarlo, necesitas que te diga su Nombre y su Dirección.
 LO MÍNIMO que necesitas de dirección es: calle, número y colonia. Si el cliente te da más datos (municipio, ciudad, código postal), extráelos también, pero NO insistas en pedirlos si ya te dio calle, número y colonia.
-Solo cuando te haya dado su nombre y dirección (mínimo calle, número y colonia), confírmale el registro y AÑADE AL FINAL de tu respuesta exactamente esta línea invisible:
-[REGISTRO_OK:nombre|dirección|ciudad]
-Si no te dieron ciudad/municipio, pon vacío el campo ciudad. Ejemplo: [REGISTRO_OK:Oscar R|Cirros 102 Col Las Nubes|]
-Si sí te dieron ciudad: [REGISTRO_OK:Oscar R|Cirros 102 Col Las Nubes|Santa Catarina]
+
+SIEMPRE al final de tu respuesta agrega UNO de estos tags según lo que hayas detectado en toda la conversación:
+- Si tiene NOMBRE Y DIRECCIÓN: [REGISTRO_OK:nombre|dirección|ciudad]
+- Si SOLO tiene NOMBRE (sin dirección): [SOLO_NOMBRE:nombre]
+- Si SOLO tiene DIRECCIÓN (sin nombre): [SOLO_DIRECCION:dirección]
+- Si NO tiene NADA: [NADA]
+
+Ejemplos:
+- Cliente dijo "Me llamo Oscar Rodriguez" → tu respuesta + [SOLO_NOMBRE:Oscar Rodriguez]
+- Cliente dijo "Vivo en Cirros 102 Col Las Nubes" → tu respuesta + [SOLO_DIRECCION:Cirros 102 Col Las Nubes]
+- Cliente dijo "Oscar Rodriguez, Cirros 102 Col Las Nubes" → tu respuesta + [REGISTRO_OK:Oscar Rodriguez|Cirros 102 Col Las Nubes|]
+- Cliente dijo algo random sin datos → tu respuesta + [NADA]
+
+IMPORTANTE: Revisa TODA la conversación previa. Si en un mensaje anterior dio su nombre y ahora da su dirección, ya tienes ambos datos: usa [REGISTRO_OK].
 
 # FORMATO OBLIGATORIO AL CONFIRMAR REGISTRO:
-Cuando confirmes el registro del cliente, SIEMPRE presenta las opciones disponibles como lista numerada con la siguiente estructura EXACTA:
-1️⃣ Ver Menú 📋
-2️⃣ Pedido a Domicilio 🛵
-3️⃣ Pedir para Pasar 🏃
-
-Ejemplo completo de respuesta tras registro:
-"¡Perfecto, *Oscar*! 🎉
-
-¡Ya estás registrado! 🚀 Tu *🍔 BURGER GRATIS* de bienvenida te espera.
-
-¿En qué te ayudo hoy?
-1️⃣ Ver Menú 📋
-2️⃣ Pedido a Domicilio 🛵
-3️⃣ Pedir para Pasar 🏃"
-NUNCA omitas las 3 opciones y SIEMPRE deben estar en este orden.`;
+Cuando confirmes el registro, responde cualquier cosa y agrega el tag [REGISTRO_OK:nombre|dirección|ciudad].
+NUNCA omitas el tag.`;
         }
 
         // ── 📦 INYECTAR CATÁLOGO DE PRODUCTOS AL CONTEXTO DEL BOT ──
@@ -1353,31 +1350,45 @@ NUNCA omitas las 3 opciones y SIEMPRE deben estar en este orden.`;
                 } catch(regErr) { console.error('[Bot] Error en auto-registro:', regErr); }
 
             } else {
-                // ── ❌ NO REGISTRO: Ignorar respuesta de IA, enviar variante determinística ──
-                const insistVariants = [
-                    '😊 Para poder ayudarte primero necesito registrarte. Solo compárteme tu *Nombre Completo* 🙋 y tu *Dirección* 📍 y recibes tu 🍔 *BURGER GRATIS* 🎁',
-                    '🍔 ¡Me encantaría ayudarte! Pero primero necesito tu *Nombre Completo* y *Dirección* para registrarte. ¡Además recibes una *BURGER GRATIS*! 🎁',
-                    '👋 ¡Estoy aquí para ti! Solo necesito tu *Nombre* 🙋 y *Dirección* 📍 para darte de alta y enviarte tu 🍔 *BURGER GRATIS*.',
-                    '🔥 ¡No te pierdas tu *BURGER GRATIS*! Solo escríbeme tu *Nombre Completo* y *Dirección* y listo. 🎁',
-                    '😋 ¡Tu *BURGER GRATIS* te está esperando! Solo falta que me compartas tu *Nombre* y *Dirección* para completar tu registro.',
-                    '🎉 ¡Regístrate y llévate una 🍔 *BURGER GRATIS*! Escríbeme tu *Nombre Completo* 🙋 y tu *Dirección* 📍.',
-                    '✨ ¡Es súper rápido! Compárteme tu *Nombre* y *Dirección* y te damos de alta con tu 🍔 *BURGER GRATIS* incluida. 🎁',
-                    '🙌 Solo necesito dos cositas: tu *Nombre Completo* y tu *Dirección*. ¡Y te llevas una 🍔 *BURGER GRATIS* de regalo!',
-                    '💪 ¡Vamos! Escríbeme tu *Nombre* 🙋 y *Dirección* 📍 para registrarte. ¡Tu 🍔 *BURGER GRATIS* te espera! 🎁',
-                    '🌶️ ¡No dejes pasar tu *BURGER GRATIS*! Solo compárteme tu *Nombre Completo* y *Dirección* para activar tu registro. 🍔',
-                    '😄 Para continuar necesito registrarte. Escríbeme tu *Nombre Completo* y *Dirección* (calle, #, colonia). ¡Recibes una 🍔 *BURGER GRATIS*! 🎁',
-                    '🚀 ¡Regístrate en 1 minuto! Solo dime tu *Nombre* 🙋 y *Dirección* 📍. Tu 🍔 *BURGER GRATIS* está lista.',
-                    '🎁 ¡Tienes una *BURGER GRATIS* esperándote! Solo falta tu *Nombre Completo* y tu *Dirección* para completar el registro.',
-                    '🍟 ¡Es facilísimo! Mándame tu *Nombre* y *Dirección* y te registro al instante. ¡Además te llevas una 🍔 *BURGER GRATIS*!',
-                    '😊 ¡Con gusto te ayudo! Pero primero registrémonos. Compárteme tu *Nombre Completo* 🙋 y *Dirección* 📍. ¡BURGER GRATIS incluida! 🍔🎁',
-                    '🔥 ¡Dale! Solo necesito tu *Nombre* y *Dirección* para darte de alta. ¡Y de paso te regalamos una 🍔 *BURGER GRATIS*!',
-                    '👉 Para avanzar necesito tu registro. Mándame tu *Nombre Completo* y tu *Dirección* (calle, #, colonia). 🍔 *BURGER GRATIS* garantizada. 🎁',
-                    '🤩 ¡Tu *BURGER GRATIS* está a un mensaje de distancia! Solo escribe tu *Nombre* 🙋 y *Dirección* 📍.',
-                    '🍔 ¡Registrarte es rapidísimo! Solo mándame tu *Nombre Completo* y tu *Dirección*. ¡BURGER GRATIS asegurada! 🎁',
-                    '😎 ¡Antes de todo, hay que registrarte! Compárteme tu *Nombre* y *Dirección* y recibes una 🍔 *BURGER GRATIS* de bienvenida. 🌶️'
-                ];
-                const randomIdx = Math.floor(Math.random() * insistVariants.length);
-                const insistMsg = insistVariants[randomIdx];
+                // ── 🔍 Detectar datos parciales ──
+                const nameMatch = reply.match(/\[SOLO_NOMBRE:([^\]]+)\]/);
+                const addrMatch = reply.match(/\[SOLO_DIRECCION:([^\]]+)\]/);
+                let insistMsg = '';
+
+                if (nameMatch) {
+                    // Tiene nombre, falta dirección
+                    const detectedName = nameMatch[1].trim();
+                    const needAddrVariants = [
+                        `¡Gracias *${detectedName}*! 😊 Solo me falta tu *Dirección* 📍 (calle, #, colonia) para completar tu registro y enviarte tu 🍔 *BURGER GRATIS* 🎁`,
+                        `¡Perfecto *${detectedName}*! 🙌 Ya tengo tu nombre. Ahora compárteme tu *Dirección* 📍 (calle, #, colonia) y listo, ¡recibes tu 🍔 *BURGER GRATIS*! 🎁`,
+                        `¡Excelente *${detectedName}*! 🔥 Ya casi terminamos. Solo escríbeme tu *Dirección* 📍 para darte de alta y mandarte tu 🍔 *BURGER GRATIS*. 🎁`,
+                        `👋 *${detectedName}*, ¡ya casi! Solo falta tu *Dirección* 📍 (calle, #, colonia) para registrarte. ¡Tu 🍔 *BURGER GRATIS* te espera! 🎁`,
+                        `✨ *${detectedName}*, estamos a un paso. Mándame tu *Dirección* 📍 y te registro con tu 🍔 *BURGER GRATIS* incluida. 🎁`
+                    ];
+                    insistMsg = needAddrVariants[Math.floor(Math.random() * needAddrVariants.length)];
+                } else if (addrMatch) {
+                    // Tiene dirección, falta nombre
+                    const needNameVariants = [
+                        '😊 ¡Ya tengo tu dirección! Solo me falta tu *Nombre Completo* 🙋 para completar tu registro y enviarte tu 🍔 *BURGER GRATIS* 🎁',
+                        '🙌 ¡Perfecto, ya tengo tu dirección! Ahora compárteme tu *Nombre Completo* 🙋 y listo, ¡recibes tu 🍔 *BURGER GRATIS*! 🎁',
+                        '🔥 ¡Ya casi! Solo escríbeme tu *Nombre Completo* 🙋 para darte de alta. ¡Tu 🍔 *BURGER GRATIS* te espera! 🎁',
+                        '✨ ¡Estamos a un paso! Mándame tu *Nombre Completo* 🙋 y te registro con tu 🍔 *BURGER GRATIS* incluida. 🎁',
+                        '👋 ¡Ya tengo tu dirección guardada! Solo falta tu *Nombre Completo* 🙋 para completar el registro. 🍔 *BURGER GRATIS* garantizada. 🎁'
+                    ];
+                    insistMsg = needNameVariants[Math.floor(Math.random() * needNameVariants.length)];
+                } else {
+                    // No tiene nada
+                    const needBothVariants = [
+                        '😊 Para poder ayudarte primero necesito registrarte. Solo compárteme tu *Nombre Completo* 🙋 y tu *Dirección* 📍 y recibes tu 🍔 *BURGER GRATIS* 🎁',
+                        '🍔 ¡Me encantaría ayudarte! Pero primero necesito tu *Nombre Completo* y *Dirección* para registrarte. ¡Además recibes una *BURGER GRATIS*! 🎁',
+                        '🔥 ¡No te pierdas tu *BURGER GRATIS*! Solo escríbeme tu *Nombre Completo* y *Dirección* y listo. 🎁',
+                        '🙌 Solo necesito dos cositas: tu *Nombre Completo* y tu *Dirección*. ¡Y te llevas una 🍔 *BURGER GRATIS* de regalo!',
+                        '🚀 ¡Regístrate en 1 minuto! Solo dime tu *Nombre* 🙋 y *Dirección* 📍. Tu 🍔 *BURGER GRATIS* está lista.',
+                        '✨ ¡Es súper rápido! Compárteme tu *Nombre* y *Dirección* y te damos de alta con tu 🍔 *BURGER GRATIS* incluida. 🎁',
+                        '😎 ¡Antes de todo, hay que registrarte! Compárteme tu *Nombre* y *Dirección* y recibes una 🍔 *BURGER GRATIS* de bienvenida. 🌶️'
+                    ];
+                    insistMsg = needBothVariants[Math.floor(Math.random() * needBothVariants.length)];
+                }
 
                 parsed.push({ role: 'model', parts: [{ text: insistMsg, ts: Date.now() }] });
                 await redis.set(historyKey, JSON.stringify(parsed));
