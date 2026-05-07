@@ -1090,29 +1090,31 @@ Tu objetivo principal es invitarlo a registrarse cordialmente para que reciba el
 Si el cliente te pregunta cualquier otra cosa, te dice piropos, muestra enojo o saca cualquier otro tema, NO VAMOS A AVANZAR. Debes "driblar" ese mensaje, diciéndole algo como "Sí, te entiendo" o "Muchas gracias", pero SIEMPRE insistiendo al final que si no se registra (dando su nombre y dirección) no podemos avanzar con el pedido o proceso. NO respondas dudas de menú ni otras cosas hasta que se registre.
 
 # REGLA DE REGISTRO CRÍTICA:
-Para registrarlo, necesitas que te diga su Nombre y su Dirección (calle, número, colonia, etc).
-Solo cuando te haya dado su nombre y dirección, confírmale el registro y AÑADE AL FINAL de tu respuesta exactamente esta línea invisible:
+Para registrarlo, necesitas que te diga su Nombre y su Dirección.
+LO MÍNIMO que necesitas de dirección es: calle, número y colonia. Si el cliente te da más datos (municipio, ciudad, código postal), extráelos también, pero NO insistas en pedirlos si ya te dio calle, número y colonia.
+Solo cuando te haya dado su nombre y dirección (mínimo calle, número y colonia), confírmale el registro y AÑADE AL FINAL de tu respuesta exactamente esta línea invisible:
 [REGISTRO_OK:nombre|dirección|ciudad]
-Ejemplo: "¡Perfecto, ya te he registrado! [REGISTRO_OK:Oscar R|Cirros 102 Col Las Nubes|Santa Catarina]"
+Si no te dieron ciudad/municipio, pon vacío el campo ciudad. Ejemplo: [REGISTRO_OK:Oscar R|Cirros 102 Col Las Nubes|]
+Si sí te dieron ciudad: [REGISTRO_OK:Oscar R|Cirros 102 Col Las Nubes|Santa Catarina]
 
 # FORMATO OBLIGATORIO AL CONFIRMAR REGISTRO:
 Cuando confirmes el registro del cliente, SIEMPRE presenta las opciones disponibles como lista numerada con la siguiente estructura EXACTA:
-1️⃣ Hacer un Pedido a Domicilio 🛵
-2️⃣ Revisar Puntos 🎁
-3️⃣ Editar datos 📝
+1️⃣ Ver Menú 📋
+2️⃣ Pedido a Domicilio 🛵
+3️⃣ Revisar Puntos 🎁
+4️⃣ Editar datos 📝
 
 Ejemplo completo de respuesta tras registro:
 "¡Perfecto, *Oscar*! 🎉
 
 ¡Ya estás registrado! 🚀 Tu *🍔 BURGER GRATIS* de bienvenida te espera.
 
-Aquí tienes tus opciones:
-1️⃣ Hacer un Pedido a Domicilio 🛵
-2️⃣ Revisar Puntos 🎁
-3️⃣ Editar datos 📝
-
-¡Cualquier cosa, aquí estoy! 🌶️"
-NUNCA omitas la opción de Pedido a Domicilio y SIEMPRE debe ser la primera de la lista.`;
+¿En qué te ayudo hoy?
+1️⃣ Ver Menú 📋
+2️⃣ Pedido a Domicilio 🛵
+3️⃣ Revisar Puntos 🎁
+4️⃣ Editar datos 📝"
+NUNCA omitas las 4 opciones y SIEMPRE deben estar en este orden.`;
         }
 
         // ── 📦 INYECTAR CATÁLOGO DE PRODUCTOS AL CONTEXTO DEL BOT ──
@@ -1160,187 +1162,138 @@ NUNCA omitas la opción de Pedido a Domicilio y SIEMPRE debe ser la primera de l
             const geminiData = await geminiRes.json();
             const reply = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-            if (reply) {
-                // Limpiar tags antes de enviar al usuario
-                let cleanReply = reply.replace(/\[REGISTRO_OK:[^\]]*\]/g, '').replace(/\[DOMICILIO_OK\]/g, '').trim();
-                parsed.push({ role: 'model', parts: [{ text: cleanReply, ts: Date.now() }] });
+            // ── 📋 Detectar si la IA encontró nombre+dirección ──
+            const regMatch = reply.match(/\[REGISTRO_OK:([^|]+)\|([^|]+)\|([^\]]*)\]/);
+
+            if (regMatch) {
+                // ── ✅ REGISTRO DETECTADO: Mensaje determinístico de confirmación ──
+                const clientData = { name: regMatch[1].trim(), address: regMatch[2].trim(), city: regMatch[3].trim() };
+                const confirmMsg = `¡Perfecto *${clientData.name}*! 🎉🔥\n\n¡Ya estás registrado! 🚀 Tu 🍔 *BURGER GRATIS* de bienvenida te espera.\n\n¿En qué te ayudo hoy?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Revisar Puntos 🎁\n4️⃣ Editar datos 📝`;
+                
+                parsed.push({ role: 'model', parts: [{ text: confirmMsg, ts: Date.now() }] });
                 await redis.set(historyKey, JSON.stringify(parsed));
                 await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
                 await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
-                await sendWhatsApp(phoneId, cleanReply, cfg);
+                await sendWhatsApp(phoneId, confirmMsg, cfg);
 
-                // ── 🛵 DELIVERY MODE: Detectar tag [DOMICILIO_OK] → silenciar bot 1 hora, aro hasta que humano intervenga ──
-                if (reply.includes('[DOMICILIO_OK]')) {
-                    await redis.set(`delivery_mode_${cleanPhone}`, '1');          // aro naranja: persiste hasta intervención humana
-                    await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1'); // silencio del bot: 1 hora
-                    console.log(`[Bot] Delivery mode activado para ${cleanPhone} (aro permanente, bot silenciado 1h)`);
-                }
-
-                // ── 📋 AUTO-REGISTRO / ACTUALIZACIÓN: Detectar tag [REGISTRO_OK] en la respuesta del bot ──
-                const alreadyRegistered = await redis.get(`client_registered_${cleanPhone}`);
-                const regMatch = reply.match(/\[REGISTRO_OK:([^|]+)\|([^|]+)\|([^\]]*)\]/);
-                if (regMatch) {
-                    try {
-                        const clientData = { name: regMatch[1].trim(), address: regMatch[2].trim(), city: regMatch[3].trim() };
-                        if (clientData.name) {
-                            const loyverseToken = await redis.get('loyverse_token');
-                            if (loyverseToken) {
-                                // ── 🔍 Buscar cliente en Loyverse por teléfono ──
-                                let existingCustomerId = null;
-                                try {
-                                    const searchRes = await fetch('https://api.loyverse.com/v1.0/customers?limit=250', {
-                                        headers: { Authorization: `Bearer ${loyverseToken}` }
+                // ── Ejecutar registro en Loyverse ──
+                try {
+                    if (clientData.name) {
+                        const loyverseToken = await redis.get('loyverse_token');
+                        if (loyverseToken) {
+                            let existingCustomerId = null;
+                            try {
+                                const searchRes = await fetch('https://api.loyverse.com/v1.0/customers?limit=250', {
+                                    headers: { Authorization: `Bearer ${loyverseToken}` }
+                                });
+                                if (searchRes.ok) {
+                                    const searchData = await searchRes.json();
+                                    const match = (searchData.customers || []).find(c => {
+                                        if (!c.phone_number) return false;
+                                        return c.phone_number.replace(/\D/g, '').slice(-10) === clientPhone10;
                                     });
-                                    if (searchRes.ok) {
-                                        const searchData = await searchRes.json();
-                                        const match = (searchData.customers || []).find(c => {
-                                            if (!c.phone_number) return false;
-                                            return c.phone_number.replace(/\D/g, '').slice(-10) === clientPhone10;
-                                        });
-                                        if (match) existingCustomerId = match.id;
-                                    }
-                                } catch(srchErr) { console.error('[Bot] Error buscando cliente:', srchErr); }
+                                    if (match) existingCustomerId = match.id;
+                                }
+                            } catch(srchErr) { console.error('[Bot] Error buscando cliente:', srchErr); }
 
-                                if (alreadyRegistered && existingCustomerId) {
-                                    // ── ✏️ ACTUALIZACIÓN DE DATOS (cliente ya registrado, opción 3) ──
-                                    const updatePayload = {
-                                        id: existingCustomerId,
-                                        name: clientData.name,
-                                    };
-                                    if (clientData.address) updatePayload.address = clientData.address;
-                                    if (clientData.city) updatePayload.city = clientData.city;
-                                    try {
-                                        await fetch('https://api.loyverse.com/v1.0/customers', {
-                                            method: 'POST',
-                                            headers: { Authorization: `Bearer ${loyverseToken}`, 'Content-Type': 'application/json' },
-                                            body: JSON.stringify(updatePayload)
-                                        });
-                                    } catch(e) {}
-                                    // Actualizar cache de Redis con los nuevos datos
-                                    await redis.set(`client_name_${cleanPhone}`, clientData.name);
-                                    console.log(`[Bot] Cliente ACTUALIZADO vía opción 3: ${clientData.name} (${clientPhone10})`);
-                                } else if (existingCustomerId) {
-                                    // Ya existe en Loyverse pero no en nuestro cache: sincronizar
-                                    const updatePayload = {
-                                        id: existingCustomerId,
-                                        name: clientData.name,
-                                    };
-                                    if (clientData.address) updatePayload.address = clientData.address;
-                                    if (clientData.city) updatePayload.city = clientData.city;
-                                    try {
-                                        await fetch('https://api.loyverse.com/v1.0/customers', {
-                                            method: 'POST',
-                                            headers: { Authorization: `Bearer ${loyverseToken}`, 'Content-Type': 'application/json' },
-                                            body: JSON.stringify(updatePayload)
-                                        });
-                                    } catch(e) {}
+                            const alreadyRegistered = await redis.get(`client_registered_${cleanPhone}`);
+                            if (alreadyRegistered && existingCustomerId) {
+                                const updatePayload = { id: existingCustomerId, name: clientData.name };
+                                if (clientData.address) updatePayload.address = clientData.address;
+                                if (clientData.city) updatePayload.city = clientData.city;
+                                try { await fetch('https://api.loyverse.com/v1.0/customers', { method: 'POST', headers: { Authorization: `Bearer ${loyverseToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(updatePayload) }); } catch(e) {}
+                                await redis.set(`client_name_${cleanPhone}`, clientData.name);
+                            } else if (existingCustomerId) {
+                                const updatePayload = { id: existingCustomerId, name: clientData.name };
+                                if (clientData.address) updatePayload.address = clientData.address;
+                                if (clientData.city) updatePayload.city = clientData.city;
+                                try { await fetch('https://api.loyverse.com/v1.0/customers', { method: 'POST', headers: { Authorization: `Bearer ${loyverseToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(updatePayload) }); } catch(e) {}
+                                await redis.set(`client_registered_${cleanPhone}`, '1');
+                                await redis.set(`client_name_${cleanPhone}`, clientData.name);
+                            } else {
+                                const customerPayload = { name: clientData.name, phone_number: clientPhone10, address: clientData.address || '', city: clientData.city || '', note: 'Tienda: WhatsApp\nRegistrado via WhatsApp Bot' };
+                                const createRes = await fetch('https://api.loyverse.com/v1.0/customers', { method: 'POST', headers: { Authorization: `Bearer ${loyverseToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(customerPayload) });
+                                if (createRes.ok) {
                                     await redis.set(`client_registered_${cleanPhone}`, '1');
+                                    await redis.set(`client_store_${cleanPhone}`, 'WhatsApp');
                                     await redis.set(`client_name_${cleanPhone}`, clientData.name);
-                                    console.log(`[Bot] Cliente YA EXISTÍA en Loyverse, sincronizado: ${clientData.name} (${clientPhone10})`);
-                                } else {
-                                    // ── 🆕 REGISTRO NUEVO: No existe en Loyverse ──
-                                    const customerPayload = {
-                                        name: clientData.name,
-                                        phone_number: clientPhone10,
-                                        address: clientData.address || '',
-                                        city: clientData.city || '',
-                                        note: 'Tienda: WhatsApp\nRegistrado via WhatsApp Bot'
-                                    };
-                                    const createRes = await fetch('https://api.loyverse.com/v1.0/customers', {
-                                        method: 'POST',
-                                        headers: { Authorization: `Bearer ${loyverseToken}`, 'Content-Type': 'application/json' },
-                                        body: JSON.stringify(customerPayload)
-                                    });
-                                    if (createRes.ok) {
-                                        await redis.set(`client_registered_${cleanPhone}`, '1');
-                                        await redis.set(`client_store_${cleanPhone}`, 'WhatsApp');
-                                        await redis.set(`client_name_${cleanPhone}`, clientData.name);
-                                        console.log(`[Bot] Cliente NUEVO registrado en Loyverse: ${clientData.name} (${clientPhone10})`);
-                                        
-                                        // ── 🎟️ CUPÓN DE BIENVENIDA ──
-                                        try {
-                                            const existingPromo = await redis.get(`promo_pos_${cleanPhone}`);
-                                            if (!existingPromo) {
-                                                const promosInfo = await redis.get('promotions');
-                                                const promos = promosInfo ? (typeof promosInfo === 'string' ? JSON.parse(promosInfo) : promosInfo) : [];
-                                                const welcomePromo = promos.find(p => p.isWelcomePromo);
-                                                if (welcomePromo) {
-                                                    const mutexKey = `coupon_sending_${cleanPhone}`;
-                                                    const acquired = await redis.setnx(mutexKey, '1');
-                                                    if (acquired) {
-                                                        await redis.expire(mutexKey, 30);
-                                                        const folioW = generateFolio();
-                                                        const { text: promoTextRaw, validDate } = buildPromoText(welcomePromo.text, folioW, welcomePromo.validFrom, welcomePromo.validityDuration);
-                                                        const promoText = promoTextRaw.replace(/{nombre_de_cliente}/g, clientData.name || '');
-                                                        
-                                                        await redis.set(`promo_folio_${cleanPhone}`, folioW);
-                                                        await redis.set(`folio_owner_${folioW}`, cleanPhone);
-                                                        await redis.set(`folio_valid_date_${folioW}`, validDate);
-                                                        await redis.set(`folio_item_name_${folioW}`, welcomePromo.itemName || 'Burger Gratis');
-                                                        if (welcomePromo.id) {
-                                                            await redis.set(`folio_promo_id_${folioW}`, welcomePromo.id);
-                                                            await redis.incr(`promo_sent_count_${welcomePromo.id}`);
-                                                        }
-                                                        
-                                                        let endpoint = '/messages/chat';
-                                                        let wBody = { token: cfg.wappToken, to: cleanPhone + '@c.us', body: promoText };
-                                                        
-                                                        if (welcomePromo.image) {
-                                                            endpoint = '/messages/image';
-                                                            wBody = { token: cfg.wappToken, to: cleanPhone + '@c.us', image: `https://global-sales-prediction.vercel.app/api/promotions/image?id=${welcomePromo.id}&ts=${Date.now()}`, caption: promoText };
-                                                        }
-                                                        
-                                                        const gwRes = await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}${endpoint}`, {
-                                                            method: 'POST',
-                                                            headers: { 'Content-Type': 'application/json' },
-                                                            body: JSON.stringify(wBody)
-                                                        });
-                                                        
-                                                        if (gwRes.ok) {
-                                                            await redis.set(`promo_pos_${cleanPhone}`, 'naranja');
-                                                            console.log(`[Bot] Cupón de bienvenida enviado a ${cleanPhone}`);
-                                                            // Save coupon message to chat history for dashboard visibility
-                                                            const couponHistEntry = {
-                                                                role: 'model',
-                                                                parts: [{
-                                                                    text: promoText,
-                                                                    ts: Date.now(),
-                                                                    ...(welcomePromo.image ? {
-                                                                        attachmentType: 'image',
-                                                                        hasAttachment: true,
-                                                                        attachmentUrl: `https://global-sales-prediction.vercel.app/api/promotions/image?id=${welcomePromo.id}`
-                                                                    } : {})
-                                                                }]
-                                                            };
-                                                            parsed.push(couponHistEntry);
-                                                            await redis.set(historyKey, JSON.stringify(parsed));
-                                                            await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
-                                                            await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
-                                                        }
-                                                        await redis.del(mutexKey);
+                                    if (clientData.address) await redis.set(`client_address_${cleanPhone}`, clientData.address + (clientData.city ? ', ' + clientData.city : ''));
+
+                                    // ── 🎟️ CUPÓN DE BIENVENIDA ──
+                                    try {
+                                        const existingPromo = await redis.get(`promo_pos_${cleanPhone}`);
+                                        if (!existingPromo) {
+                                            const promosInfo = await redis.get('promotions');
+                                            const promos = promosInfo ? (typeof promosInfo === 'string' ? JSON.parse(promosInfo) : promosInfo) : [];
+                                            const welcomePromo = promos.find(p => p.isWelcomePromo);
+                                            if (welcomePromo) {
+                                                const mutexKey = `coupon_sending_${cleanPhone}`;
+                                                const acquired = await redis.setnx(mutexKey, '1');
+                                                if (acquired) {
+                                                    await redis.expire(mutexKey, 30);
+                                                    const folioW = generateFolio();
+                                                    const { text: promoTextRaw, validDate } = buildPromoText(welcomePromo.text, folioW, welcomePromo.validFrom, welcomePromo.validityDuration);
+                                                    const promoText = promoTextRaw.replace(/{nombre_de_cliente}/g, clientData.name || '');
+                                                    await redis.set(`promo_folio_${cleanPhone}`, folioW);
+                                                    await redis.set(`folio_owner_${folioW}`, cleanPhone);
+                                                    await redis.set(`folio_valid_date_${folioW}`, validDate);
+                                                    await redis.set(`folio_item_name_${folioW}`, welcomePromo.itemName || 'Burger Gratis');
+                                                    if (welcomePromo.id) { await redis.set(`folio_promo_id_${folioW}`, welcomePromo.id); await redis.incr(`promo_sent_count_${welcomePromo.id}`); }
+                                                    let endpoint = '/messages/chat';
+                                                    let wBody = { token: cfg.wappToken, to: cleanPhone + '@c.us', body: promoText };
+                                                    if (welcomePromo.image) { endpoint = '/messages/image'; wBody = { token: cfg.wappToken, to: cleanPhone + '@c.us', image: `https://global-sales-prediction.vercel.app/api/promotions/image?id=${welcomePromo.id}&ts=${Date.now()}`, caption: promoText }; }
+                                                    const gwRes = await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(wBody) });
+                                                    if (gwRes.ok) {
+                                                        await redis.set(`promo_pos_${cleanPhone}`, 'naranja');
+                                                        const couponHistEntry = { role: 'model', parts: [{ text: promoText, ts: Date.now(), ...(welcomePromo.image ? { attachmentType: 'image', hasAttachment: true, attachmentUrl: `https://global-sales-prediction.vercel.app/api/promotions/image?id=${welcomePromo.id}` } : {}) }] };
+                                                        parsed.push(couponHistEntry);
+                                                        await redis.set(historyKey, JSON.stringify(parsed));
+                                                        await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
+                                                        await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
                                                     }
+                                                    await redis.del(mutexKey);
                                                 }
                                             }
-                                        } catch(cupErr) { console.error('[Bot] Error enviando cupón bienvenida:', cupErr); }
-                                    } else {
-                                        console.error('[Bot] Error creando cliente en Loyverse:', await createRes.text());
-                                    }
-                                }
+                                        }
+                                    } catch(cupErr) { console.error('[Bot] Error enviando cupón bienvenida:', cupErr); }
+                                } else { console.error('[Bot] Error creando cliente en Loyverse:', await createRes.text()); }
                             }
                         }
-                    } catch(regErr) { console.error('[Bot] Error en auto-registro/actualización:', regErr); }
-                }
-                
-                // Limpiar el tag del mensaje antes de que se guarde en el historial visual
-                if (regMatch) {
-                    const cleanReply = reply.replace(/\[REGISTRO_OK:[^\]]+\]/, '').trim();
-                    // Actualizar el último entry del historial sin el tag
-                    const prevEntry = parsed[parsed.length - 1];
-                    parsed[parsed.length - 1] = { role: 'model', parts: [{ text: cleanReply, ts: prevEntry?.parts?.[0]?.ts || Date.now() }] };
-                    await redis.set(historyKey, JSON.stringify(parsed));
-                    await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
-                    await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
-                }
+                    }
+                } catch(regErr) { console.error('[Bot] Error en auto-registro:', regErr); }
+
+            } else {
+                // ── ❌ NO REGISTRO: Ignorar respuesta de IA, enviar variante determinística ──
+                const insistVariants = [
+                    '😊 Para poder ayudarte primero necesito registrarte. Solo compárteme tu *Nombre Completo* 🙋 y tu *Dirección* 📍 y recibes tu 🍔 *BURGER GRATIS* 🎁',
+                    '🍔 ¡Me encantaría ayudarte! Pero primero necesito tu *Nombre Completo* y *Dirección* para registrarte. ¡Además recibes una *BURGER GRATIS*! 🎁',
+                    '👋 ¡Estoy aquí para ti! Solo necesito tu *Nombre* 🙋 y *Dirección* 📍 para darte de alta y enviarte tu 🍔 *BURGER GRATIS*.',
+                    '🔥 ¡No te pierdas tu *BURGER GRATIS*! Solo escríbeme tu *Nombre Completo* y *Dirección* y listo. 🎁',
+                    '😋 ¡Tu *BURGER GRATIS* te está esperando! Solo falta que me compartas tu *Nombre* y *Dirección* para completar tu registro.',
+                    '🎉 ¡Regístrate y llévate una 🍔 *BURGER GRATIS*! Escríbeme tu *Nombre Completo* 🙋 y tu *Dirección* 📍.',
+                    '✨ ¡Es súper rápido! Compárteme tu *Nombre* y *Dirección* y te damos de alta con tu 🍔 *BURGER GRATIS* incluida. 🎁',
+                    '🙌 Solo necesito dos cositas: tu *Nombre Completo* y tu *Dirección*. ¡Y te llevas una 🍔 *BURGER GRATIS* de regalo!',
+                    '💪 ¡Vamos! Escríbeme tu *Nombre* 🙋 y *Dirección* 📍 para registrarte. ¡Tu 🍔 *BURGER GRATIS* te espera! 🎁',
+                    '🌶️ ¡No dejes pasar tu *BURGER GRATIS*! Solo compárteme tu *Nombre Completo* y *Dirección* para activar tu registro. 🍔',
+                    '😄 Para continuar necesito registrarte. Escríbeme tu *Nombre Completo* y *Dirección* (calle, #, colonia). ¡Recibes una 🍔 *BURGER GRATIS*! 🎁',
+                    '🚀 ¡Regístrate en 1 minuto! Solo dime tu *Nombre* 🙋 y *Dirección* 📍. Tu 🍔 *BURGER GRATIS* está lista.',
+                    '🎁 ¡Tienes una *BURGER GRATIS* esperándote! Solo falta tu *Nombre Completo* y tu *Dirección* para completar el registro.',
+                    '🍟 ¡Es facilísimo! Mándame tu *Nombre* y *Dirección* y te registro al instante. ¡Además te llevas una 🍔 *BURGER GRATIS*!',
+                    '😊 ¡Con gusto te ayudo! Pero primero registrémonos. Compárteme tu *Nombre Completo* 🙋 y *Dirección* 📍. ¡BURGER GRATIS incluida! 🍔🎁',
+                    '🔥 ¡Dale! Solo necesito tu *Nombre* y *Dirección* para darte de alta. ¡Y de paso te regalamos una 🍔 *BURGER GRATIS*!',
+                    '👉 Para avanzar necesito tu registro. Mándame tu *Nombre Completo* y tu *Dirección* (calle, #, colonia). 🍔 *BURGER GRATIS* garantizada. 🎁',
+                    '🤩 ¡Tu *BURGER GRATIS* está a un mensaje de distancia! Solo escribe tu *Nombre* 🙋 y *Dirección* 📍.',
+                    '🍔 ¡Registrarte es rapidísimo! Solo mándame tu *Nombre Completo* y tu *Dirección*. ¡BURGER GRATIS asegurada! 🎁',
+                    '😎 ¡Antes de todo, hay que registrarte! Compárteme tu *Nombre* y *Dirección* y recibes una 🍔 *BURGER GRATIS* de bienvenida. 🌶️'
+                ];
+                const randomIdx = Math.floor(Math.random() * insistVariants.length);
+                const insistMsg = insistVariants[randomIdx];
+
+                parsed.push({ role: 'model', parts: [{ text: insistMsg, ts: Date.now() }] });
+                await redis.set(historyKey, JSON.stringify(parsed));
+                await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
+                await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+                await sendWhatsApp(phoneId, insistMsg, cfg);
             }
         } else {
             console.error('Gemini API Error:', await geminiRes.text());
