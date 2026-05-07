@@ -206,21 +206,8 @@ export async function POST(req) {
           console.log('Cliente:', pushName, fromJid);
           console.log('Productos:', itemCount);
           console.log('Total: $' + total, currency);
-          
-          // 1. Notificar al dueño
-          let msgDueno = `🛒 *NUEVO PEDIDO RECIBIDO*\n\n`;
-          msgDueno += `👤 *Cliente:* ${pushName} (${fromJid.replace('@c.us', '')})\n`;
-          if (productLines) {
-              msgDueno += `📋 *Detalle:*\n${productLines}`;
-          } else {
-              msgDueno += `📦 *Productos:* ${itemCount}\n`;
-          }
-          msgDueno += `💰 *Total:* $${total} ${currency}\n`;
-          if (nota) msgDueno += `📝 *Nota:* ${nota}\n`;
-          
-          await sendWhatsApp('5218116038195@c.us', msgDueno, cfg);
-          
-          // 2. Responder al cliente
+
+          // Responder al cliente
           let msgCliente = `🍔 ¡Hola ${pushName}! Hemos recibido tu pedido:\n\n`;
           if (productLinesBubble) {
               msgCliente += `${productLinesBubble}\n`;
@@ -962,8 +949,8 @@ export async function POST(req) {
     // Reset human-read flag so the chat shows as "needs attention" again
     await redis.del(`human_read_${cleanPhone}`);
 
-    // ── 🛵 DELIVERY MODE: Si está activo, guardar mensaje pero NO responder ──
-    const deliveryActive = await redis.get(`delivery_mode_${cleanPhone}`);
+    // ── 🛵 DELIVERY MODE: Si el silencio está activo, guardar mensaje pero NO responder ──
+    const deliveryActive = await redis.get(`delivery_bot_silence_${cleanPhone}`);
     if (deliveryActive) {
         if (parsed.length > 40) parsed = parsed.slice(-40);
         await redis.set(historyKey, JSON.stringify(parsed));
@@ -1037,9 +1024,9 @@ export async function POST(req) {
     if (parsed.length === 1) {
         if (isRegistered && clientName) {
             // Cliente ya registrado: saludar por nombre
-            const welcomeMsg = `¡Hola *${clientName}*! Qué gusto verte de vuelta. 😊\n\n¿En qué te ayudo?\n\n1️⃣ Pedido a Domicilio\n2️⃣ Revisar Puntos\n3️⃣ Editar datos`;
+            const welcomeMsg = `¡Hola *${clientName}*! 🍔 Qué gusto verte de vuelta. 😊\n\n¿En qué te ayudo hoy?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Revisar Puntos 🎁\n4️⃣ Editar datos 📝`;
             await sendWhatsApp(phoneId, welcomeMsg, cfg);
-            parsed.push({ role: 'model', parts: [{ text: `¡Hola ${clientName}! Qué gusto verte de vuelta. ¿En qué te ayudo? 1) Pedido a Domicilio 2) Revisar Puntos 3) Editar datos`, ts: Date.now() }] });
+            parsed.push({ role: 'model', parts: [{ text: `¡Hola ${clientName}! Qué gusto verte de vuelta. ¿En qué te ayudo hoy? 1) Ver Menú 2) Pedido a Domicilio 3) Revisar Puntos 4) Editar datos`, ts: Date.now() }] });
             await redis.set(historyKey, JSON.stringify(parsed));
             await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
             await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
@@ -1048,7 +1035,7 @@ export async function POST(req) {
             // Cliente nuevo: invitar a registrarse
             await sendWhatsApp(phoneId, '¡Hola! 👋🍔 Bienvenido a *El Diablito Boneless & Burgers*', cfg);
             await new Promise(r => setTimeout(r, 800));
-            await sendWhatsApp(phoneId, 'Veo que en nuestro sistema aún no estás registrado. Para comenzar debes registrarte y además recibes una *🍔 BURGER GRATIS* 🎁\n\nSolo necesito tu *nombre apellido* y *dirección* (calle, número, colonia, municipio).', cfg);
+            await sendWhatsApp(phoneId, 'Veo que en nuestro sistema aún no estás registrado. Nos tomará 1 minuto ⏱️, solo compárteme tu *Nombre Completo* 🙋 y tu *Dirección* 📍, al completar tu registro recibes una 🍔 *BURGER GRATIS* 🎁', cfg);
             parsed.push({ role: 'model', parts: [{ text: 'Hola! Bienvenido al Diablito. Veo que en nuestro sistema aún no estás registrado. Para comenzar debes registrarte y además recibes una burger gratis. Solo necesito tu nombre apellido y tu dirección.', ts: Date.now() }] });
             await redis.set(historyKey, JSON.stringify(parsed));
             await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
@@ -1182,10 +1169,11 @@ NUNCA omitas la opción de Pedido a Domicilio y SIEMPRE debe ser la primera de l
                 await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
                 await sendWhatsApp(phoneId, cleanReply, cfg);
 
-                // ── 🛵 DELIVERY MODE: Detectar tag [DOMICILIO_OK] → silenciar bot 1 hora ──
+                // ── 🛵 DELIVERY MODE: Detectar tag [DOMICILIO_OK] → silenciar bot 1 hora, aro hasta que humano intervenga ──
                 if (reply.includes('[DOMICILIO_OK]')) {
-                    await redis.setex(`delivery_mode_${cleanPhone}`, 3600, '1');
-                    console.log(`[Bot] Delivery mode activado para ${cleanPhone} (1 hora)`);
+                    await redis.set(`delivery_mode_${cleanPhone}`, '1');          // aro naranja: persiste hasta intervención humana
+                    await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1'); // silencio del bot: 1 hora
+                    console.log(`[Bot] Delivery mode activado para ${cleanPhone} (aro permanente, bot silenciado 1h)`);
                 }
 
                 // ── 📋 AUTO-REGISTRO / ACTUALIZACIÓN: Detectar tag [REGISTRO_OK] en la respuesta del bot ──
