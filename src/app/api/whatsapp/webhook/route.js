@@ -153,7 +153,14 @@ export async function POST(req) {
     }
 
     const fromMe = payload.data.fromMe !== undefined ? payload.data.fromMe : payload.data.key?.fromMe;
-    if (fromMe) return NextResponse.json({ success: true });
+    
+    // We will no longer block fromMe messages globally because we want to capture outgoing messages in groups
+    // If it's not a group, and it's fromMe, we can block it.
+    let isGroupMsgGeneral = false;
+    let tempPhoneId = payload.data.from || payload.data.key?.remoteJid || payload.data.__raw?.key?.remoteJidAlt || payload.data.__raw?.key?.remoteJid;
+    if (tempPhoneId && tempPhoneId.includes('@g.us')) isGroupMsgGeneral = true;
+
+    if (fromMe && !isGroupMsgGeneral) return NextResponse.json({ success: true });
 
     // ── 🛒 INTERCEPCIÓN DE PEDIDOS DEL CATÁLOGO (CARRITO) ──
     if (payload.data.type === 'order' || payload.data.__raw?.message?.orderMessage) {
@@ -832,11 +839,23 @@ export async function POST(req) {
         }));
         await redis.ltrim('debug_group_payload', 0, 10);
 
-        // Add the message to history
+        // Prevent duplicates for outgoing messages sent from the Web UI
+        let isImageActual = payload.data.type === 'image' || !!payload.data.__raw?.message?.imageMessage;
         let finalBody = bodyStr;
-        if (isImage) finalBody = '[Imagen] ' + finalBody;
+        if (isImageActual) finalBody = '[Imagen] ' + finalBody;
+
+        const fromMe = payload.data.fromMe !== undefined ? payload.data.fromMe : payload.data.key?.fromMe;
+        const msgId = payload.data.id || payload.data.key?.id;
         
-        gParsed.push({ role: 'user', parts: [{ text: `${senderName}: ${finalBody}`, ts: Date.now() }] });
+        if (fromMe) {
+            if (msgId) {
+                const isFromWebUI = await redis.get(`chat_msg_${msgId}`);
+                if (isFromWebUI) return NextResponse.json({ success: true, note: 'duplicate_from_web_ui_group' });
+            }
+            gParsed.push({ role: 'model', parts: [{ text: finalBody, ts: Date.now() }] });
+        } else {
+            gParsed.push({ role: 'user', parts: [{ text: `${senderName}: ${finalBody}`, ts: Date.now() }] });
+        }
         
         if (gParsed.length > 40) gParsed = gParsed.slice(-40);
         
