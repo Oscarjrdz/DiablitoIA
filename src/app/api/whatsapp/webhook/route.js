@@ -799,9 +799,54 @@ export async function POST(req) {
         return NextResponse.json({ success: true });
     }
 
-    // ── 🛡️ BLOQUEAR GRUPOS: Solo los comandos admin de arriba pasan, el resto se ignora
+    // ── 🛡️ BLOQUEAR GRUPOS DE LA IA (pero guardar su historial)
     if (phoneId.includes('@g.us')) {
-        return NextResponse.json({ success: true });
+        let cleanGroupPhone = '52' + phoneId.replace(/\D/g, '').slice(-10);
+        let groupHistKey = `chat_hist_${cleanGroupPhone}@c.us`;
+        let gHistory = await redis.get(groupHistKey) || await redis.get(`chat_hist_${phoneId}`);
+        let gParsed = typeof gHistory === 'string' ? JSON.parse(gHistory) : (gHistory || []);
+        
+        let senderName = payload.data.pushName || 'Miembro';
+        let memberJid = payload.data.participant || '';
+        if (memberJid) {
+           senderName += ` (${memberJid.split('@')[0]})`;
+        }
+
+        // Add the message to history
+        let finalBody = bodyStr;
+        if (isImage) finalBody = '[Imagen] ' + finalBody;
+        
+        gParsed.push({ role: 'user', parts: [{ text: `${senderName}: ${finalBody}`, ts: Date.now() }] });
+        
+        if (gParsed.length > 40) gParsed = gParsed.slice(-40);
+        
+        await redis.set(groupHistKey, JSON.stringify(gParsed));
+        await redis.set(`chat_hist_${cleanGroupPhone}`, JSON.stringify(gParsed));
+        await redis.incr(`chat_unread_${cleanGroupPhone}`);
+        await redis.del(`human_read_${cleanGroupPhone}`);
+
+        // Fetch and cache the group profile picture if not already cached
+        const picKey = `profile_pic_${cleanGroupPhone}`;
+        const hasPic = await redis.get(picKey);
+        if (!hasPic) {
+            const configStr = await redis.get('wapp_config');
+            const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
+            if (cfg.wappInstance && cfg.wappToken) {
+                try {
+                    const picRes = await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/group/profilePic?token=${cfg.wappToken}&groupJid=${phoneId}`);
+                    if (picRes.ok) {
+                        const picData = await picRes.json();
+                        if (picData?.profilePic || picData?.data?.profilePic) {
+                            await redis.setex(picKey, 86400, picData.profilePic || picData.data.profilePic);
+                        } else {
+                            await redis.setex(picKey, 86400, 'none');
+                        }
+                    }
+                } catch(e) {}
+            }
+        }
+        
+        return NextResponse.json({ success: true, note: 'group_history_saved' });
     }
 
     // ── 🎟️ VALIDACIÓN DE CUPÓN (FOLIO) ──────────────────────────────────
