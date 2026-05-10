@@ -807,7 +807,7 @@ export async function POST(req) {
         let gParsed = typeof gHistory === 'string' ? JSON.parse(gHistory) : (gHistory || []);
         
         let senderName = payload.data.pushName || 'Miembro';
-        let memberJid = payload.data.participant || '';
+        let memberJid = payload.data.participant || payload.data.key?.participant || payload.data.__raw?.key?.participant || '';
         if (memberJid) {
            senderName += ` (${memberJid.split('@')[0]})`;
         }
