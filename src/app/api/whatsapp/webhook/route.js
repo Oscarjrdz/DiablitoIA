@@ -807,10 +807,30 @@ export async function POST(req) {
         let gParsed = typeof gHistory === 'string' ? JSON.parse(gHistory) : (gHistory || []);
         
         let senderName = payload.data.pushName || 'Miembro';
-        let memberJid = payload.data.participant || payload.data.key?.participant || payload.data.__raw?.key?.participant || '';
+        
+        // El Gateway puede mandar el número en varios campos dependiendo de si es Evolution, Baileys o un wrapper custom
+        let memberJid = payload.data.participant 
+                     || payload.data.key?.participant 
+                     || payload.data.__raw?.key?.participant 
+                     || payload.data.sender 
+                     || payload.data.author
+                     || '';
+                     
         if (memberJid) {
            senderName += ` (${memberJid.split('@')[0]})`;
         }
+
+        // TEMP DEBUG: Guardar payload para poder inspeccionarlo
+        await redis.lpush('debug_group_payload', JSON.stringify({
+           from: payload.data.from,
+           pushName: payload.data.pushName,
+           participant: payload.data.participant,
+           keyPart: payload.data.key?.participant,
+           sender: payload.data.sender,
+           author: payload.data.author,
+           rawKeys: payload.data.__raw ? Object.keys(payload.data.__raw) : null
+        }));
+        await redis.ltrim('debug_group_payload', 0, 10);
 
         // Add the message to history
         let finalBody = bodyStr;
@@ -833,11 +853,11 @@ export async function POST(req) {
             const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
             if (cfg.wappInstance && cfg.wappToken) {
                 try {
-                    const picRes = await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/group/profilePic?token=${cfg.wappToken}&groupJid=${phoneId}`);
+                    const picRes = await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/contacts/profile-picture?token=${cfg.wappToken}&to=${phoneId}`);
                     if (picRes.ok) {
                         const picData = await picRes.json();
-                        if (picData?.profilePic || picData?.data?.profilePic) {
-                            await redis.setex(picKey, 86400, picData.profilePic || picData.data.profilePic);
+                        if (picData?.profile_picture) {
+                            await redis.setex(picKey, 86400, picData.profile_picture);
                         } else {
                             await redis.setex(picKey, 86400, 'none');
                         }

@@ -19,28 +19,23 @@ export async function GET(req) {
     fetchTo = `${redisPhone}@c.us`;
   }
 
-  // Caché 24h — string vacío significa "sin foto"
+  // Caché 24h — string vacío o "none" significa "sin foto"
   const cached = await redis.get(`profile_pic_${redisPhone}`);
-  if (cached !== null) return NextResponse.json({ url: cached || null });
+  if (cached !== null) {
+    return NextResponse.json({ url: (cached === 'none' || cached === '') ? null : cached });
+  }
 
   try {
     const configStr = await redis.get('wapp_config');
     const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
     if (!cfg.wappInstance || !cfg.wappToken) return NextResponse.json({ url: null });
 
-    // Use /group/profilePic for groups, /contacts/profile-picture for normal contacts
-    let url = isGroup 
-        ? `https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/group/profilePic?token=${cfg.wappToken}&groupJid=${fetchTo}`
-        : `https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/contacts/profile-picture?token=${cfg.wappToken}&to=${fetchTo}`;
+    // The /contacts/profile-picture endpoint works for both personal numbers and group JIDs
+    let url = `https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/contacts/profile-picture?token=${cfg.wappToken}&to=${fetchTo}`;
 
     const res = await fetch(url);
     const picData = res.ok ? await res.json() : null;
-    let picUrl = null;
-    if (isGroup) {
-       picUrl = picData?.profilePic || picData?.data?.profilePic || null;
-    } else {
-       picUrl = picData?.profile_picture || null;
-    }
+    let picUrl = picData?.profile_picture || null;
 
     await redis.setex(`profile_pic_${redisPhone}`, 86400, picUrl || '');
     return NextResponse.json({ url: picUrl });
