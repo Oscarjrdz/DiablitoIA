@@ -3,23 +3,43 @@ import { redis } from '@/lib/redis';
 
 export async function GET() {
   try {
-    const keys = await redis.keys('chat_hist_*@c.us');
-    if (!keys || keys.length === 0) return NextResponse.json({ success: true, chats: [] });
+    const keysRaw = await redis.keys('chat_hist_*@c.us');
+    let fetchKeys = Array.from(new Set(keysRaw || []));
+    let phones = fetchKeys.map(k => k.replace('chat_hist_', '').replace('@c.us', ''));
 
-    const phones = keys.map(k => k.replace('chat_hist_', '').replace('@c.us', ''));
+    // ── 📌 Inyectar Grupo Pinned ──
+    const grupoId = await redis.get('ventas_grupo_id');
+    let gPhoneIndex = -1;
+    if (grupoId && grupoId.includes('@g.us')) {
+      const gCleanPhone = '52' + grupoId.replace(/\D/g, '').slice(-10);
+      gPhoneIndex = phones.indexOf(gCleanPhone);
+      if (gPhoneIndex !== -1) {
+        // Reemplazar el "phone" por el JID real para que el frontend pueda responderle
+        phones[gPhoneIndex] = grupoId; 
+      } else {
+        phones.push(grupoId);
+        fetchKeys.push(`chat_hist_${gCleanPhone}@c.us`);
+      }
+    }
+
+    if (!fetchKeys || fetchKeys.length === 0) return NextResponse.json({ success: true, chats: [] });
 
     // Batch: build all metadata keys and fetch in one mget
-    const metaKeys = phones.flatMap(p => [
-      `client_name_${p}`,
-      `chat_unread_${p}`,
-      `client_store_${p}`,
-      `human_read_${p}`,
-      `delivery_mode_${p}`,
-      `delivery_bot_silence_${p}`
-    ]);
+    const metaKeys = phones.flatMap(p => {
+      let redisPhone = p;
+      if (p.includes('@g.us')) redisPhone = '52' + p.replace(/\D/g, '').slice(-10);
+      return [
+        `client_name_${redisPhone}`,
+        `chat_unread_${redisPhone}`,
+        `client_store_${redisPhone}`,
+        `human_read_${redisPhone}`,
+        `delivery_mode_${redisPhone}`,
+        `delivery_bot_silence_${redisPhone}`
+      ];
+    });
 
     const [histResults, metaResults] = await Promise.all([
-      Promise.all(keys.map(k => redis.get(k))),
+      Promise.all(fetchKeys.map(k => redis.get(k))),
       metaKeys.length > 0 ? redis.mget(...metaKeys) : []
     ]);
 
@@ -36,9 +56,17 @@ export async function GET() {
 
         const parsed = typeof histData === 'string' ? JSON.parse(histData) : (histData || []);
         const lastMsg = parsed.length > 0 ? parsed[parsed.length - 1] : null;
+
+        let name = cachedName || phone.slice(-10);
+        let isGroup = false;
+        if (phone === grupoId) {
+          name = '📌 Grupo Ventas';
+          isGroup = true;
+        }
+
         return {
           phone,
-          name: cachedName || phone.slice(-10),
+          name,
           lastText: (lastMsg?.parts?.[0]?.text || '').substring(0, 80),
           lastTs: lastMsg?.parts?.[0]?.ts || 0,
           fromMe: lastMsg?.role === 'model',
@@ -47,14 +75,19 @@ export async function GET() {
           store: cachedStore || '',
           needsHuman: !humanRead && parsed.length > 0,
           deliveryMode: !!deliveryMode,
-          botSilent: !!botSilence
+          botSilent: !!botSilence,
+          isGroup
         };
       } catch {
-        return { phone, name: phone.slice(-10), lastText: '', lastTs: 0, fromMe: false, unread: 0, msgCount: 0, store: '', needsHuman: false, deliveryMode: false, botSilent: false };
+        return { phone, name: phone === grupoId ? '📌 Grupo Ventas' : phone.slice(-10), lastText: '', lastTs: 0, fromMe: false, unread: 0, msgCount: 0, store: '', needsHuman: false, deliveryMode: false, botSilent: false, isGroup: phone === grupoId };
       }
     });
 
-    chats.sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
+    chats.sort((a, b) => {
+      if (a.isGroup && !b.isGroup) return -1;
+      if (!a.isGroup && b.isGroup) return 1;
+      return (b.lastTs || 0) - (a.lastTs || 0);
+    });
     return NextResponse.json({ success: true, chats });
   } catch (e) {
     return NextResponse.json({ success: false, error: e.message, chats: [] });

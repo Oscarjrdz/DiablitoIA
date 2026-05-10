@@ -4,24 +4,34 @@ import { redis } from '@/lib/redis';
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   let phone = searchParams.get('phone') || '';
-  phone = phone.replace(/\D/g, '');
-  if (!phone.startsWith('52')) phone = '52' + phone;
   if (!phone) return NextResponse.json({ success: false });
+
+  let isGroup = phone.includes('@g.us');
+  let redisPhone = phone;
+
+  if (isGroup) {
+    // History is saved by webhook under mangled cleanPhone
+    redisPhone = '52' + phone.replace(/\D/g, '').slice(-10);
+  } else {
+    redisPhone = phone.replace(/\D/g, '');
+    if (!redisPhone.startsWith('52')) redisPhone = '52' + redisPhone;
+  }
 
   // Only clear unread when explicitly requested (on chat open, not polls)
   const clearUnread = searchParams.get('clearUnread');
   if (clearUnread) {
-    await redis.del(`chat_unread_${phone}`);
+    await redis.del(`chat_unread_${redisPhone}`);
   }
 
   try {
-    const [histData, typingRaw] = await Promise.all([
+    const [histData, typingRaw, botSilenceRaw] = await Promise.all([
       (async () => {
-        const a = await redis.get(`chat_hist_${phone}@c.us`);
+        const a = await redis.get(`chat_hist_${redisPhone}@c.us`);
         if (a) return a;
-        return redis.get(`chat_hist_${phone}`);
+        return redis.get(`chat_hist_${redisPhone}`);
       })(),
-      redis.get(`typing_${phone}`)
+      redis.get(`typing_${redisPhone}`),
+      redis.get(`delivery_bot_silence_${redisPhone}`)
     ]);
 
     const parsed = typeof histData === 'string' ? JSON.parse(histData) : (histData || []);
@@ -44,7 +54,7 @@ export async function GET(req) {
     });
 
     const lastTs = messages.length > 0 ? messages[messages.length - 1].ts : 0;
-    return NextResponse.json({ success: true, messages, msgCount: messages.length, lastTs, isTyping: !!typingRaw });
+    return NextResponse.json({ success: true, messages, msgCount: messages.length, lastTs, isTyping: !!typingRaw, botSilent: !!botSilenceRaw });
   } catch (e) {
     return NextResponse.json({ success: false, messages: [], isTyping: false });
   }

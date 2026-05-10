@@ -6,8 +6,19 @@ export async function POST(req) {
     const { to, text, attachment, attachmentType } = await req.json();
     if (!to) return NextResponse.json({ success: false });
 
-    let cleanTo = to.replace(/\D/g, '');
-    if (!cleanTo.startsWith('52')) cleanTo = '52' + cleanTo;
+    let isGroup = to.includes('@g.us');
+    let wappTo = to;
+    let redisPhone = to;
+
+    if (isGroup) {
+      wappTo = to; // Keep @g.us
+      redisPhone = '52' + to.replace(/\D/g, '').slice(-10); // How it's currently saved in Redis by webhook
+    } else {
+      let cleanTo = to.replace(/\D/g, '');
+      if (!cleanTo.startsWith('52')) cleanTo = '52' + cleanTo;
+      wappTo = `${cleanTo}@c.us`;
+      redisPhone = cleanTo;
+    }
 
     const configStr = await redis.get('wapp_config');
     const wConfig = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
@@ -17,24 +28,24 @@ export async function POST(req) {
     const histEntry = { text: text || '', ts, status: 'sent' };
     if (attachment) { histEntry.attachmentType = attachmentType; histEntry.hasAttachment = true; }
 
-    const hKey = `chat_hist_${cleanTo}@c.us`;
-    let history = await redis.get(hKey) || await redis.get(`chat_hist_${cleanTo}`);
+    const hKey = `chat_hist_${redisPhone}@c.us`;
+    let history = await redis.get(hKey) || await redis.get(`chat_hist_${redisPhone}`);
     let parsed = typeof history === 'string' ? JSON.parse(history) : (history || []);
     parsed.push({ role: 'model', parts: [histEntry] });
 
     const baseUrl = `https://gatewaywapp-production.up.railway.app/${wConfig.wappInstance}`;
     let endpoint = '/messages/chat';
-    let body = { token: wConfig.wappToken, to: `${cleanTo}@c.us`, body: text };
+    let body = { token: wConfig.wappToken, to: wappTo, body: text };
 
     if (attachment && attachmentType === 'image') {
       endpoint = '/messages/image';
-      body = { token: wConfig.wappToken, to: `${cleanTo}@c.us`, image: attachment, caption: text };
+      body = { token: wConfig.wappToken, to: wappTo, image: attachment, caption: text };
     } else if (attachment && attachmentType === 'audio') {
       endpoint = '/messages/audio';
-      body = { token: wConfig.wappToken, to: `${cleanTo}@c.us`, audio: attachment };
+      body = { token: wConfig.wappToken, to: wappTo, audio: attachment };
     } else if (attachment && attachmentType === 'document') {
       endpoint = '/messages/document';
-      body = { token: wConfig.wappToken, to: `${cleanTo}@c.us`, document: attachment, mimetype: 'application/pdf', fileName: 'Documento.pdf', caption: text };
+      body = { token: wConfig.wappToken, to: wappTo, document: attachment, mimetype: 'application/pdf', fileName: 'Documento.pdf', caption: text };
     }
 
     const raw = await fetch(baseUrl + endpoint, {
@@ -49,7 +60,7 @@ export async function POST(req) {
         const msgId = sendData?.messageId || sendData?.key?.id || sendData?.data?.key?.id || sendData?.id;
         if (msgId) {
           // Save msgId → phone mapping for ACK tracking (7 days TTL)
-          await redis.setex(`chat_msg_${msgId}`, 604800, cleanTo);
+          await redis.setex(`chat_msg_${msgId}`, 604800, redisPhone);
           // Store msgId in the last history entry
           parsed[parsed.length - 1].parts[0].msgId = msgId;
         }
@@ -59,9 +70,10 @@ export async function POST(req) {
     }
 
     await redis.set(hKey, JSON.stringify(parsed));
-    await redis.set(`chat_hist_${cleanTo}`, JSON.stringify(parsed));
-    // Mark as human-read when a human sends a message
-    await redis.set(`human_read_${cleanTo}`, '1');
+    await redis.set(`chat_hist_${redisPhone}`, JSON.stringify(parsed));
+    // Mark as human-read and clear delivery ring when a human sends a message
+    await redis.set(`human_read_${redisPhone}`, '1');
+    await redis.del(`delivery_mode_${redisPhone}`);
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error('Send message error:', e);
