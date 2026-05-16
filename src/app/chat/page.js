@@ -334,7 +334,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (messages.length && isAtBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
     }
   }, [messages]);
 
