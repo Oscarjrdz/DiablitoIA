@@ -25,10 +25,17 @@ export async function GET() {
 
     // Inject each pinned group into the phones/fetchKeys arrays
     for (const [gId, gName] of Object.entries(allPinnedMap)) {
-      const gCleanPhone = '52' + gId.replace(/\D/g, '').slice(-10);
+      let gCleanPhone;
+      if (gId.includes('@g.us')) {
+        gCleanPhone = '52' + gId.replace(/\D/g, '').slice(-10);
+      } else if (gId.startsWith('group_')) {
+        gCleanPhone = gId.replace('group_', '');
+      } else {
+        gCleanPhone = gId;
+      }
       const gPhoneIndex = phones.indexOf(gCleanPhone);
       if (gPhoneIndex !== -1) {
-        // Replace the "phone" with the JID so frontend can respond
+        // Replace the "phone" with the group ID so frontend can respond
         phones[gPhoneIndex] = gId;
       } else {
         phones.push(gId);
@@ -42,6 +49,7 @@ export async function GET() {
     const metaKeys = phones.flatMap(p => {
       let redisPhone = p;
       if (p.includes('@g.us')) redisPhone = '52' + p.replace(/\D/g, '').slice(-10);
+      else if (p.startsWith('group_')) redisPhone = p.replace('group_', '');
       return [
         `client_name_${redisPhone}`,
         `chat_unread_${redisPhone}`,

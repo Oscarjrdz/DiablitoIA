@@ -864,6 +864,14 @@ export async function POST(req) {
         await redis.incr(`chat_unread_${cleanGroupPhone}`);
         await redis.del(`human_read_${cleanGroupPhone}`);
 
+        // Save group JID mapping so the groups API can discover all groups
+        await redis.set(`group_jid_${cleanGroupPhone}`, phoneId);
+        // Try to capture group name from payload
+        const groupSubject = payload.data.groupName || payload.data.subject || payload.data.chatName || payload.data.__raw?.groupMetadata?.subject || '';
+        if (groupSubject) {
+          await redis.set(`group_subject_${cleanGroupPhone}`, groupSubject);
+        }
+
         // Fetch and cache the group profile picture if not already cached
         const picKey = `profile_pic_${cleanGroupPhone}`;
         const hasPic = await redis.get(picKey);
