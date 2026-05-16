@@ -57,6 +57,8 @@ export async function POST(req) {
     if (raw.ok) {
       try {
         const sendData = await raw.json();
+        // Debug: guardar respuesta del gateway para diagnóstico
+        await redis.set('debug_last_send_response', JSON.stringify(sendData));
         const rawId = sendData?.messageId
           || sendData?.key?.id
           || sendData?.data?.key?.id
