@@ -115,16 +115,17 @@ export async function POST(req) {
         const rawId = item?.key?.id || item?.id?._serialized || item?.id || item?.msgId || null;
         const msgId = typeof rawId === 'object' ? (rawId?._serialized || null) : rawId;
 
-        // ── Extraer statusId (múltiples formatos) ──
-        const statusId = item?.update?.status ?? item?.ack ?? item?.status ?? null;
+        // ── Extraer statusId (múltiples formatos, normalizar a minúsculas) ──
+        const rawStatus = item?.update?.status ?? item?.ack ?? item?.status ?? null;
+        const statusId = typeof rawStatus === 'string' ? rawStatus.toLowerCase() : rawStatus;
 
         if (!msgId || statusId === null) continue;
 
         const STATUS_ORDER = { sent: 1, delivered: 2, read: 3 };
         let newStatus = null;
-        if ([0, 1, 2, 'SERVER_ACK', 'PENDING'].includes(statusId)) newStatus = 'sent';
-        if ([3, 'DELIVERY_ACK', 'DELIVERED'].includes(statusId)) newStatus = 'delivered';
-        if ([4, 5, 'READ', 'READ_ACK', 'PLAYED'].includes(statusId)) newStatus = 'read';
+        if ([0, 1, 2, 'server_ack', 'pending', 'sent'].includes(statusId)) newStatus = 'sent';
+        if ([3, 'delivery_ack', 'delivered'].includes(statusId)) newStatus = 'delivered';
+        if ([4, 5, 'read', 'read_ack', 'played'].includes(statusId)) newStatus = 'read';
 
         // ── Actualizar historial ──
         if (newStatus) {
