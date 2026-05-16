@@ -628,8 +628,11 @@ export default function ChatPage() {
               className={`${styles.chatItem} ${activeChat?.phone === chat.phone ? styles.chatActive : ''}`}
               onClick={() => openChat(chat)}
             >
-              <div className={chat.deliveryMode ? styles.deliveryRing : undefined}>
-                <Avatar name={chat.name} phone={chat.phone} size={49} picUrl={profilePics[chat.phone]} />
+              <div className={styles.avatarWrap}>
+                <div className={chat.deliveryMode ? styles.deliveryRing : undefined}>
+                  <Avatar name={chat.name} phone={chat.phone} size={49} picUrl={profilePics[chat.phone]} />
+                </div>
+                {chat.unread > 0 && <span className={styles.avatarBadge}>{chat.unread > 99 ? '99+' : chat.unread}</span>}
               </div>
               <div className={styles.chatMeta}>
                 <div className={styles.chatRow1}>
@@ -647,7 +650,7 @@ export default function ChatPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                     {chat.botSilent && <span className={styles.botSilentBadge} title="Bot silenciado">🤖💤</span>}
                     {chat.needsHuman && <span className={styles.needsHumanBadge} title="Sin atención humana">●</span>}
-                    {chat.unread > 0 && <span className={styles.badge}>{chat.unread > 99 ? '99+' : chat.unread}</span>}
+
                   </div>
                 </div>
               </div>
