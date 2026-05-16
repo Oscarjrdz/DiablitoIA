@@ -10,26 +10,40 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'No WhatsApp config' });
     }
 
-    // Fetch groups from gateway (Evolution API / Baileys)
-    const res = await fetch(
-      `https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/groups?token=${cfg.wappToken}`,
-      { signal: AbortSignal.timeout(10000) }
-    );
-
+    const base = `https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}`;
     let groups = [];
-    if (res.ok) {
-      const data = await res.json();
-      // Evolution API returns array or { data: [...] }
-      const rawGroups = Array.isArray(data) ? data : (data.data || data.groups || []);
-      groups = rawGroups.map(g => ({
-        id: g.id || g.jid || g.groupId || '',
-        name: g.subject || g.name || g.groupName || 'Grupo',
-        participants: g.size || g.participants?.length || 0,
-        picture: g.pictureUrl || g.profilePicture || null
-      })).filter(g => g.id);
+
+    // Try multiple gateway endpoints (different API versions)
+    const endpoints = [
+      `${base}/groups?token=${cfg.wappToken}`,
+      `${base}/group/fetchAllGroups?token=${cfg.wappToken}`,
+      `${base}/chat/fetchAllGroups?token=${cfg.wappToken}`,
+      `${base}/group/fetchAllGroups/${cfg.wappInstance}?token=${cfg.wappToken}`,
+    ];
+
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (res.ok) {
+          const data = await res.json();
+          const rawGroups = Array.isArray(data) ? data : (data.data || data.groups || []);
+          if (rawGroups.length > 0) {
+            groups = rawGroups.map(g => ({
+              id: g.id || g.jid || g.groupId || g.chatId || '',
+              name: g.subject || g.name || g.groupName || g.chatName || 'Grupo',
+              participants: g.size || g.participants?.length || g.memberCount || 0,
+              picture: g.pictureUrl || g.profilePicture || g.imgUrl || null
+            })).filter(g => g.id && g.id.includes('@g.us'));
+            break; // Found groups, stop trying
+          }
+        }
+      } catch {}
     }
 
-    // Get currently pinned groups
+    // Save gateway debug info
+    await redis.set('debug_groups_found', JSON.stringify({ count: groups.length, ids: groups.map(g => g.id) }));
+
+    // Get currently pinned groups (with custom names)
     const pinnedRaw = await redis.get('pinned_groups');
     const pinned = pinnedRaw ? (typeof pinnedRaw === 'string' ? JSON.parse(pinnedRaw) : pinnedRaw) : [];
 
@@ -57,7 +71,8 @@ export async function POST(req) {
     const pinned = pinnedRaw ? (typeof pinnedRaw === 'string' ? JSON.parse(pinnedRaw) : pinnedRaw) : [];
 
     // Don't duplicate
-    if (pinned.find(g => g.id === groupId)) {
+    const existing = pinned.find(g => g.id === groupId);
+    if (existing) {
       return NextResponse.json({ success: true, note: 'already_pinned' });
     }
 
@@ -67,12 +82,37 @@ export async function POST(req) {
     // Initialize empty chat history for the group if not exists
     const cleanPhone = '52' + groupId.replace(/\D/g, '').slice(-10);
     const histKey = `chat_hist_${cleanPhone}@c.us`;
-    const existing = await redis.get(histKey);
-    if (!existing) {
+    const histExists = await redis.get(histKey);
+    if (!histExists) {
       await redis.set(histKey, JSON.stringify([]));
     }
     // Set group name in Redis
     await redis.set(`client_name_${cleanPhone}`, `📌 ${groupName || 'Grupo'}`);
+
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    return NextResponse.json({ success: false, error: e.message });
+  }
+}
+
+// PATCH — Rename a pinned group (local name only)
+export async function PATCH(req) {
+  try {
+    const { groupId, newName } = await req.json();
+    if (!groupId || !newName) return NextResponse.json({ success: false, error: 'groupId and newName required' });
+
+    const pinnedRaw = await redis.get('pinned_groups');
+    const pinned = pinnedRaw ? (typeof pinnedRaw === 'string' ? JSON.parse(pinnedRaw) : pinnedRaw) : [];
+
+    const group = pinned.find(g => g.id === groupId);
+    if (!group) return NextResponse.json({ success: false, error: 'Group not pinned' });
+
+    group.name = newName.trim();
+    await redis.set('pinned_groups', JSON.stringify(pinned));
+
+    // Also update the cached name in Redis
+    const cleanPhone = '52' + groupId.replace(/\D/g, '').slice(-10);
+    await redis.set(`client_name_${cleanPhone}`, `📌 ${newName.trim()}`);
 
     return NextResponse.json({ success: true });
   } catch (e) {

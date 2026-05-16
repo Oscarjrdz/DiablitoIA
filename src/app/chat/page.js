@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styles from './page.module.css';
-import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, Check, Plus, Phone, User, Users } from 'lucide-react';
+import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, Check, Plus, Phone, User, Users, Pencil } from 'lucide-react';
 
 // ── Avatar con iniciales y color consistente ──
 const AVATAR_COLORS = [
@@ -128,8 +128,11 @@ export default function ChatPage() {
   const [showGroupsModal, setShowGroupsModal] = useState(false);
   const [gatewayGroups, setGatewayGroups] = useState([]);
   const [pinnedGroupIds, setPinnedGroupIds] = useState([]);
+  const [pinnedGroupsData, setPinnedGroupsData] = useState([]);
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [pinningGroup, setPinningGroup] = useState(null);
+  const [renamingGroupId, setRenamingGroupId] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -157,6 +160,7 @@ export default function ChatPage() {
       if (data.success) {
         setGatewayGroups(data.groups || []);
         setPinnedGroupIds((data.pinned || []).map(g => g.id));
+        setPinnedGroupsData(data.pinned || []);
       }
     } catch {}
     setLoadingGroups(false);
@@ -365,6 +369,7 @@ export default function ChatPage() {
       if (isPinned) {
         await fetch(`/api/whatsapp/groups?groupId=${encodeURIComponent(group.id)}`, { method: 'DELETE' });
         setPinnedGroupIds(prev => prev.filter(id => id !== group.id));
+        setPinnedGroupsData(prev => prev.filter(g => g.id !== group.id));
         showToast(`${group.name} desfijado`, 'success');
       } else {
         await fetch('/api/whatsapp/groups', {
@@ -373,15 +378,36 @@ export default function ChatPage() {
           body: JSON.stringify({ groupId: group.id, groupName: group.name })
         });
         setPinnedGroupIds(prev => [...prev, group.id]);
+        setPinnedGroupsData(prev => [...prev, { id: group.id, name: group.name }]);
         showToast(`${group.name} fijado ✅`, 'success');
       }
-      // Refresh chat list
       fetchChats();
     } catch {
       showToast('Error al actualizar grupo', 'error');
     }
     setPinningGroup(null);
   }, [pinnedGroupIds, fetchChats]);
+
+  // ── Rename pinned group (local only) ──
+  const renameGroup = useCallback(async (groupId, newName) => {
+    if (!newName.trim()) return;
+    try {
+      const res = await fetch('/api/whatsapp/groups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId, newName: newName.trim() })
+      });
+      if (res.ok) {
+        setPinnedGroupsData(prev => prev.map(g => g.id === groupId ? { ...g, name: newName.trim() } : g));
+        showToast('Nombre actualizado', 'success');
+        fetchChats();
+      }
+    } catch {
+      showToast('Error al renombrar', 'error');
+    }
+    setRenamingGroupId(null);
+    setRenameValue('');
+  }, [fetchChats]);
 
   // ── Borrar chat ──
   const confirmDeleteChat = async () => {
@@ -1113,7 +1139,7 @@ export default function ChatPage() {
 
       {/* ── Modal Gestionar Grupos ── */}
       {showGroupsModal && (
-        <div className={styles.deleteOverlay} onClick={() => setShowGroupsModal(false)}>
+        <div className={styles.deleteOverlay} onClick={() => { setShowGroupsModal(false); setRenamingGroupId(null); }}>
           <div className={styles.groupsModal} onClick={e => e.stopPropagation()}>
             <div className={styles.groupsModalHeader}>
               <h3 className={styles.groupsModalTitle}>
@@ -1121,49 +1147,115 @@ export default function ChatPage() {
               </h3>
               <button
                 className={styles.groupsModalClose}
-                onClick={() => setShowGroupsModal(false)}
+                onClick={() => { setShowGroupsModal(false); setRenamingGroupId(null); }}
               >
                 <X size={18} />
               </button>
             </div>
             <p className={styles.groupsModalSub}>
-              Fija los grupos que quieres ver en tu panel de chats
+              Fija grupos y personaliza sus nombres para tu panel
             </p>
             <div className={styles.groupsList}>
               {loadingGroups && (
                 <p className={styles.groupsLoading}>Cargando grupos...</p>
               )}
-              {!loadingGroups && gatewayGroups.length === 0 && (
+
+              {/* ── Grupos Fijados ── */}
+              {pinnedGroupsData.length > 0 && (
+                <>
+                  <div className={styles.groupSectionLabel}>📌 Fijados ({pinnedGroupsData.length})</div>
+                  {pinnedGroupsData.map(pg => {
+                    const gwGroup = gatewayGroups.find(g => g.id === pg.id);
+                    const originalName = gwGroup?.name || pg.id;
+                    return (
+                      <div key={pg.id} className={`${styles.groupItem} ${styles.groupItemPinned}`}>
+                        <div className={styles.groupInfo}>
+                          <div className={styles.groupAvatar}>
+                            <Avatar name={pg.name} size={40} />
+                          </div>
+                          <div className={styles.groupText}>
+                            {renamingGroupId === pg.id ? (
+                              <div className={styles.renameRow}>
+                                <input
+                                  className={styles.renameInput}
+                                  value={renameValue}
+                                  onChange={e => setRenameValue(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') renameGroup(pg.id, renameValue); if (e.key === 'Escape') setRenamingGroupId(null); }}
+                                  autoFocus
+                                  placeholder="Nombre del grupo"
+                                />
+                                <button className={styles.renameSaveBtn} onClick={() => renameGroup(pg.id, renameValue)}>
+                                  <Check size={14} />
+                                </button>
+                                <button className={styles.renameCancelBtn} onClick={() => setRenamingGroupId(null)}>
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className={styles.nameWithEdit}>
+                                <span className={styles.groupName}>{pg.name}</span>
+                                <button
+                                  className={styles.editNameBtn}
+                                  onClick={() => { setRenamingGroupId(pg.id); setRenameValue(pg.name); }}
+                                  title="Renombrar grupo"
+                                >
+                                  <Pencil size={12} />
+                                </button>
+                              </div>
+                            )}
+                            <span className={styles.groupParticipants}>
+                              {originalName !== pg.name ? `WA: ${originalName}` : pg.id}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          className={`${styles.pinBtn} ${styles.pinBtnActive}`}
+                          onClick={() => togglePinGroup(pg)}
+                          disabled={pinningGroup === pg.id}
+                        >
+                          {pinningGroup === pg.id ? '...' : '📌 Fijado'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+
+              {/* ── Grupos del Gateway ── */}
+              {!loadingGroups && gatewayGroups.length > 0 && (
+                <>
+                  <div className={styles.groupSectionLabel}>👥 Disponibles ({gatewayGroups.filter(g => !pinnedGroupIds.includes(g.id)).length})</div>
+                  {gatewayGroups.filter(g => !pinnedGroupIds.includes(g.id)).map(g => (
+                    <div key={g.id} className={styles.groupItem}>
+                      <div className={styles.groupInfo}>
+                        <div className={styles.groupAvatar}>
+                          {g.picture
+                            ? <img src={g.picture} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
+                            : <Avatar name={g.name} size={40} />
+                          }
+                        </div>
+                        <div className={styles.groupText}>
+                          <span className={styles.groupName}>{g.name}</span>
+                          <span className={styles.groupParticipants}>
+                            {g.participants ? `${g.participants} participantes` : g.id}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        className={styles.pinBtn}
+                        onClick={() => togglePinGroup(g)}
+                        disabled={pinningGroup === g.id}
+                      >
+                        {pinningGroup === g.id ? '...' : 'Fijar'}
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {!loadingGroups && gatewayGroups.length === 0 && pinnedGroupsData.length === 0 && (
                 <p className={styles.groupsLoading}>No se encontraron grupos</p>
               )}
-              {gatewayGroups.map(g => {
-                const isPinned = pinnedGroupIds.includes(g.id);
-                return (
-                  <div key={g.id} className={`${styles.groupItem} ${isPinned ? styles.groupItemPinned : ''}`}>
-                    <div className={styles.groupInfo}>
-                      <div className={styles.groupAvatar}>
-                        {g.picture
-                          ? <img src={g.picture} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
-                          : <Avatar name={g.name} size={40} />
-                        }
-                      </div>
-                      <div className={styles.groupText}>
-                        <span className={styles.groupName}>{g.name}</span>
-                        <span className={styles.groupParticipants}>
-                          {g.participants ? `${g.participants} participantes` : g.id}
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      className={`${styles.pinBtn} ${isPinned ? styles.pinBtnActive : ''}`}
-                      onClick={() => togglePinGroup(g)}
-                      disabled={pinningGroup === g.id}
-                    >
-                      {pinningGroup === g.id ? '...' : isPinned ? '📌 Fijado' : 'Fijar'}
-                    </button>
-                  </div>
-                );
-              })}
             </div>
           </div>
         </div>
