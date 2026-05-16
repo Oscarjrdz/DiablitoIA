@@ -162,30 +162,6 @@ export default function ChatPage() {
     setLoadingGroups(false);
   }, []);
 
-  const togglePinGroup = useCallback(async (group) => {
-    const isPinned = pinnedGroupIds.includes(group.id);
-    setPinningGroup(group.id);
-    try {
-      if (isPinned) {
-        await fetch(`/api/whatsapp/groups?groupId=${encodeURIComponent(group.id)}`, { method: 'DELETE' });
-        setPinnedGroupIds(prev => prev.filter(id => id !== group.id));
-        showToast(`${group.name} desfijado`, 'success');
-      } else {
-        await fetch('/api/whatsapp/groups', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ groupId: group.id, groupName: group.name })
-        });
-        setPinnedGroupIds(prev => [...prev, group.id]);
-        showToast(`${group.name} fijado ✅`, 'success');
-      }
-      // Refresh chat list
-      fetchChats();
-    } catch {
-      showToast('Error al actualizar grupo', 'error');
-    }
-    setPinningGroup(null);
-  }, [pinnedGroupIds, fetchChats]);
 
   // ── Cargar lista de chats ──
   const fetchChats = useCallback(async () => {
@@ -380,6 +356,32 @@ export default function ChatPage() {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3200);
   };
+
+  // ── Toggle pin group (defined here so fetchChats and showToast are available) ──
+  const togglePinGroup = useCallback(async (group) => {
+    const isPinned = pinnedGroupIds.includes(group.id);
+    setPinningGroup(group.id);
+    try {
+      if (isPinned) {
+        await fetch(`/api/whatsapp/groups?groupId=${encodeURIComponent(group.id)}`, { method: 'DELETE' });
+        setPinnedGroupIds(prev => prev.filter(id => id !== group.id));
+        showToast(`${group.name} desfijado`, 'success');
+      } else {
+        await fetch('/api/whatsapp/groups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ groupId: group.id, groupName: group.name })
+        });
+        setPinnedGroupIds(prev => [...prev, group.id]);
+        showToast(`${group.name} fijado ✅`, 'success');
+      }
+      // Refresh chat list
+      fetchChats();
+    } catch {
+      showToast('Error al actualizar grupo', 'error');
+    }
+    setPinningGroup(null);
+  }, [pinnedGroupIds, fetchChats]);
 
   // ── Borrar chat ──
   const confirmDeleteChat = async () => {
