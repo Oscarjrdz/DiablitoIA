@@ -346,15 +346,6 @@ export default function ChatPage() {
     clearInterval(msgPollRef.current);
     fetchMessages(chat.phone);
     fetchClientCard(chat.phone);
-    // Clear unread badge once on open
-    setChats(prev => prev.map(c => c.phone === chat.phone ? { ...c, unread: 0 } : c));
-    fetch(`/api/whatsapp/mark-read`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: chat.phone, read: false })
-    }).catch(() => {});
-    // Reset unread counter in Redis
-    fetch(`/api/whatsapp/history?phone=${encodeURIComponent(chat.phone)}&clearUnread=1`).catch(() => {});
     // Load profile pic if needed
     if (!profilePics[chat.phone]) fetchProfilePic(chat.phone);
     fetchPOSData();
@@ -540,9 +531,10 @@ export default function ChatPage() {
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setChats(prev => prev.map(c =>
       c.phone === activeChat.phone
-        ? { ...c, lastText: text || '📎 Archivo', lastTs: now, fromMe: true, needsHuman: false }
+        ? { ...c, lastText: text || '📎 Archivo', lastTs: now, fromMe: true, needsHuman: false, unread: 0 }
         : c
     ));
+    fetch(`/api/whatsapp/history?phone=${encodeURIComponent(activeChat.phone)}&clearUnread=1`).catch(() => {});
     try {
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',

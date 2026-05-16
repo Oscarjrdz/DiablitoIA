@@ -67,11 +67,24 @@ async function createLoyverseItem(folio, targetStoreId, allStores, token) {
 }
 
 async function sendWhatsApp(to, body, cfg) {
-  await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/messages/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: cfg.wappToken, to, body })
-  });
+  try {
+    const res = await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/messages/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: cfg.wappToken, to, body })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const rawId = data?.messageId || data?.key?.id || data?.data?.key?.id || data?.id;
+      return typeof rawId === 'object' ? (rawId?._serialized || null) : (rawId || null);
+    }
+  } catch {}
+  return null;
+}
+
+async function trackMsgId(msgId, cleanPhone) {
+  if (!msgId || !cleanPhone) return;
+  await redis.setex(`chat_msg_${msgId}`, 604800, cleanPhone);
 }
 
 export async function POST(req) {
@@ -1217,8 +1230,10 @@ export async function POST(req) {
         }
 
         if (botReply) {
-            await sendWhatsApp(phoneId, botReply, cfg);
-            parsed.push({ role: 'model', parts: [{ text: botReply, ts: Date.now() }] });
+            const botMsgId = await sendWhatsApp(phoneId, botReply, cfg);
+            const botEntry = { text: botReply, ts: Date.now(), status: 'sent' };
+            if (botMsgId) { botEntry.msgId = botMsgId; await trackMsgId(botMsgId, cleanPhone); }
+            parsed.push({ role: 'model', parts: [botEntry] });
             if (parsed.length > 40) parsed = parsed.slice(-40);
             await redis.set(historyKey, JSON.stringify(parsed));
             await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
@@ -1362,11 +1377,13 @@ NUNCA omitas el tag.`;
                 const clientData = { name: regMatch[1].trim(), address: regMatch[2].trim(), city: regMatch[3].trim() };
                 const confirmMsg = `¡Perfecto *${clientData.name}*! 🎉🔥\n\n¡Ya estás registrado! 🚀 Tu 🍔 *BURGER GRATIS* de bienvenida te espera.\n\n¿En qué te ayudo hoy?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
                 
-                parsed.push({ role: 'model', parts: [{ text: confirmMsg, ts: Date.now() }] });
+                const confirmMsgId = await sendWhatsApp(phoneId, confirmMsg, cfg);
+                const confirmEntry = { text: confirmMsg, ts: Date.now(), status: 'sent' };
+                if (confirmMsgId) { confirmEntry.msgId = confirmMsgId; await trackMsgId(confirmMsgId, cleanPhone); }
+                parsed.push({ role: 'model', parts: [confirmEntry] });
                 await redis.set(historyKey, JSON.stringify(parsed));
                 await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
                 await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
-                await sendWhatsApp(phoneId, confirmMsg, cfg);
 
                 // ── Ejecutar registro en Loyverse ──
                 try {
@@ -1495,11 +1512,13 @@ NUNCA omitas el tag.`;
                     insistMsg = needBothVariants[Math.floor(Math.random() * needBothVariants.length)];
                 }
 
-                parsed.push({ role: 'model', parts: [{ text: insistMsg, ts: Date.now() }] });
+                const insistMsgId = await sendWhatsApp(phoneId, insistMsg, cfg);
+                const insistEntry = { text: insistMsg, ts: Date.now(), status: 'sent' };
+                if (insistMsgId) { insistEntry.msgId = insistMsgId; await trackMsgId(insistMsgId, cleanPhone); }
+                parsed.push({ role: 'model', parts: [insistEntry] });
                 await redis.set(historyKey, JSON.stringify(parsed));
                 await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
                 await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
-                await sendWhatsApp(phoneId, insistMsg, cfg);
             }
         } else {
             console.error('Gemini API Error:', await geminiRes.text());
