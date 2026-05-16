@@ -133,12 +133,15 @@ export default function ChatPage() {
   const [posCart, setPosCart] = useState([]);
   const [posStoreId, setPosStoreId] = useState('');
   const [posSearch, setPosSearch] = useState('');
-  const [posSubmitting, setPosSubmitting] = useState(false);
   const [posSending, setPosSending] = useState(false);
   const [posVariantPicker, setPosVariantPicker] = useState(null); // null | { item }
   const [posGroupPickerOpen, setPosGroupPickerOpen] = useState(false);
   const [posSelectedGroups, setPosSelectedGroups] = useState([]);
   const [posSendingToGroups, setPosSendingToGroups] = useState(false);
+  const [posModifiers, setPosModifiers] = useState([]);
+  const [posModifierPicker, setPosModifierPicker] = useState(null); // { item, variant, modifiers }
+  const [posSelectedModifiers, setPosSelectedModifiers] = useState([]);
+  const [posOrderType, setPosOrderType] = useState('domicilio');
 
   // New chat
   const [showNewChat, setShowNewChat] = useState(false);
@@ -332,6 +335,7 @@ export default function ChatPage() {
         setPosItems(data.items || []);
         setPosStores(data.stores || []);
         setPosPayTypes(data.paymentTypes || []);
+        setPosModifiers(data.modifiers || []);
         if (data.paymentTypes?.length) setPosPayTypeId(data.paymentTypes[0].id);
       }
     } catch {}
@@ -570,10 +574,11 @@ export default function ChatPage() {
     const variantId = variant?.variant_id;
     const vLabel = variantName(variant);
     const displayName = vLabel ? `${item.item_name} - ${vLabel}` : item.item_name;
+    const cartKey = variantId;
     setPosCart(prev => {
-      const idx = prev.findIndex(c => c.variantId === variantId);
+      const idx = prev.findIndex(c => c.cartKey === cartKey);
       if (idx >= 0) return prev.map((c, i) => i === idx ? { ...c, qty: c.qty + 1 } : c);
-      return [...prev, { itemId: item.id, variantId, name: displayName, price, qty: 1 }];
+      return [...prev, { itemId: item.id, variantId, cartKey, name: displayName, price, qty: 1 }];
     });
   }, [posStoreId]);
 
@@ -585,6 +590,49 @@ export default function ChatPage() {
     setPosCart(prev => prev.filter((_, i) => i !== idx));
   }, []);
 
+  const posHandleVariantSelect = useCallback((item, variant) => {
+    const applicable = posModifiers.filter(m => item.modifier_ids?.includes(m.id));
+    if (applicable.length > 0) {
+      setPosVariantPicker(null);
+      setPosModifierPicker({ item, variant, modifiers: applicable });
+      setPosSelectedModifiers([]);
+    } else {
+      posAddItemVariant(item, variant);
+    }
+  }, [posModifiers, posAddItemVariant]);
+
+  const posAddItemWithModifiers = useCallback(() => {
+    if (!posModifierPicker) return;
+    const { item, variant } = posModifierPicker;
+    let basePrice = variant?.default_price || 0;
+    if (posStoreId && variant?.stores) {
+      const sp = variant.stores.find(s => s.store_id === posStoreId)?.price;
+      if (sp != null) basePrice = sp;
+    }
+    const selectedOptions = [];
+    posModifierPicker.modifiers.forEach(mod => {
+      mod.modifier_options?.forEach(opt => {
+        if (posSelectedModifiers.includes(opt.id)) {
+          selectedOptions.push({ name: opt.name, price: opt.price || 0 });
+        }
+      });
+    });
+    const modTotal = selectedOptions.reduce((s, o) => s + o.price, 0);
+    const effectivePrice = basePrice + modTotal;
+    const variantId = variant?.variant_id;
+    const vLabel = variantName(variant);
+    const modLabel = selectedOptions.map(o => o.name).join(', ');
+    const displayName = [vLabel ? `${item.item_name} - ${vLabel}` : item.item_name, modLabel].filter(Boolean).join(' + ');
+    const cartKey = variantId + (posSelectedModifiers.length ? '|' + [...posSelectedModifiers].sort().join(',') : '');
+    setPosCart(prev => {
+      const idx = prev.findIndex(c => c.cartKey === cartKey);
+      if (idx >= 0) return prev.map((c, i) => i === idx ? { ...c, qty: c.qty + 1 } : c);
+      return [...prev, { itemId: item.id, variantId, cartKey, name: displayName, price: effectivePrice, qty: 1 }];
+    });
+    setPosModifierPicker(null);
+    setPosSelectedModifiers([]);
+  }, [posModifierPicker, posSelectedModifiers, posStoreId]);
+
   const posTotal = useMemo(() => posCart.reduce((sum, c) => sum + c.price * c.qty, 0), [posCart]);
 
   const posFiltered = useMemo(
@@ -594,14 +642,17 @@ export default function ChatPage() {
     [posItems, posSearch]
   );
 
+  const ORDER_TYPE_LABELS = { domicilio: '🛵 Domicilio', llevar: '🏃 Para llevar', comer: '🍽️ Para comer aquí' };
+
   const posSendSummary = useCallback(async () => {
     if (!posCart.length || !activeChat || posSending) return;
     setPosSending(true);
     const storeName = posStores.find(s => s.id === posStoreId)?.name || '';
+    const orderLabel = ORDER_TYPE_LABELS[posOrderType] || posOrderType;
     const lines = posCart.map(c =>
       `• ${c.name} x${c.qty} — $${(c.price * c.qty).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
     ).join('\n');
-    const text = `🛒 *Resumen de tu pedido:*\n\n${lines}\n\n*Total: $${posTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}*${storeName ? `\n\nSucursal: ${storeName}` : ''}`;
+    const text = `🛒 *Resumen de tu pedido:*\n\n*Tipo:* ${orderLabel}\n\n${lines}\n\n*Total: $${posTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}*${storeName ? `\n\nSucursal: ${storeName}` : ''}`;
     try {
       await fetch('/api/whatsapp/send', {
         method: 'POST',
@@ -613,37 +664,7 @@ export default function ChatPage() {
       showToast('Error al enviar resumen', 'error');
     }
     setPosSending(false);
-  }, [posCart, posStoreId, posStores, posTotal, activeChat, posSending]);
-
-  const posCreateReceipt = useCallback(async () => {
-    if (!posCart.length || !posStoreId || posSubmitting) return;
-    setPosSubmitting(true);
-    try {
-      const customerId = clientCard?.client?.customerId || null;
-      const res = await fetch('/api/loyverse/pos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          store_id: posStoreId,
-          line_items: posCart.map(c => ({ item_id: c.itemId, variant_id: c.variantId, quantity: c.qty, price: c.price })),
-          payment_type_id: posPayTypeId,
-          total: posTotal,
-          ...(customerId ? { customer_id: customerId } : {})
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast('Ticket creado en Loyverse ✅', 'success');
-        setPosCart([]);
-      } else {
-        const errMsg = data.error?.details || data.error?.message || JSON.stringify(data.error) || 'Error desconocido';
-        showToast(`Error: ${errMsg}`, 'error');
-      }
-    } catch {
-      showToast('Error de conexión', 'error');
-    }
-    setPosSubmitting(false);
-  }, [posCart, posStoreId, posPayTypeId, posTotal, posSubmitting, clientCard]);
+  }, [posCart, posStoreId, posStores, posTotal, activeChat, posSending, posOrderType]);
 
   const posSendToGroups = useCallback(async () => {
     if (!posSelectedGroups.length || posSendingToGroups) return;
@@ -652,6 +673,7 @@ export default function ChatPage() {
     const clientPhone = (activeChat?.phone || '').replace(/^52/, '').replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3');
     const storeName = posStores.find(s => s.id === posStoreId)?.name || '';
     const paymentName = posPayTypes.find(pt => pt.id === posPayTypeId)?.name || '';
+    const orderLabel = ORDER_TYPE_LABELS[posOrderType] || posOrderType;
     const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Monterrey' });
     const lines = posCart.map(c =>
       `• ${c.name} x${c.qty} — $${(c.price * c.qty).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
@@ -662,6 +684,7 @@ export default function ChatPage() {
       `👤 *Cliente:* ${clientName}\n` +
       `📱 *Tel:* ${clientPhone}\n` +
       `🕐 *Hora:* ${hora} hrs\n` +
+      `🚚 *Tipo:* ${orderLabel}\n` +
       (storeName ? `🏪 *Sucursal:* ${storeName}\n` : '') +
       `\n📋 *Pedido:*\n${lines}\n\n` +
       (paymentName ? `💳 *Pago:* ${paymentName}\n` : '') +
@@ -682,7 +705,7 @@ export default function ChatPage() {
       showToast('Error al enviar a sucursales', 'error');
     }
     setPosSendingToGroups(false);
-  }, [posSelectedGroups, posCart, posStoreId, posStores, posPayTypeId, posPayTypes, posTotal, clientCard, activeChat, posSendingToGroups]);
+  }, [posSelectedGroups, posCart, posStoreId, posStores, posPayTypeId, posPayTypes, posTotal, clientCard, activeChat, posSendingToGroups, posOrderType]);
 
   // ── Lista de sucursales únicas (de los chats cargados) ──
   const stores = [...new Set(chats.map(c => c.store).filter(Boolean))].sort();
@@ -1268,6 +1291,11 @@ export default function ChatPage() {
           </div>
 
           <div className={styles.posTopControls}>
+            <select className={styles.posSelect} value={posOrderType} onChange={e => setPosOrderType(e.target.value)}>
+              <option value="domicilio">🛵 Domicilio</option>
+              <option value="llevar">🏃 Para llevar</option>
+              <option value="comer">🍽️ Para comer aquí</option>
+            </select>
             <select className={styles.posSelect} value={posStoreId} onChange={e => setPosStoreId(e.target.value)}>
               <option value="">— Sucursal —</option>
               {posStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -1294,7 +1322,40 @@ export default function ChatPage() {
           </div>
 
           <div className={styles.posProducts}>
-            {posVariantPicker ? (
+            {posModifierPicker ? (
+              /* ── Vista de modificadores ── */
+              <div className={styles.posModifierView}>
+                <button className={styles.posVariantBack} onClick={() => { setPosModifierPicker(null); setPosSelectedModifiers([]); }}>
+                  ← Volver
+                </button>
+                <div className={styles.posVariantTitle}>{posModifierPicker.item.item_name}</div>
+                <div className={styles.posModifierSubtitle}>Selecciona los extras (opcional)</div>
+                {posModifierPicker.modifiers.map(mod => (
+                  <div key={mod.id} className={styles.posModifierGroup}>
+                    <div className={styles.posModifierGroupName}>{mod.name}</div>
+                    {(mod.modifier_options || []).map(opt => (
+                      <label key={opt.id} className={styles.posModifierOption}>
+                        <input
+                          type="checkbox"
+                          checked={posSelectedModifiers.includes(opt.id)}
+                          onChange={e => {
+                            if (e.target.checked) setPosSelectedModifiers(prev => [...prev, opt.id]);
+                            else setPosSelectedModifiers(prev => prev.filter(id => id !== opt.id));
+                          }}
+                        />
+                        <span className={styles.posModifierName}>{opt.name}</span>
+                        {opt.price > 0 && (
+                          <span className={styles.posModifierPrice}>+${opt.price.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                ))}
+                <button className={styles.posModifierConfirmBtn} onClick={posAddItemWithModifiers}>
+                  Agregar al carrito
+                </button>
+              </div>
+            ) : posVariantPicker ? (
               /* ── Vista de variantes ── */
               <div className={styles.posVariantView}>
                 <button className={styles.posVariantBack} onClick={() => setPosVariantPicker(null)}>
@@ -1308,18 +1369,18 @@ export default function ChatPage() {
                     const sp = variant.stores.find(s => s.store_id === posStoreId)?.price;
                     if (sp != null) price = sp;
                   }
-                  const inCart = posCart.find(c => c.variantId === variant.variant_id);
+                  const inCartQty = posCart.filter(c => c.variantId === variant.variant_id).reduce((s, c) => s + c.qty, 0);
                   return (
                     <div
                       key={variant.variant_id}
-                      className={`${styles.posVariantOption} ${inCart ? styles.posVariantInCart : ''}`}
-                      onClick={() => posAddItemVariant(posVariantPicker.item, variant)}
+                      className={`${styles.posVariantOption} ${inCartQty > 0 ? styles.posVariantInCart : ''}`}
+                      onClick={() => posHandleVariantSelect(posVariantPicker.item, variant)}
                     >
                       <span className={styles.posVariantName}>{vLabel || 'Estándar'}</span>
                       <span className={styles.posVariantPrice}>
                         ${price.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                       </span>
-                      {inCart && <span className={styles.posVariantQtyBadge}>{inCart.qty}</span>}
+                      {inCartQty > 0 && <span className={styles.posVariantQtyBadge}>{inCartQty}</span>}
                     </div>
                   );
                 })}
@@ -1345,7 +1406,7 @@ export default function ChatPage() {
                       className={`${styles.posProductCard} ${totalInCart > 0 ? styles.posProductInCart : ''}`}
                       onClick={() => hasMulti
                         ? setPosVariantPicker({ item })
-                        : posAddItemVariant(item, firstVariant)
+                        : posHandleVariantSelect(item, firstVariant)
                       }
                       title={item.item_name}
                     >
@@ -1458,16 +1519,14 @@ export default function ChatPage() {
                 <div className={styles.posClientBadgeNone}>Sin cliente Loyverse vinculado</div>
               )}
               <div className={styles.posActionBtns}>
-                <button className={styles.posSendBtn} onClick={posSendSummary} disabled={posSending || posSubmitting}>
+                <button className={styles.posSendBtn} onClick={posSendSummary} disabled={posSending}>
                   {posSending ? 'Enviando...' : 'Enviar cliente'}
                 </button>
                 <button
-                  className={styles.posTicketBtn}
-                  onClick={posCreateReceipt}
-                  disabled={!posStoreId || posSubmitting}
-                  title={!posStoreId ? 'Selecciona una sucursal primero' : ''}
+                  className={styles.posClearOrderBtn}
+                  onClick={() => { setPosCart([]); setPosModifierPicker(null); setPosVariantPicker(null); }}
                 >
-                  {posSubmitting ? '...' : 'Crear ticket'}
+                  🗑 Borrar pedido
                 </button>
               </div>
             </div>

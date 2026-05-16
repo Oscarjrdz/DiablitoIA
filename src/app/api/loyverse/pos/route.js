@@ -25,19 +25,22 @@ export async function GET() {
       page++;
     } while (cursor && page < 4);
 
-    const [storesRes, payTypesRes] = await Promise.all([
+    const [storesRes, payTypesRes, modifiersRes] = await Promise.all([
       fetch(`${BASE}/stores`, { headers }),
-      fetch(`${BASE}/payment_types`, { headers })
+      fetch(`${BASE}/payment_types`, { headers }),
+      fetch(`${BASE}/modifiers`, { headers })
     ]);
 
     const storesData = storesRes.ok ? await storesRes.json() : {};
     const payTypesData = payTypesRes.ok ? await payTypesRes.json() : {};
+    const modifiersData = modifiersRes.ok ? await modifiersRes.json() : {};
 
     return NextResponse.json({
       success: true,
       items: allItems.filter(i => !i.deleted_at && i.variants?.length > 0),
       stores: storesData.stores || [],
-      paymentTypes: payTypesData.payment_types || []
+      paymentTypes: payTypesData.payment_types || [],
+      modifiers: modifiersData.modifiers || []
     });
   } catch (e) {
     return NextResponse.json({ success: false, error: e.message }, { status: 500 });

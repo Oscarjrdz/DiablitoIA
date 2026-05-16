@@ -1949,22 +1949,21 @@ select.infoEditInput option { background: #1a2730; color: #e9edef; }
 .posSendBtn:hover:not(:disabled) { background: #374045; border-color: #4a5568; }
 .posSendBtn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-.posTicketBtn {
+.posClearOrderBtn {
   flex: 1;
-  background: #00a884;
-  color: #111b21;
-  border: none;
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
   border-radius: 8px;
   padding: 8px 6px;
   font-size: 11.5px;
   font-weight: 700;
   font-family: inherit;
   cursor: pointer;
-  transition: background 0.13s;
+  transition: all 0.13s;
   white-space: nowrap;
 }
-.posTicketBtn:hover:not(:disabled) { background: #06cf9c; }
-.posTicketBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.posClearOrderBtn:hover { background: rgba(239, 68, 68, 0.22); border-color: rgba(239, 68, 68, 0.5); }
 
 /* ── Vista de variantes (reemplaza el grid) ── */
 .posVariantView {
@@ -2156,3 +2155,82 @@ select.infoEditInput option { background: #1a2730; color: #e9edef; }
   justify-content: center;
   flex-shrink: 0;
 }
+
+/* ── Vista de modificadores ── */
+.posModifierView {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.posModifierSubtitle {
+  font-size: 11px;
+  color: #8696a0;
+  margin-bottom: 2px;
+}
+
+.posModifierGroup {
+  background: #1f2c34;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.posModifierGroupName {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8696a0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.posModifierOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.posModifierOption:hover { background: rgba(0, 168, 132, 0.08); }
+.posModifierOption input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: #00a884;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.posModifierName {
+  flex: 1;
+  font-size: 12px;
+  color: #e9edef;
+}
+
+.posModifierPrice {
+  font-size: 11px;
+  font-weight: 700;
+  color: #00a884;
+  white-space: nowrap;
+}
+
+.posModifierConfirmBtn {
+  width: 100%;
+  background: #00a884;
+  color: #111b21;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.13s;
+  margin-top: 4px;
+}
+.posModifierConfirmBtn:hover { background: #06cf9c; }
