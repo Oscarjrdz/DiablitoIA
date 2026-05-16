@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import styles from './page.module.css';
 import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, Check, Plus, Phone, User, Users, Pencil } from 'lucide-react';
 
@@ -118,6 +118,17 @@ export default function ChatPage() {
   const [savingField, setSavingField] = useState(false);
   const [botSilent, setBotSilent] = useState(false);
 
+  // POS
+  const [posItems, setPosItems] = useState([]);
+  const [posStores, setPosStores] = useState([]);
+  const [posPayTypes, setPosPayTypes] = useState([]);
+  const [posPayTypeId, setPosPayTypeId] = useState('');
+  const [posLoading, setPosLoading] = useState(false);
+  const [posCart, setPosCart] = useState([]);
+  const [posStoreId, setPosStoreId] = useState('');
+  const [posSearch, setPosSearch] = useState('');
+  const [posSubmitting, setPosSubmitting] = useState(false);
+
   // New chat
   const [showNewChat, setShowNewChat] = useState(false);
   const [newPhone, setNewPhone] = useState('');
@@ -148,6 +159,7 @@ export default function ChatPage() {
   const [isOffline, setIsOffline] = useState(false);
   const picQueueRef = useRef([]);
   const picLoadingRef = useRef(0);
+  const posDataLoadedRef = useRef(false);
 
   useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
 
@@ -295,6 +307,23 @@ export default function ChatPage() {
     setSavingField(false);
   }, [clientCard, editAddress, editStore]);
 
+  const fetchPOSData = useCallback(async () => {
+    if (posDataLoadedRef.current) return;
+    posDataLoadedRef.current = true;
+    setPosLoading(true);
+    try {
+      const res = await fetch('/api/loyverse/pos');
+      const data = await res.json();
+      if (data.success) {
+        setPosItems(data.items || []);
+        setPosStores(data.stores || []);
+        setPosPayTypes(data.paymentTypes || []);
+        if (data.paymentTypes?.length) setPosPayTypeId(data.paymentTypes[0].id);
+      }
+    } catch {}
+    setPosLoading(false);
+  }, []);
+
   const openChat = useCallback((chat) => {
     setActiveChat(chat);
     setMessages([]);
@@ -317,10 +346,11 @@ export default function ChatPage() {
     fetch(`/api/whatsapp/history?phone=${encodeURIComponent(chat.phone)}&clearUnread=1`).catch(() => {});
     // Load profile pic if needed
     if (!profilePics[chat.phone]) fetchProfilePic(chat.phone);
+    fetchPOSData();
     msgPollRef.current = setInterval(() => {
       if (activeChatRef.current?.phone === chat.phone) fetchMessages(chat.phone);
     }, 2000);
-  }, [fetchMessages, fetchProfilePic, fetchClientCard, profilePics]);
+  }, [fetchMessages, fetchProfilePic, fetchClientCard, profilePics, fetchPOSData]);
 
   useEffect(() => () => clearInterval(msgPollRef.current), []);
 
@@ -523,6 +553,86 @@ export default function ChatPage() {
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
+
+  // ── POS helpers ──
+  const posAddItem = useCallback((item) => {
+    const variant = item.variants?.[0];
+    let price = variant?.default_price || 0;
+    if (posStoreId && variant?.stores) {
+      const sp = variant.stores.find(s => s.store_id === posStoreId)?.price;
+      if (sp != null) price = sp;
+    }
+    const variantId = variant?.variant_id;
+    setPosCart(prev => {
+      const idx = prev.findIndex(c => c.itemId === item.id);
+      if (idx >= 0) return prev.map((c, i) => i === idx ? { ...c, qty: c.qty + 1 } : c);
+      return [...prev, { itemId: item.id, variantId, name: item.item_name, price, qty: 1 }];
+    });
+  }, [posStoreId]);
+
+  const posUpdateQty = useCallback((idx, delta) => {
+    setPosCart(prev => prev.map((c, i) => i === idx ? { ...c, qty: c.qty + delta } : c).filter(c => c.qty > 0));
+  }, []);
+
+  const posRemoveItem = useCallback((idx) => {
+    setPosCart(prev => prev.filter((_, i) => i !== idx));
+  }, []);
+
+  const posTotal = useMemo(() => posCart.reduce((sum, c) => sum + c.price * c.qty, 0), [posCart]);
+
+  const posFiltered = useMemo(
+    () => posItems
+      .filter(item => !posSearch || item.item_name.toLowerCase().includes(posSearch.toLowerCase()))
+      .sort((a, b) => a.item_name.localeCompare(b.item_name, 'es')),
+    [posItems, posSearch]
+  );
+
+  const posSendSummary = useCallback(async () => {
+    if (!posCart.length || !activeChat) return;
+    const storeName = posStores.find(s => s.id === posStoreId)?.name || '';
+    const lines = posCart.map(c =>
+      `• ${c.name} x${c.qty} — $${(c.price * c.qty).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+    ).join('\n');
+    const text = `🛒 *Resumen de tu pedido:*\n\n${lines}\n\n*Total: $${posTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}*${storeName ? `\n\nSucursal: ${storeName}` : ''}`;
+    try {
+      await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: activeChat.phone, text })
+      });
+      showToast('Resumen enviado al cliente ✅', 'success');
+    } catch {
+      showToast('Error al enviar resumen', 'error');
+    }
+  }, [posCart, posStoreId, posStores, posTotal, activeChat]);
+
+  const posCreateReceipt = useCallback(async () => {
+    if (!posCart.length || !posStoreId || posSubmitting) return;
+    setPosSubmitting(true);
+    try {
+      const res = await fetch('/api/loyverse/pos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          store_id: posStoreId,
+          line_items: posCart.map(c => ({ item_id: c.itemId, variant_id: c.variantId, quantity: c.qty, price: c.price })),
+          payment_type_id: posPayTypeId,
+          total: posTotal
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Ticket creado en Loyverse ✅', 'success');
+        setPosCart([]);
+      } else {
+        const errMsg = data.error?.details || data.error?.message || JSON.stringify(data.error) || 'Error desconocido';
+        showToast(`Error: ${errMsg}`, 'error');
+      }
+    } catch {
+      showToast('Error de conexión', 'error');
+    }
+    setPosSubmitting(false);
+  }, [posCart, posStoreId, posPayTypeId, posTotal, posSubmitting]);
 
   // ── Lista de sucursales únicas (de los chats cargados) ──
   const stores = [...new Set(chats.map(c => c.store).filter(Boolean))].sort();
@@ -1095,6 +1205,136 @@ export default function ChatPage() {
                 )}
               </div>
 
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ CUARTA COLUMNA: PUNTO DE VENTA ══ */}
+      {activeChat && (
+        <div className={styles.posPanel}>
+          <div className={styles.posPanelHeader}>
+            🛒 Punto de Venta
+          </div>
+
+          <div className={styles.posTopControls}>
+            <select className={styles.posSelect} value={posStoreId} onChange={e => setPosStoreId(e.target.value)}>
+              <option value="">— Sucursal —</option>
+              {posStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            {posPayTypes.length > 1 && (
+              <select className={styles.posSelect} value={posPayTypeId} onChange={e => setPosPayTypeId(e.target.value)}>
+                {posPayTypes.map(pt => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+              </select>
+            )}
+          </div>
+
+          <div className={styles.posSearchWrap}>
+            <input
+              className={styles.posSearchInput}
+              placeholder="Buscar producto..."
+              value={posSearch}
+              onChange={e => setPosSearch(e.target.value)}
+            />
+            {posSearch && (
+              <button className={styles.posClearSearch} onClick={() => setPosSearch('')}>
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          <div className={styles.posProducts}>
+            {posLoading ? (
+              <div className={styles.posLoading}>Cargando productos...</div>
+            ) : posFiltered.length === 0 ? (
+              <div className={styles.posLoading}>{posSearch ? 'Sin resultados' : 'Sin productos'}</div>
+            ) : (
+              <div className={styles.posGrid}>
+                {posFiltered.map(item => {
+                  const variant = item.variants?.[0];
+                  let price = variant?.default_price || 0;
+                  if (posStoreId && variant?.stores) {
+                    const sp = variant.stores.find(s => s.store_id === posStoreId)?.price;
+                    if (sp != null) price = sp;
+                  }
+                  const inCart = posCart.find(c => c.itemId === item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      className={`${styles.posProductCard} ${inCart ? styles.posProductInCart : ''}`}
+                      onClick={() => posAddItem(item)}
+                      title={item.item_name}
+                    >
+                      {item.image_url ? (
+                        <img src={item.image_url} alt="" className={styles.posProductImg} />
+                      ) : (
+                        <div className={styles.posProductPlaceholder}>
+                          {item.item_name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className={styles.posProductName}>{item.item_name}</div>
+                      <div className={styles.posProductPrice}>
+                        ${price.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                      </div>
+                      {inCart && <div className={styles.posProductQtyBadge}>{inCart.qty}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className={styles.posCartSection}>
+            <div className={styles.posCartHeader}>
+              <span>Carrito</span>
+              {posCart.length > 0 && (
+                <button className={styles.posClearCartBtn} onClick={() => setPosCart([])}>Limpiar</button>
+              )}
+            </div>
+            {posCart.length === 0 ? (
+              <div className={styles.posCartEmpty}>Sin productos agregados</div>
+            ) : (
+              <div className={styles.posCartList}>
+                {posCart.map((item, i) => (
+                  <div key={i} className={styles.posCartRow}>
+                    <div className={styles.posCartInfo}>
+                      <span className={styles.posCartName}>{item.name}</span>
+                      <span className={styles.posCartSubprice}>${item.price.toLocaleString('es-MX', { minimumFractionDigits: 0 })} c/u</span>
+                    </div>
+                    <div className={styles.posCartControls}>
+                      <button className={styles.posQtyBtn} onClick={() => posUpdateQty(i, -1)}>−</button>
+                      <span className={styles.posQtyNum}>{item.qty}</span>
+                      <button className={styles.posQtyBtn} onClick={() => posUpdateQty(i, 1)}>+</button>
+                      <span className={styles.posCartTotal}>${(item.price * item.qty).toLocaleString('es-MX', { minimumFractionDigits: 0 })}</span>
+                      <button className={styles.posCartRemove} onClick={() => posRemoveItem(i)}><X size={11} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {posCart.length > 0 && (
+            <div className={styles.posFooter}>
+              <div className={styles.posTotalRow}>
+                <span className={styles.posTotalLabel}>Total</span>
+                <span className={styles.posTotalAmount}>
+                  ${posTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className={styles.posActionBtns}>
+                <button className={styles.posSendBtn} onClick={posSendSummary} disabled={posSubmitting}>
+                  Enviar cliente
+                </button>
+                <button
+                  className={styles.posTicketBtn}
+                  onClick={posCreateReceipt}
+                  disabled={!posStoreId || posSubmitting}
+                  title={!posStoreId ? 'Selecciona una sucursal primero' : ''}
+                >
+                  {posSubmitting ? '...' : 'Crear ticket'}
+                </button>
+              </div>
             </div>
           )}
         </div>
