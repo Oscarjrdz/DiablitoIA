@@ -1965,3 +1965,83 @@ select.infoEditInput option { background: #1a2730; color: #e9edef; }
 }
 .posTicketBtn:hover:not(:disabled) { background: #06cf9c; }
 .posTicketBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Vista de variantes (reemplaza el grid) ── */
+.posVariantView {
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.posVariantBack {
+  background: none;
+  border: none;
+  color: #00a884;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 4px 0 8px;
+  text-align: left;
+  letter-spacing: 0.2px;
+}
+.posVariantBack:hover { color: #06cf9c; }
+
+.posVariantTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e9edef;
+  padding: 0 2px 8px;
+  border-bottom: 1px solid #1f2c34;
+  margin-bottom: 4px;
+}
+
+.posVariantOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px;
+  background: #202c33;
+  border: 1px solid #1f2c34;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all 0.13s;
+  position: relative;
+}
+.posVariantOption:hover {
+  background: #2a3942;
+  border-color: #00a884;
+}
+.posVariantInCart {
+  border-color: #00a884;
+  background: rgba(0, 168, 132, 0.08);
+}
+
+.posVariantName {
+  flex: 1;
+  font-size: 13px;
+  color: #e9edef;
+  font-weight: 500;
+}
+
+.posVariantPrice {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #00a884;
+  flex-shrink: 0;
+}
+
+.posVariantQtyBadge {
+  background: #00a884;
+  color: #111b21;
+  font-size: 10px;
+  font-weight: 800;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}

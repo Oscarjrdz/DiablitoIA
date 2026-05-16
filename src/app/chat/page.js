@@ -86,6 +86,12 @@ function dayLabel(ts) {
   return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Monterrey' });
 }
 
+// ── Nombre de variante Loyverse ──
+function variantName(variant) {
+  return [variant?.option1_value, variant?.option2_value, variant?.option3_value]
+    .filter(Boolean).join(' / ') || '';
+}
+
 // ── Animación de tres puntos (typing) ──
 function TypingDots() {
   return (
@@ -128,6 +134,8 @@ export default function ChatPage() {
   const [posStoreId, setPosStoreId] = useState('');
   const [posSearch, setPosSearch] = useState('');
   const [posSubmitting, setPosSubmitting] = useState(false);
+  const [posSending, setPosSending] = useState(false);
+  const [posVariantPicker, setPosVariantPicker] = useState(null); // null | { item }
 
   // New chat
   const [showNewChat, setShowNewChat] = useState(false);
@@ -555,18 +563,19 @@ export default function ChatPage() {
   };
 
   // ── POS helpers ──
-  const posAddItem = useCallback((item) => {
-    const variant = item.variants?.[0];
+  const posAddItemVariant = useCallback((item, variant) => {
     let price = variant?.default_price || 0;
     if (posStoreId && variant?.stores) {
       const sp = variant.stores.find(s => s.store_id === posStoreId)?.price;
       if (sp != null) price = sp;
     }
     const variantId = variant?.variant_id;
+    const vLabel = variantName(variant);
+    const displayName = vLabel ? `${item.item_name} - ${vLabel}` : item.item_name;
     setPosCart(prev => {
-      const idx = prev.findIndex(c => c.itemId === item.id);
+      const idx = prev.findIndex(c => c.variantId === variantId);
       if (idx >= 0) return prev.map((c, i) => i === idx ? { ...c, qty: c.qty + 1 } : c);
-      return [...prev, { itemId: item.id, variantId, name: item.item_name, price, qty: 1 }];
+      return [...prev, { itemId: item.id, variantId, name: displayName, price, qty: 1 }];
     });
   }, [posStoreId]);
 
@@ -588,7 +597,8 @@ export default function ChatPage() {
   );
 
   const posSendSummary = useCallback(async () => {
-    if (!posCart.length || !activeChat) return;
+    if (!posCart.length || !activeChat || posSending) return;
+    setPosSending(true);
     const storeName = posStores.find(s => s.id === posStoreId)?.name || '';
     const lines = posCart.map(c =>
       `• ${c.name} x${c.qty} — $${(c.price * c.qty).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
@@ -604,7 +614,8 @@ export default function ChatPage() {
     } catch {
       showToast('Error al enviar resumen', 'error');
     }
-  }, [posCart, posStoreId, posStores, posTotal, activeChat]);
+    setPosSending(false);
+  }, [posCart, posStoreId, posStores, posTotal, activeChat, posSending]);
 
   const posCreateReceipt = useCallback(async () => {
     if (!posCart.length || !posStoreId || posSubmitting) return;
@@ -1244,25 +1255,59 @@ export default function ChatPage() {
           </div>
 
           <div className={styles.posProducts}>
-            {posLoading ? (
+            {posVariantPicker ? (
+              /* ── Vista de variantes ── */
+              <div className={styles.posVariantView}>
+                <button className={styles.posVariantBack} onClick={() => setPosVariantPicker(null)}>
+                  ← Volver
+                </button>
+                <div className={styles.posVariantTitle}>{posVariantPicker.item.item_name}</div>
+                {posVariantPicker.item.variants.map(variant => {
+                  const vLabel = variantName(variant);
+                  let price = variant.default_price || 0;
+                  if (posStoreId && variant.stores) {
+                    const sp = variant.stores.find(s => s.store_id === posStoreId)?.price;
+                    if (sp != null) price = sp;
+                  }
+                  const inCart = posCart.find(c => c.variantId === variant.variant_id);
+                  return (
+                    <div
+                      key={variant.variant_id}
+                      className={`${styles.posVariantOption} ${inCart ? styles.posVariantInCart : ''}`}
+                      onClick={() => posAddItemVariant(posVariantPicker.item, variant)}
+                    >
+                      <span className={styles.posVariantName}>{vLabel || 'Estándar'}</span>
+                      <span className={styles.posVariantPrice}>
+                        ${price.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                      </span>
+                      {inCart && <span className={styles.posVariantQtyBadge}>{inCart.qty}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : posLoading ? (
               <div className={styles.posLoading}>Cargando productos...</div>
             ) : posFiltered.length === 0 ? (
               <div className={styles.posLoading}>{posSearch ? 'Sin resultados' : 'Sin productos'}</div>
             ) : (
               <div className={styles.posGrid}>
                 {posFiltered.map(item => {
-                  const variant = item.variants?.[0];
-                  let price = variant?.default_price || 0;
-                  if (posStoreId && variant?.stores) {
-                    const sp = variant.stores.find(s => s.store_id === posStoreId)?.price;
+                  const hasMulti = item.variants?.length > 1;
+                  const firstVariant = item.variants?.[0];
+                  let price = firstVariant?.default_price || 0;
+                  if (posStoreId && firstVariant?.stores) {
+                    const sp = firstVariant.stores.find(s => s.store_id === posStoreId)?.price;
                     if (sp != null) price = sp;
                   }
-                  const inCart = posCart.find(c => c.itemId === item.id);
+                  const totalInCart = posCart.filter(c => c.itemId === item.id).reduce((s, c) => s + c.qty, 0);
                   return (
                     <div
                       key={item.id}
-                      className={`${styles.posProductCard} ${inCart ? styles.posProductInCart : ''}`}
-                      onClick={() => posAddItem(item)}
+                      className={`${styles.posProductCard} ${totalInCart > 0 ? styles.posProductInCart : ''}`}
+                      onClick={() => hasMulti
+                        ? setPosVariantPicker({ item })
+                        : posAddItemVariant(item, firstVariant)
+                      }
                       title={item.item_name}
                     >
                       {item.image_url ? (
@@ -1274,9 +1319,9 @@ export default function ChatPage() {
                       )}
                       <div className={styles.posProductName}>{item.item_name}</div>
                       <div className={styles.posProductPrice}>
-                        ${price.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                        {hasMulti ? 'Ver variantes' : `$${price.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`}
                       </div>
-                      {inCart && <div className={styles.posProductQtyBadge}>{inCart.qty}</div>}
+                      {totalInCart > 0 && <div className={styles.posProductQtyBadge}>{totalInCart}</div>}
                     </div>
                   );
                 })}
@@ -1323,8 +1368,8 @@ export default function ChatPage() {
                 </span>
               </div>
               <div className={styles.posActionBtns}>
-                <button className={styles.posSendBtn} onClick={posSendSummary} disabled={posSubmitting}>
-                  Enviar cliente
+                <button className={styles.posSendBtn} onClick={posSendSummary} disabled={posSending || posSubmitting}>
+                  {posSending ? 'Enviando...' : 'Enviar cliente'}
                 </button>
                 <button
                   className={styles.posTicketBtn}
