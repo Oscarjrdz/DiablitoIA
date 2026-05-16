@@ -1,12 +1,22 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
+import { createHmac } from 'crypto';
 
-// Didi Food manda un GET para verificar la URL callback cuando la registras
+// Verifica firma HMAC-SHA256 del header Signature-Webhook
+function verifySignature(rawBody, signature, secret) {
+  if (!secret || !signature) return true; // si no hay secret configurado, se acepta
+  try {
+    const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
+    return expected === signature;
+  } catch {
+    return false;
+  }
+}
+
+// GET → verificación de URL al registrarla en el portal Didi
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
-  // Algunos gateways mandan un challenge/token para verificar
   const challenge = searchParams.get('challenge') || searchParams.get('token') || searchParams.get('verify_token');
-  // Loggeamos los query params para saber qué nos mandan en la verificación
   await redis.setex('didi_verify_request', 86400, JSON.stringify({
     ts: Date.now(),
     params: Object.fromEntries(searchParams.entries())
@@ -15,77 +25,95 @@ export async function GET(req) {
   return new Response('OK', { status: 200 });
 }
 
-// Didi Food manda un POST cuando llega un pedido nuevo
+// POST → pedido nuevo desde Didi Food
 export async function POST(req) {
+  const rawBody = await req.text();
+  const ts = Date.now();
+
   try {
-    const rawText = await req.text();
-    const ts = Date.now();
+    // Verificar firma si hay secret configurado
+    const configStr = await redis.get('didi_config');
+    const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
+    const signature = req.headers.get('Signature-Webhook') || req.headers.get('signature-webhook') || '';
 
-    // Guardamos el payload crudo en Redis para inspeccionarlo
-    const logKey = `didi_order_raw_${ts}`;
-    await redis.setex(logKey, 60 * 60 * 24 * 7, rawText); // 7 días
+    if (cfg.webhookSecret && !verifySignature(rawBody, signature, cfg.webhookSecret)) {
+      await redis.setex(`didi_sig_error_${ts}`, 86400, JSON.stringify({ ts, signature, rawBody }));
+      return NextResponse.json({ success: false, error: 'invalid signature' }, { status: 401 });
+    }
 
-    // Mantenemos lista de últimos 50 pedidos recibidos
-    await redis.lpush('didi_orders_log', JSON.stringify({ ts, raw: rawText }));
+    // Guardamos raw en Redis
+    await redis.setex(`didi_order_raw_${ts}`, 86400 * 7, rawBody);
+    await redis.lpush('didi_orders_log', JSON.stringify({ ts, raw: rawBody }));
     await redis.ltrim('didi_orders_log', 0, 49);
 
-    // Intentamos parsear como JSON para extraer info útil
     let body = {};
-    try { body = JSON.parse(rawText); } catch {}
+    try { body = JSON.parse(rawBody); } catch {}
 
-    // Extraemos campos comunes de APIs de delivery (nos adaptamos cuando veamos el formato real)
-    const orderId   = body?.order_id   || body?.orderId   || body?.id        || body?.data?.order_id || '—';
-    const status    = body?.status     || body?.orderStatus || body?.data?.status || '—';
-    const total     = body?.total      || body?.totalAmount || body?.data?.total  || '—';
-    const items     = body?.items      || body?.orderItems  || body?.data?.items  || [];
-    const storeName = body?.store_name || body?.restaurant?.name || body?.data?.store_name || '—';
-    const clientName = body?.customer?.name || body?.user?.name || body?.data?.customer_name || '—';
-    const address   = body?.delivery?.address || body?.address || body?.data?.address || '—';
+    // Campos del payload Didi Food (total en centavos)
+    const orderId     = body?.external_id   || '—';
+    const orderNumber = body?.order_number   || '—';
+    const storeId     = body?.external_store_id || '—';
+    const clientName  = body?.customer       || '—';
+    const totalCents  = body?.total          || 0;
+    const total       = (totalCents / 100).toFixed(2);
+    const discount    = ((body?.discount_value || 0) / 100).toFixed(2);
+    const instructions = body?.instructions  || '';
+    const deliveryId  = body?.delivery_id    || null;
+    const items       = body?.items          || [];
+    const createdAt   = body?.created_at     || new Date().toISOString();
 
-    // Notificamos por WhatsApp al número configurado
-    const configStr = await redis.get('wapp_config');
-    const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
+    // Guardamos el pedido parseado en Redis para la UI
+    const orderData = { ts, orderId, orderNumber, storeId, clientName, total, discount, instructions, deliveryId, items, createdAt, status: 'new' };
+    await redis.setex(`didi_order_${orderId}`, 86400 * 7, JSON.stringify(orderData));
+    await redis.lpush('didi_pending_orders', JSON.stringify(orderData));
+    await redis.ltrim('didi_pending_orders', 0, 99);
 
-    if (cfg.wappInstance && cfg.wappToken && cfg.notifyPhone) {
-      const hora = new Date().toLocaleTimeString('es-MX', {
+    // Notificación WhatsApp
+    const wappStr = await redis.get('wapp_config');
+    const wapp = typeof wappStr === 'string' ? JSON.parse(wappStr) : (wappStr || {});
+
+    if (wapp.wappInstance && wapp.wappToken && wapp.notifyPhone) {
+      const hora = new Date(createdAt).toLocaleTimeString('es-MX', {
         hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Monterrey'
       });
 
-      let itemLines = '';
-      if (Array.isArray(items) && items.length > 0) {
-        itemLines = items.map(it => {
-          const name = it.name || it.item_name || it.product_name || '?';
-          const qty  = it.quantity || it.qty || 1;
-          const price = it.price || it.unit_price || '';
-          return `• ${name} x${qty}${price ? ' — $' + price : ''}`;
-        }).join('\n');
-      } else {
-        itemLines = '(ver detalle en app Didi)';
-      }
+      const itemLines = items.length > 0
+        ? items.map(it => {
+            const mods = (it.modifiers || []).map(m => `   + ${m.name} x${m.quantity}`).join('\n');
+            const lineTotal = ((it.total_value || 0) / 100).toFixed(2);
+            return `• ${it.name} x${it.quantity} — $${lineTotal}${mods ? '\n' + mods : ''}`;
+          }).join('\n')
+        : '(sin detalle)';
 
       const msg =
         `🛵 *Nuevo pedido Didi Food*\n` +
         `━━━━━━━━━━━━━━\n` +
-        `🆔 *Pedido:* ${orderId}\n` +
-        `🏪 *Tienda:* ${storeName}\n` +
+        `🆔 *Pedido:* ${orderNumber}\n` +
+        `🏪 *Tienda ID:* ${storeId}\n` +
         `👤 *Cliente:* ${clientName}\n` +
-        `📍 *Dirección:* ${address}\n` +
         `🕐 *Hora:* ${hora} hrs\n` +
-        `📋 *Estado:* ${status}\n\n` +
-        `📋 *Productos:*\n${itemLines}\n\n` +
-        `💰 *Total: $${total}*\n` +
-        `━━━━━━━━━━━━━━`;
+        (instructions ? `📝 *Notas:* ${instructions}\n` : '') +
+        `\n📋 *Productos:*\n${itemLines}\n\n` +
+        (discount !== '0.00' ? `🏷️ *Descuento:* -$${discount}\n` : '') +
+        `💰 *Total: $${total} MXN*\n` +
+        `━━━━━━━━━━━━━━\n` +
+        `_ID: ${orderId}_`;
 
-      await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/messages/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: cfg.wappToken, to: cfg.notifyPhone, body: msg })
-      }).catch(() => {});
+      await fetch(
+        `https://gatewaywapp-production.up.railway.app/${wapp.wappInstance}/messages/chat`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: wapp.wappToken, to: wapp.notifyPhone, body: msg })
+        }
+      ).catch(() => {});
     }
 
-    return NextResponse.json({ success: true, received: true }, { status: 200 });
+    // Didi espera 200 con cuerpo vacío o mínimo
+    return new Response(null, { status: 200 });
   } catch (e) {
-    // Siempre respondemos 200 para que Didi no marque la URL como inválida
-    return NextResponse.json({ success: true, received: true }, { status: 200 });
+    await redis.setex(`didi_error_${ts}`, 86400, JSON.stringify({ ts, error: e.message, raw: rawBody }));
+    // Siempre 200 para que Didi no reintente
+    return new Response(null, { status: 200 });
   }
 }
