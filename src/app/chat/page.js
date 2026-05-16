@@ -246,6 +246,9 @@ export default function ChatPage() {
     return () => clearInterval(listPollRef.current);
   }, [fetchChats]);
 
+  // Cargar grupos fijados al montar para que el POS los tenga disponibles
+  useEffect(() => { fetchGroups(); }, [fetchGroups]);
+
   // ── Cargar mensajes del chat activo (delta-aware) ──
   const fetchMessages = useCallback(async (phone) => {
     if (!phone) return;
