@@ -57,7 +57,14 @@ export async function POST(req) {
     if (raw.ok) {
       try {
         const sendData = await raw.json();
-        const msgId = sendData?.messageId || sendData?.key?.id || sendData?.data?.key?.id || sendData?.id;
+        const rawId = sendData?.messageId
+          || sendData?.key?.id
+          || sendData?.data?.key?.id
+          || sendData?.response?.key?.id
+          || sendData?.response?.id
+          || sendData?.id
+          || sendData?.msgId;
+        const msgId = typeof rawId === 'object' ? (rawId?._serialized || null) : rawId;
         if (msgId) {
           // Save msgId → phone mapping for ACK tracking (7 days TTL)
           await redis.setex(`chat_msg_${msgId}`, 604800, redisPhone);

@@ -101,31 +101,43 @@ export async function POST(req) {
     }
 
     // ── ACK → palomitas y semáforo de promo ──
-    if (payload.event_type === 'message_ack' || payload.event_type === 'messages.update') {
+    const ACK_EVENTS = ['message_ack', 'messages.update', 'ack', 'message.ack', 'msg_ack'];
+    if (ACK_EVENTS.includes(payload.event_type)) {
+      // Guardar en debug log (últimos 30)
+      await redis.lpush('debug_ack_log', JSON.stringify({ ts: Date.now(), event_type: payload.event_type, data: payload.data }));
+      await redis.ltrim('debug_ack_log', 0, 29);
+
       const msgData = payload.data || {};
-      const msgKey = msgData.key || (Array.isArray(msgData) ? msgData[0]?.key : null);
-      if (msgKey?.id) {
-        const statusId = msgData.update?.status ?? (Array.isArray(msgData) ? msgData[0]?.update?.status : null);
+      const dataArr = Array.isArray(msgData) ? msgData : [msgData];
 
-        // Mapa de status numérico → string
+      for (const item of dataArr) {
+        // ── Extraer msgId (múltiples formatos de gateway) ──
+        const rawId = item?.key?.id || item?.id?._serialized || item?.id || item?.msgId || null;
+        const msgId = typeof rawId === 'object' ? (rawId?._serialized || null) : rawId;
+
+        // ── Extraer statusId (múltiples formatos) ──
+        const statusId = item?.update?.status ?? item?.ack ?? item?.status ?? null;
+
+        if (!msgId || statusId === null) continue;
+
+        const STATUS_ORDER = { sent: 1, delivered: 2, read: 3 };
         let newStatus = null;
-        if ([1, 2, 'SERVER_ACK'].includes(statusId)) newStatus = 'sent';
+        if ([0, 1, 2, 'SERVER_ACK', 'PENDING'].includes(statusId)) newStatus = 'sent';
         if ([3, 'DELIVERY_ACK', 'DELIVERED'].includes(statusId)) newStatus = 'delivered';
-        if ([4, 'READ', 'READ_ACK'].includes(statusId)) newStatus = 'read';
+        if ([4, 5, 'READ', 'READ_ACK', 'PLAYED'].includes(statusId)) newStatus = 'read';
 
-        // Actualizar estado en historial del chat
+        // ── Actualizar historial ──
         if (newStatus) {
-          const chatPhone = await redis.get(`chat_msg_${msgKey.id}`);
+          const chatPhone = await redis.get(`chat_msg_${msgId}`);
           if (chatPhone) {
             const hKey = `chat_hist_${chatPhone}@c.us`;
             try {
               const hData = await redis.get(hKey);
               if (hData) {
                 const hist = typeof hData === 'string' ? JSON.parse(hData) : hData;
-                const STATUS_ORDER = { sent: 1, delivered: 2, read: 3 };
                 for (let i = hist.length - 1; i >= 0; i--) {
                   const p = hist[i].parts?.[0];
-                  if (p?.msgId === msgKey.id) {
+                  if (p?.msgId === msgId) {
                     if ((STATUS_ORDER[newStatus] || 0) > (STATUS_ORDER[p.status] || 0)) {
                       p.status = newStatus;
                     }
@@ -139,9 +151,9 @@ export async function POST(req) {
           }
         }
 
-        // Semáforo de promo (lógica existente)
-        if ([3, 4, 'READ'].includes(statusId)) {
-          const phone = await redis.get(`promo_msg_${msgKey.id}`);
+        // Semáforo de promo
+        if ([3, 4, 5, 'READ', 'PLAYED'].includes(statusId)) {
+          const phone = await redis.get(`promo_msg_${msgId}`);
           if (phone) await redis.set(`promo_pos_${phone}`, 'verde');
         }
       }
