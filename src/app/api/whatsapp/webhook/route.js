@@ -1155,7 +1155,7 @@ export async function POST(req) {
                 botReply = `Ok 👍 Entonces dime, ¿en qué te puedo ayudar?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
             } else {
                 // Sí o cualquier otra cosa → enviar imagen del menú
-                const menuImageUrl = 'https://global-sales-prediction.vercel.app/menu-bot.jpg';
+                const menuImageUrl = 'https://global-sales-prediction.vercel.app/menu-mayo-2025.jpg';
                 const menuCaption = '🍔🌶️ ¡Aquí tienes nuestro menú *El Diablito*! 😈\n\n¿Se te antoja algo?\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃';
                 try {
                     await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/messages/image`, {
