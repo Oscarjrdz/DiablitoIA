@@ -136,6 +136,9 @@ export default function ChatPage() {
   const [posSubmitting, setPosSubmitting] = useState(false);
   const [posSending, setPosSending] = useState(false);
   const [posVariantPicker, setPosVariantPicker] = useState(null); // null | { item }
+  const [posGroupPickerOpen, setPosGroupPickerOpen] = useState(false);
+  const [posSelectedGroups, setPosSelectedGroups] = useState([]);
+  const [posSendingToGroups, setPosSendingToGroups] = useState(false);
 
   // New chat
   const [showNewChat, setShowNewChat] = useState(false);
@@ -646,6 +649,45 @@ export default function ChatPage() {
     }
     setPosSubmitting(false);
   }, [posCart, posStoreId, posPayTypeId, posTotal, posSubmitting, clientCard]);
+
+  const posSendToGroups = useCallback(async () => {
+    if (!posSelectedGroups.length || posSendingToGroups) return;
+    setPosSendingToGroups(true);
+    const clientName = clientCard?.client?.name || activeChat?.name || 'Cliente';
+    const clientPhone = (activeChat?.phone || '').replace(/^52/, '').replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3');
+    const storeName = posStores.find(s => s.id === posStoreId)?.name || '';
+    const paymentName = posPayTypes.find(pt => pt.id === posPayTypeId)?.name || '';
+    const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Monterrey' });
+    const lines = posCart.map(c =>
+      `• ${c.name} x${c.qty} — $${(c.price * c.qty).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+    ).join('\n');
+    const text =
+      `📦 *Pedido por WhatsApp*\n` +
+      `━━━━━━━━━━━━━━\n` +
+      `👤 *Cliente:* ${clientName}\n` +
+      `📱 *Tel:* ${clientPhone}\n` +
+      `🕐 *Hora:* ${hora} hrs\n` +
+      (storeName ? `🏪 *Sucursal:* ${storeName}\n` : '') +
+      `\n📋 *Pedido:*\n${lines}\n\n` +
+      (paymentName ? `💳 *Pago:* ${paymentName}\n` : '') +
+      `💰 *Total: $${posTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}*\n` +
+      `━━━━━━━━━━━━━━`;
+    try {
+      await Promise.all(posSelectedGroups.map(groupId =>
+        fetch('/api/whatsapp/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: groupId, text })
+        })
+      ));
+      showToast(`Pedido enviado a ${posSelectedGroups.length} sucursal(es) ✅`, 'success');
+      setPosGroupPickerOpen(false);
+      setPosSelectedGroups([]);
+    } catch {
+      showToast('Error al enviar a sucursales', 'error');
+    }
+    setPosSendingToGroups(false);
+  }, [posSelectedGroups, posCart, posStoreId, posStores, posPayTypeId, posPayTypes, posTotal, clientCard, activeChat, posSendingToGroups]);
 
   // ── Lista de sucursales únicas (de los chats cargados) ──
   const stores = [...new Set(chats.map(c => c.store).filter(Boolean))].sort();
@@ -1369,6 +1411,50 @@ export default function ChatPage() {
                   ${posTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                 </span>
               </div>
+
+              {/* ── Mandar pedido a sucursal ── */}
+              <button
+                className={styles.posSucursalBtn}
+                onClick={() => { setPosGroupPickerOpen(v => !v); setPosSelectedGroups([]); }}
+              >
+                📦 {posGroupPickerOpen ? 'Cancelar envío a sucursal' : 'Mandar pedido a sucursal'}
+              </button>
+
+              {posGroupPickerOpen && (
+                <div className={styles.posGroupPicker}>
+                  <div className={styles.posGroupPickerTitle}>Seleccionar sucursal(es)</div>
+                  {pinnedGroupsData.length === 0 ? (
+                    <div className={styles.posGroupPickerEmpty}>No hay grupos fijados. Fija grupos desde el panel de chats.</div>
+                  ) : (
+                    pinnedGroupsData.map(g => (
+                      <label key={g.id} className={styles.posGroupOption}>
+                        <input
+                          type="checkbox"
+                          className={styles.posGroupCheck}
+                          checked={posSelectedGroups.includes(g.id)}
+                          onChange={e => {
+                            if (e.target.checked) setPosSelectedGroups(prev => [...prev, g.id]);
+                            else setPosSelectedGroups(prev => prev.filter(id => id !== g.id));
+                          }}
+                        />
+                        <span>{g.name}</span>
+                      </label>
+                    ))
+                  )}
+                  {pinnedGroupsData.length > 0 && (
+                    <button
+                      className={styles.posGroupSendBtn}
+                      disabled={!posSelectedGroups.length || posSendingToGroups}
+                      onClick={posSendToGroups}
+                    >
+                      {posSendingToGroups
+                        ? 'Enviando...'
+                        : `Enviar a ${posSelectedGroups.length || '―'} sucursal${posSelectedGroups.length !== 1 ? 'es' : ''}`}
+                    </button>
+                  )}
+                </div>
+              )}
+
               {clientCard?.client?.customerId ? (
                 <div className={styles.posClientBadge}>
                   👤 {clientCard.client.name || activeChat.name}
