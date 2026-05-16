@@ -46,7 +46,7 @@ export async function GET() {
 
 export async function POST(req) {
   try {
-    const { store_id, line_items, payment_type_id, total } = await req.json();
+    const { store_id, line_items, payment_type_id, total, customer_id } = await req.json();
     if (!store_id || !line_items?.length) {
       return NextResponse.json({ success: false, error: 'Faltan campos requeridos' }, { status: 400 });
     }
@@ -66,6 +66,7 @@ export async function POST(req) {
 
     const receipt = {
       store_id,
+      ...(customer_id ? { customer_id } : {}),
       receipt_date: new Date().toISOString(),
       line_items: line_items.map(item => ({
         item_id: item.item_id,

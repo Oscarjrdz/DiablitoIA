@@ -621,6 +621,7 @@ export default function ChatPage() {
     if (!posCart.length || !posStoreId || posSubmitting) return;
     setPosSubmitting(true);
     try {
+      const customerId = clientCard?.client?.customerId || null;
       const res = await fetch('/api/loyverse/pos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -628,7 +629,8 @@ export default function ChatPage() {
           store_id: posStoreId,
           line_items: posCart.map(c => ({ item_id: c.itemId, variant_id: c.variantId, quantity: c.qty, price: c.price })),
           payment_type_id: posPayTypeId,
-          total: posTotal
+          total: posTotal,
+          ...(customerId ? { customer_id: customerId } : {})
         })
       });
       const data = await res.json();
@@ -643,7 +645,7 @@ export default function ChatPage() {
       showToast('Error de conexión', 'error');
     }
     setPosSubmitting(false);
-  }, [posCart, posStoreId, posPayTypeId, posTotal, posSubmitting]);
+  }, [posCart, posStoreId, posPayTypeId, posTotal, posSubmitting, clientCard]);
 
   // ── Lista de sucursales únicas (de los chats cargados) ──
   const stores = [...new Set(chats.map(c => c.store).filter(Boolean))].sort();
@@ -1367,6 +1369,13 @@ export default function ChatPage() {
                   ${posTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                 </span>
               </div>
+              {clientCard?.client?.customerId ? (
+                <div className={styles.posClientBadge}>
+                  👤 {clientCard.client.name || activeChat.name}
+                </div>
+              ) : (
+                <div className={styles.posClientBadgeNone}>Sin cliente Loyverse vinculado</div>
+              )}
               <div className={styles.posActionBtns}>
                 <button className={styles.posSendBtn} onClick={posSendSummary} disabled={posSending || posSubmitting}>
                   {posSending ? 'Enviando...' : 'Enviar cliente'}

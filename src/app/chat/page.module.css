@@ -2032,6 +2032,28 @@ select.infoEditInput option { background: #1a2730; color: #e9edef; }
   flex-shrink: 0;
 }
 
+/* ── Badge cliente en footer POS ── */
+.posClientBadge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #00a884;
+  background: rgba(0, 168, 132, 0.1);
+  border: 1px solid rgba(0, 168, 132, 0.25);
+  border-radius: 8px;
+  padding: 4px 8px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.posClientBadgeNone {
+  font-size: 10.5px;
+  color: #525d65;
+  text-align: center;
+  font-style: italic;
+}
+
 .posVariantQtyBadge {
   background: #00a884;
   color: #111b21;
