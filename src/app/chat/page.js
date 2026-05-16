@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styles from './page.module.css';
-import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, Check, Plus, Phone, User } from 'lucide-react';
+import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, Check, Plus, Phone, User, Users } from 'lucide-react';
 
 // ── Avatar con iniciales y color consistente ──
 const AVATAR_COLORS = [
@@ -124,6 +124,13 @@ export default function ChatPage() {
   const [newName, setNewName] = useState('');
   const [creatingChat, setCreatingChat] = useState(false);
 
+  // Groups management
+  const [showGroupsModal, setShowGroupsModal] = useState(false);
+  const [gatewayGroups, setGatewayGroups] = useState([]);
+  const [pinnedGroupIds, setPinnedGroupIds] = useState([]);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [pinningGroup, setPinningGroup] = useState(null);
+
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -140,6 +147,45 @@ export default function ChatPage() {
   const picLoadingRef = useRef(0);
 
   useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
+
+  // ── Fetch groups from gateway ──
+  const fetchGroups = useCallback(async () => {
+    setLoadingGroups(true);
+    try {
+      const res = await fetch('/api/whatsapp/groups');
+      const data = await res.json();
+      if (data.success) {
+        setGatewayGroups(data.groups || []);
+        setPinnedGroupIds((data.pinned || []).map(g => g.id));
+      }
+    } catch {}
+    setLoadingGroups(false);
+  }, []);
+
+  const togglePinGroup = useCallback(async (group) => {
+    const isPinned = pinnedGroupIds.includes(group.id);
+    setPinningGroup(group.id);
+    try {
+      if (isPinned) {
+        await fetch(`/api/whatsapp/groups?groupId=${encodeURIComponent(group.id)}`, { method: 'DELETE' });
+        setPinnedGroupIds(prev => prev.filter(id => id !== group.id));
+        showToast(`${group.name} desfijado`, 'success');
+      } else {
+        await fetch('/api/whatsapp/groups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ groupId: group.id, groupName: group.name })
+        });
+        setPinnedGroupIds(prev => [...prev, group.id]);
+        showToast(`${group.name} fijado ✅`, 'success');
+      }
+      // Refresh chat list
+      fetchChats();
+    } catch {
+      showToast('Error al actualizar grupo', 'error');
+    }
+    setPinningGroup(null);
+  }, [pinnedGroupIds, fetchChats]);
 
   // ── Cargar lista de chats ──
   const fetchChats = useCallback(async () => {
@@ -497,6 +543,13 @@ export default function ChatPage() {
           <Avatar name="El Diablito" size={40} />
           <span className={styles.leftTitle}>Chats</span>
           <div className={styles.headerIconsLeft}>
+            <button
+              className={styles.groupsBtn}
+              title="Gestionar Grupos"
+              onClick={() => { setShowGroupsModal(true); fetchGroups(); }}
+            >
+              <Users size={20} />
+            </button>
             <MoreVertical size={20} />
           </div>
         </div>
@@ -1051,6 +1104,64 @@ export default function ChatPage() {
               >
                 {deletingChat ? 'Eliminando...' : 'Sí, eliminar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Gestionar Grupos ── */}
+      {showGroupsModal && (
+        <div className={styles.deleteOverlay} onClick={() => setShowGroupsModal(false)}>
+          <div className={styles.groupsModal} onClick={e => e.stopPropagation()}>
+            <div className={styles.groupsModalHeader}>
+              <h3 className={styles.groupsModalTitle}>
+                <Users size={20} /> Grupos de WhatsApp
+              </h3>
+              <button
+                className={styles.groupsModalClose}
+                onClick={() => setShowGroupsModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p className={styles.groupsModalSub}>
+              Fija los grupos que quieres ver en tu panel de chats
+            </p>
+            <div className={styles.groupsList}>
+              {loadingGroups && (
+                <p className={styles.groupsLoading}>Cargando grupos...</p>
+              )}
+              {!loadingGroups && gatewayGroups.length === 0 && (
+                <p className={styles.groupsLoading}>No se encontraron grupos</p>
+              )}
+              {gatewayGroups.map(g => {
+                const isPinned = pinnedGroupIds.includes(g.id);
+                return (
+                  <div key={g.id} className={`${styles.groupItem} ${isPinned ? styles.groupItemPinned : ''}`}>
+                    <div className={styles.groupInfo}>
+                      <div className={styles.groupAvatar}>
+                        {g.picture
+                          ? <img src={g.picture} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
+                          : <Avatar name={g.name} size={40} />
+                        }
+                      </div>
+                      <div className={styles.groupText}>
+                        <span className={styles.groupName}>{g.name}</span>
+                        <span className={styles.groupParticipants}>
+                          {g.participants ? `${g.participants} participantes` : g.id}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      className={`${styles.pinBtn} ${isPinned ? styles.pinBtnActive : ''}`}
+                      onClick={() => togglePinGroup(g)}
+                      disabled={pinningGroup === g.id}
+                    >
+                      {pinningGroup === g.id ? '...' : isPinned ? '📌 Fijado' : 'Fijar'}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

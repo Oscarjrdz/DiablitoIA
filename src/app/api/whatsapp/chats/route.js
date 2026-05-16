@@ -7,17 +7,31 @@ export async function GET() {
     let fetchKeys = Array.from(new Set(keysRaw || []));
     let phones = fetchKeys.map(k => k.replace('chat_hist_', '').replace('@c.us', ''));
 
-    // ── 📌 Inyectar Grupo Pinned ──
-    const grupoId = await redis.get('ventas_grupo_id');
-    let gPhoneIndex = -1;
-    if (grupoId && grupoId.includes('@g.us')) {
-      const gCleanPhone = '52' + grupoId.replace(/\D/g, '').slice(-10);
-      gPhoneIndex = phones.indexOf(gCleanPhone);
+    // ── 📌 Inyectar TODOS los Grupos Pinned ──
+    const pinnedRaw = await redis.get('pinned_groups');
+    const pinnedGroups = pinnedRaw ? (typeof pinnedRaw === 'string' ? JSON.parse(pinnedRaw) : pinnedRaw) : [];
+
+    // Legacy: also check ventas_grupo_id
+    const legacyGrupoId = await redis.get('ventas_grupo_id');
+    
+    // Build unified set of pinned group IDs
+    const allPinnedMap = {};
+    for (const pg of pinnedGroups) {
+      allPinnedMap[pg.id] = pg.name || 'Grupo';
+    }
+    if (legacyGrupoId && legacyGrupoId.includes('@g.us') && !allPinnedMap[legacyGrupoId]) {
+      allPinnedMap[legacyGrupoId] = 'Grupo Ventas';
+    }
+
+    // Inject each pinned group into the phones/fetchKeys arrays
+    for (const [gId, gName] of Object.entries(allPinnedMap)) {
+      const gCleanPhone = '52' + gId.replace(/\D/g, '').slice(-10);
+      const gPhoneIndex = phones.indexOf(gCleanPhone);
       if (gPhoneIndex !== -1) {
-        // Reemplazar el "phone" por el JID real para que el frontend pueda responderle
-        phones[gPhoneIndex] = grupoId; 
+        // Replace the "phone" with the JID so frontend can respond
+        phones[gPhoneIndex] = gId;
       } else {
-        phones.push(grupoId);
+        phones.push(gId);
         fetchKeys.push(`chat_hist_${gCleanPhone}@c.us`);
       }
     }
@@ -59,8 +73,8 @@ export async function GET() {
 
         let name = cachedName || phone.slice(-10);
         let isGroup = false;
-        if (phone === grupoId) {
-          name = '📌 Grupo Ventas';
+        if (allPinnedMap[phone]) {
+          name = `📌 ${allPinnedMap[phone]}`;
           isGroup = true;
         }
 
@@ -79,7 +93,7 @@ export async function GET() {
           isGroup
         };
       } catch {
-        return { phone, name: phone === grupoId ? '📌 Grupo Ventas' : phone.slice(-10), lastText: '', lastTs: 0, fromMe: false, unread: 0, msgCount: 0, store: '', needsHuman: false, deliveryMode: false, botSilent: false, isGroup: phone === grupoId };
+        return { phone, name: allPinnedMap[phone] ? `📌 ${allPinnedMap[phone]}` : phone.slice(-10), lastText: '', lastTs: 0, fromMe: false, unread: 0, msgCount: 0, store: '', needsHuman: false, deliveryMode: false, botSilent: false, isGroup: !!allPinnedMap[phone] };
       }
     });
 
