@@ -907,22 +907,32 @@ export default function ChatPage() {
                     return;
                   }
                   setCreatingChat(true);
+                  let loyverseOk = newPhoneLoyverse?.found; // ya existía
                   if (!newPhoneLoyverse?.found) {
                     // No existe en Loyverse → crear cliente automáticamente
                     try {
-                      await fetch('/api/loyverse/client-card', {
+                      const loyRes = await fetch('/api/loyverse/client-card', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ name: newName.trim(), phone: newPhone.slice(-10) })
                       });
-                    } catch {}
+                      const loyData = await loyRes.json();
+                      loyverseOk = loyRes.ok && loyData.success;
+                      if (!loyverseOk) {
+                        console.error('[crear cliente]', loyData);
+                        showToast(`Error Loyverse: ${loyData.error?.errors?.[0]?.message || JSON.stringify(loyData.error) || 'Error desconocido'}`, 'error');
+                      }
+                    } catch (e) {
+                      console.error('[crear cliente]', e);
+                      showToast('Error de conexión al crear cliente', 'error');
+                    }
                   }
                   await fetch('/api/whatsapp/create-chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: cleanPhone, name: newName.trim() }) });
                   const newChat = { phone: cleanPhone, name: newName.trim() || newPhone.slice(-10), lastText: '', lastTs: Date.now(), fromMe: false, unread: 0, msgCount: 0, store: '', needsHuman: false };
                   setChats(prev => [newChat, ...prev]);
                   openChat(newChat);
                   setShowNewChat(false); setNewPhone(''); setNewName(''); setNewPhoneLoyverse(null);
-                  showToast(newPhoneLoyverse?.found ? 'Chat creado ✅' : 'Chat creado y cliente registrado en Loyverse ✅');
+                  if (loyverseOk) showToast(newPhoneLoyverse?.found ? 'Chat creado ✅' : 'Chat creado y cliente registrado en Loyverse ✅');
                   setCreatingChat(false);
                 }}
               >
