@@ -194,6 +194,36 @@ export async function GET(req) {
 }
 
 // Actualiza dirección o sucursal en Loyverse + Redis
+export async function POST(req) {
+  try {
+    const { name, phone } = await req.json();
+    if (!name || !phone) return NextResponse.json({ success: false, error: 'name y phone requeridos' }, { status: 400 });
+
+    const loyverseToken = await redis.get('loyverse_token');
+    if (!loyverseToken) return NextResponse.json({ success: false, error: 'No token' }, { status: 500 });
+
+    const phone10 = phone.replace(/\D/g, '').slice(-10);
+    const cleanPhone = '52' + phone10;
+
+    const res = await fetch(`${BASE}/customers`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${loyverseToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim(), phone_number: phone10, note: 'Registrado desde Chat Web' })
+    });
+
+    const data = await res.json();
+    if (!res.ok) return NextResponse.json({ success: false, error: data }, { status: res.status });
+
+    // Cachear en Redis
+    await redis.set(`client_name_${cleanPhone}`, name.trim());
+    await redis.set(`client_registered_${cleanPhone}`, '1');
+
+    return NextResponse.json({ success: true, customer: data });
+  } catch (e) {
+    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+  }
+}
+
 export async function PATCH(req) {
   try {
     const { id, name, address, note, _storeRedis, _phone } = await req.json();

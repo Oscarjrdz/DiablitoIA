@@ -149,6 +149,9 @@ export default function ChatPage() {
   const [newPhone, setNewPhone] = useState('');
   const [newName, setNewName] = useState('');
   const [creatingChat, setCreatingChat] = useState(false);
+  const [newPhoneLoyverse, setNewPhoneLoyverse] = useState(null); // null | { found, name, id, points }
+  const [newPhoneSearching, setNewPhoneSearching] = useState(false);
+  const [showLoyverseConfirm, setShowLoyverseConfirm] = useState(false);
 
   // Groups management
   const [showGroupsModal, setShowGroupsModal] = useState(false);
@@ -815,7 +818,11 @@ export default function ChatPage() {
         <div className={styles.newChatSection}>
           <button
             className={`${styles.newChatToggle} ${showNewChat ? styles.newChatToggleActive : ''}`}
-            onClick={() => setShowNewChat(!showNewChat)}
+            onClick={() => {
+              setShowNewChat(!showNewChat);
+              setNewPhone(''); setNewName('');
+              setNewPhoneLoyverse(null); setShowLoyverseConfirm(false);
+            }}
           >
             <Plus size={16} />
             <span>Agregar Chat</span>
@@ -824,75 +831,152 @@ export default function ChatPage() {
 
           {showNewChat && (
             <div className={styles.newChatForm}>
+              {/* Teléfono */}
               <div className={styles.newChatInputRow}>
                 <Phone size={16} color="#8696a0" />
                 <input
                   className={styles.newChatInput}
                   placeholder="Número WhatsApp (ej: 8112345678)"
                   value={newPhone}
-                  onChange={e => setNewPhone(e.target.value.replace(/\D/g, ''))}
+                  onChange={async e => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    setNewPhone(val);
+                    setNewPhoneLoyverse(null);
+                    setShowLoyverseConfirm(false);
+                    if (val.length === 10) {
+                      setNewPhoneSearching(true);
+                      try {
+                        const res = await fetch(`/api/loyverse/client-card?phone=52${val}`);
+                        const data = await res.json();
+                        if (data.success && data.client?.name) {
+                          setNewPhoneLoyverse({ found: true, name: data.client.name, id: data.client.customerId, points: data.client.points });
+                          setNewName(data.client.name);
+                        } else {
+                          setNewPhoneLoyverse({ found: false });
+                          setNewName('');
+                        }
+                      } catch {
+                        setNewPhoneLoyverse({ found: false });
+                      }
+                      setNewPhoneSearching(false);
+                    }
+                  }}
                   maxLength={10}
                 />
+                {newPhoneSearching && <span style={{ fontSize: 11, color: '#8696a0', flexShrink: 0 }}>Buscando...</span>}
               </div>
-              <div className={styles.newChatInputRow}>
-                <User size={16} color="#8696a0" />
-                <input
-                  className={styles.newChatInput}
-                  placeholder="Nombre del contacto"
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                />
-              </div>
-              <button
-                className={styles.newChatBtn}
-                disabled={creatingChat || newPhone.length < 10}
-                onClick={async () => {
-                  setCreatingChat(true);
-                  try {
+
+              {/* Badge resultado Loyverse */}
+              {newPhoneLoyverse && (
+                <div style={{
+                  fontSize: 11, fontWeight: 600, padding: '5px 10px', borderRadius: 8,
+                  background: newPhoneLoyverse.found ? 'rgba(0,168,132,0.12)' : 'rgba(245,158,11,0.12)',
+                  color: newPhoneLoyverse.found ? '#00a884' : '#f59e0b',
+                  border: `1px solid ${newPhoneLoyverse.found ? 'rgba(0,168,132,0.3)' : 'rgba(245,158,11,0.3)'}`,
+                }}>
+                  {newPhoneLoyverse.found
+                    ? `✅ Cliente en Loyverse: ${newPhoneLoyverse.name} · ${newPhoneLoyverse.points ?? 0} pts`
+                    : '⚠️ No encontrado en Loyverse'}
+                </div>
+              )}
+
+              {/* Nombre — solo editable si no está en Loyverse */}
+              {newPhoneLoyverse?.found === false && (
+                <div className={styles.newChatInputRow}>
+                  <User size={16} color="#8696a0" />
+                  <input
+                    className={styles.newChatInput}
+                    placeholder="Nombre del contacto"
+                    value={newName}
+                    onChange={e => setNewName(e.target.value)}
+                  />
+                </div>
+              )}
+
+              {/* Confirmación crear en Loyverse */}
+              {showLoyverseConfirm && (
+                <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 10, padding: '10px 12px', fontSize: 12 }}>
+                  <div style={{ color: '#f59e0b', fontWeight: 600, marginBottom: 8 }}>
+                    ¿Crear este número como cliente nuevo en Loyverse?
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      style={{ flex: 1, background: '#00a884', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 0', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                      onClick={async () => {
+                        setShowLoyverseConfirm(false);
+                        setCreatingChat(true);
+                        const cleanPhone = '52' + newPhone.slice(-10);
+                        // Crear cliente en Loyverse
+                        try {
+                          await fetch('/api/loyverse/client-card', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: newName.trim(), phone: newPhone.slice(-10) })
+                          });
+                        } catch {}
+                        // Crear chat
+                        await fetch('/api/whatsapp/create-chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: cleanPhone, name: newName.trim() }) });
+                        const newChat = { phone: cleanPhone, name: newName.trim() || newPhone.slice(-10), lastText: '', lastTs: Date.now(), fromMe: false, unread: 0, msgCount: 0, store: '', needsHuman: false };
+                        setChats(prev => [newChat, ...prev]);
+                        openChat(newChat);
+                        setShowNewChat(false); setNewPhone(''); setNewName(''); setNewPhoneLoyverse(null); setShowLoyverseConfirm(false);
+                        showToast('Chat creado y cliente registrado en Loyverse ✅');
+                        setCreatingChat(false);
+                      }}
+                    >Sí, crear cliente</button>
+                    <button
+                      style={{ flex: 1, background: '#2a3942', color: '#e9edef', border: 'none', borderRadius: 8, padding: '7px 0', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                      onClick={async () => {
+                        setShowLoyverseConfirm(false);
+                        setCreatingChat(true);
+                        const cleanPhone = '52' + newPhone.slice(-10);
+                        await fetch('/api/whatsapp/create-chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: cleanPhone, name: newName.trim() }) });
+                        const newChat = { phone: cleanPhone, name: newName.trim() || newPhone.slice(-10), lastText: '', lastTs: Date.now(), fromMe: false, unread: 0, msgCount: 0, store: '', needsHuman: false };
+                        setChats(prev => [newChat, ...prev]);
+                        openChat(newChat);
+                        setShowNewChat(false); setNewPhone(''); setNewName(''); setNewPhoneLoyverse(null); setShowLoyverseConfirm(false);
+                        showToast('Chat creado');
+                        setCreatingChat(false);
+                      }}
+                    >Solo crear chat</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Botón principal */}
+              {!showLoyverseConfirm && (
+                <button
+                  className={styles.newChatBtn}
+                  disabled={creatingChat || newPhone.length < 10 || newPhoneSearching || (!newPhoneLoyverse)}
+                  onClick={async () => {
                     const cleanPhone = '52' + newPhone.slice(-10);
-                    // Check if chat already exists
                     const existing = chats.find(c => c.phone === cleanPhone);
                     if (existing) {
                       openChat(existing);
-                      setShowNewChat(false);
-                      setNewPhone('');
-                      setNewName('');
+                      setShowNewChat(false); setNewPhone(''); setNewName(''); setNewPhoneLoyverse(null);
                       showToast('Chat ya existe, abriendo...');
-                      setCreatingChat(false);
                       return;
                     }
-                    // Create in Redis
-                    await fetch('/api/whatsapp/create-chat', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ phone: cleanPhone, name: newName.trim() })
-                    });
-                    const newChat = {
-                      phone: cleanPhone,
-                      name: newName.trim() || newPhone.slice(-10),
-                      lastText: '',
-                      lastTs: Date.now(),
-                      fromMe: false,
-                      unread: 0,
-                      msgCount: 0,
-                      store: '',
-                      needsHuman: false
-                    };
-                    setChats(prev => [newChat, ...prev]);
-                    openChat(newChat);
-                    setShowNewChat(false);
-                    setNewPhone('');
-                    setNewName('');
-                    showToast('Chat creado');
-                  } catch {
-                    showToast('Error al crear chat', 'error');
-                  }
-                  setCreatingChat(false);
-                }}
-              >
-                <Plus size={16} />
-                {creatingChat ? 'Creando...' : 'Crear Chat'}
-              </button>
+                    if (newPhoneLoyverse?.found) {
+                      // Ya existe en Loyverse → crear chat directo
+                      setCreatingChat(true);
+                      await fetch('/api/whatsapp/create-chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: cleanPhone, name: newName.trim() }) });
+                      const newChat = { phone: cleanPhone, name: newName.trim(), lastText: '', lastTs: Date.now(), fromMe: false, unread: 0, msgCount: 0, store: '', needsHuman: false };
+                      setChats(prev => [newChat, ...prev]);
+                      openChat(newChat);
+                      setShowNewChat(false); setNewPhone(''); setNewName(''); setNewPhoneLoyverse(null);
+                      showToast('Chat creado ✅');
+                      setCreatingChat(false);
+                    } else {
+                      // No existe en Loyverse → mostrar confirmación
+                      setShowLoyverseConfirm(true);
+                    }
+                  }}
+                >
+                  <Plus size={16} />
+                  {creatingChat ? 'Creando...' : newPhoneLoyverse?.found ? 'Abrir Chat' : 'Crear Chat'}
+                </button>
+              )}
             </div>
           )}
         </div>
