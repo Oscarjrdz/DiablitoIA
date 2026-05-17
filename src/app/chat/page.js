@@ -199,10 +199,21 @@ export default function ChatPage() {
       const res = await fetch('/api/whatsapp/chats');
       const data = await res.json();
       if (data.success) {
-        setChats(data.chats || []);
+        // Merge con estado local: si localmente el chat está en unread=0 y el servidor
+        // confirma needsHuman=false (human_read activo en Redis), preservamos el 0
+        // para evitar que una respuesta en vuelo sobreescriba un clear reciente.
+        setChats(prev => {
+          const prevMap = new Map(prev.map(c => [c.phone, c]));
+          return (data.chats || []).map(c => {
+            const local = prevMap.get(c.phone);
+            if (local && local.unread === 0 && c.unread > 0 && !c.needsHuman) {
+              return { ...c, unread: 0 };
+            }
+            return c;
+          });
+        });
         failCountRef.current = 0;
         setIsOffline(false);
-        // Queue profile pics (max 3 concurrent)
         const toLoad = (data.chats || []).slice(0, 20);
         toLoad.forEach(c => queueProfilePic(c.phone));
       }
