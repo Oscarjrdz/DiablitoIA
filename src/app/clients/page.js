@@ -26,6 +26,7 @@ export default function ClientsPage() {
   const [welcomeStatus, setWelcomeStatus] = useState({});
   const [selectedPromo, setSelectedPromo] = useState({});
   const [openDropdown, setOpenDropdown] = useState(null);
+  const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -108,6 +109,11 @@ export default function ClientsPage() {
     setCurrentPage(1);
   };
 
+  const handleSearch = (e) => {
+    setSearch(e.target.value);
+    setCurrentPage(1);
+  };
+
   const getSortIndicator = (key) => {
     if (sortKey !== key) return ' ↕';
     return sortDir === 'asc' ? ' ▲' : ' ▼';
@@ -165,8 +171,24 @@ export default function ClientsPage() {
     });
   }, [clients, sortKey, sortDir]);
 
-  const totalPages = Math.ceil(sortedClients.length / PAGE_SIZE);
-  const pagedClients = sortedClients.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const filteredClients = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return sortedClients;
+    return sortedClients.filter(c => {
+      const phone = (c.phone_number || '').replace(/\D/g, '');
+      return (
+        (c.name || '').toLowerCase().includes(q) ||
+        phone.includes(q.replace(/\D/g, '')) ||
+        (c.tienda || '').toLowerCase().includes(q) ||
+        (c.address || '').toLowerCase().includes(q) ||
+        (c.city || '').toLowerCase().includes(q) ||
+        (c.email || '').toLowerCase().includes(q)
+      );
+    });
+  }, [sortedClients, search]);
+
+  const totalPages = Math.ceil(filteredClients.length / PAGE_SIZE);
+  const pagedClients = filteredClients.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -370,7 +392,20 @@ export default function ClientsPage() {
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <h1>Clientes ({clients.length})</h1>
+        <h1>Clientes ({search ? `${filteredClients.length} de ${clients.length}` : clients.length})</h1>
+        <div className={styles.searchBox}>
+          <span className={styles.searchIcon}>🔍</span>
+          <input
+            className={styles.searchInput}
+            type="text"
+            placeholder="Buscar por nombre, teléfono, sucursal, dirección…"
+            value={search}
+            onChange={handleSearch}
+          />
+          {search && (
+            <button className={styles.searchClear} onClick={() => { setSearch(''); setCurrentPage(1); }}>✕</button>
+          )}
+        </div>
         <button className={styles.createBtn} onClick={openCreateModal}>
           Crear Cliente
         </button>
