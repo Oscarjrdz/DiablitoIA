@@ -5,6 +5,11 @@ const BASE = 'https://api.loyverse.com/v1.0';
 
 // Busca TODOS los registros en Loyverse que coincidan con ese teléfono.
 // Un cliente puede tener dos registros: uno de tienda y uno de WhatsApp.
+function phoneMatches(customerPhone, phone10) {
+  const stripped = (customerPhone || '').replace(/\D/g, '');
+  return stripped === phone10 || stripped === '52' + phone10;
+}
+
 async function findAllCustomersByPhone(phone10, headers) {
   const matches = [];
 
@@ -14,7 +19,7 @@ async function findAllCustomersByPhone(phone10, headers) {
     if (!res.ok) continue;
     const data = await res.json();
     for (const c of data.customers || []) {
-      if (c.phone_number?.replace(/\D/g, '').endsWith(phone10)) {
+      if (phoneMatches(c.phone_number, phone10)) {
         if (!matches.find(m => m.id === c.id)) matches.push(c);
       }
     }
@@ -29,7 +34,7 @@ async function findAllCustomersByPhone(phone10, headers) {
     if (!res.ok) break;
     const data = await res.json();
     for (const c of data.customers || []) {
-      if (c.phone_number?.replace(/\D/g, '').endsWith(phone10)) {
+      if (phoneMatches(c.phone_number, phone10)) {
         if (!matches.find(m => m.id === c.id)) matches.push(c);
       }
     }
