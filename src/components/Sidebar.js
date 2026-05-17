@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Settings, TrendingUp, Store, Smartphone, Users, Bot, Megaphone, TicketCheck, Receipt, ShoppingBag, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { LayoutDashboard, Settings, TrendingUp, Store, Smartphone, Users, Bot, Megaphone, TicketCheck, Receipt, ShoppingBag, PanelLeftClose, PanelLeftOpen, Copy } from 'lucide-react';
 
 const EXPANDED_WIDTH = 250;
 const COLLAPSED_WIDTH = 64;
@@ -37,6 +37,7 @@ export default function Sidebar() {
     { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
     { label: 'Predictions', icon: TrendingUp, href: '/predictions' },
     { label: 'Bot IA', icon: Bot, href: '/bot' },
+    { label: 'Duplicados', icon: Copy, href: '/duplicados' },
     { label: 'Settings', icon: Settings, href: '/settings' },
   ];
 

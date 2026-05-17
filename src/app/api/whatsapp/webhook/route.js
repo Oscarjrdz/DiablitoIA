@@ -1392,9 +1392,11 @@ NUNCA omitas el tag.`;
                         if (loyverseToken) {
                             let existingCustomerId = null;
                             try {
-                                const searchRes = await fetch('https://api.loyverse.com/v1.0/customers?limit=250', {
-                                    headers: { Authorization: `Bearer ${loyverseToken}` }
-                                });
+                                // Búsqueda directa por teléfono — evita duplicados sin importar cuántos clientes haya
+                                const searchRes = await fetch(
+                                    `https://api.loyverse.com/v1.0/customers?phone_number=${encodeURIComponent(clientPhone10)}&limit=10`,
+                                    { headers: { Authorization: `Bearer ${loyverseToken}` } }
+                                );
                                 if (searchRes.ok) {
                                     const searchData = await searchRes.json();
                                     const match = (searchData.customers || []).find(c => {
