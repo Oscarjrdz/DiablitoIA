@@ -48,7 +48,7 @@ export default function Sidebar() {
 
         {/* Logo + toggle */}
         <div className="ios-sidebar-logo">
-          <Store size={26} color="var(--accent-color)" style={{ flexShrink: 0 }} />
+          {!collapsed && <Store size={26} color="var(--accent-color)" style={{ flexShrink: 0 }} />}
           {!collapsed && <span>Diablito 😈</span>}
           <button
             onClick={toggle}
