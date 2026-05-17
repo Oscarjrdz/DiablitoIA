@@ -1096,29 +1096,22 @@ export async function POST(req) {
         const cachedAddr = await redis.get(`client_address_${cleanPhone}`);
         if (cachedAddr) clientAddress = cachedAddr;
     } else {
-        // FIX#7: Buscar en Loyverse con paginación completa
+        // Buscar en Loyverse por teléfono exacto (rápido, sin paginación)
         try {
             const loyToken = await redis.get('loyverse_token');
             if (loyToken) {
                 const clientPhone10 = cleanPhone.slice(-10);
                 let match = null;
-                let cursor = null;
-                let keepSearching = true;
-                while (keepSearching) {
-                    let url = 'https://api.loyverse.com/v1.0/customers?limit=250';
-                    if (cursor) url += `&cursor=${cursor}`;
-                    const searchRes = await fetch(url, {
-                        headers: { Authorization: `Bearer ${loyToken}` }
-                    });
-                    if (!searchRes.ok) break;
+                const searchRes = await fetch(
+                    `https://api.loyverse.com/v1.0/customers?phone_number=${encodeURIComponent(clientPhone10)}&limit=10`,
+                    { headers: { Authorization: `Bearer ${loyToken}` } }
+                );
+                if (searchRes.ok) {
                     const searchData = await searchRes.json();
                     match = (searchData.customers || []).find(c => {
                         if (!c.phone_number) return false;
                         return c.phone_number.replace(/\D/g, '').slice(-10) === clientPhone10;
                     });
-                    if (match) break;
-                    cursor = searchData.cursor || null;
-                    keepSearching = !!cursor;
                 }
                 if (match) {
                     clientName = match.name;
