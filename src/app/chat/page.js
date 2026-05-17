@@ -848,7 +848,7 @@ export default function ChatPage() {
                       try {
                         const res = await fetch(`/api/loyverse/client-card?phone=52${val}`);
                         const data = await res.json();
-                        if (data.success && data.client?.customerId) {
+                        if (data.success && data.client?.name) {
                           setNewPhoneLoyverse({ found: true, name: data.client.name, id: data.client.customerId, points: data.client.points });
                           setNewName(data.client.name);
                         } else {
