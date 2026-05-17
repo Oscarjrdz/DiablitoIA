@@ -138,6 +138,7 @@ export default function ChatPage() {
   const [posGroupPickerOpen, setPosGroupPickerOpen] = useState(false);
   const [posSelectedGroups, setPosSelectedGroups] = useState([]);
   const [posSendingToGroups, setPosSendingToGroups] = useState(false);
+  const [posComment, setPosComment] = useState('');
   const [posModifiers, setPosModifiers] = useState([]);
   const [posModifierPicker, setPosModifierPicker] = useState(null); // { item, variant, modifiers }
   const [posSelectedModifiers, setPosSelectedModifiers] = useState([]);
@@ -702,6 +703,7 @@ export default function ChatPage() {
       `\n📋 *Pedido:*\n${lines}\n\n` +
       (paymentName ? `💳 *Pago:* ${paymentName}\n` : '') +
       `💰 *Total: $${posTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}*\n` +
+      (posComment.trim() ? `\n💬 *Comentarios:*\n${posComment.trim()}\n` : '') +
       `━━━━━━━━━━━━━━`;
     try {
       await Promise.all(posSelectedGroups.map(groupId =>
@@ -714,11 +716,12 @@ export default function ChatPage() {
       showToast(`Pedido enviado a ${posSelectedGroups.length} sucursal(es) ✅`, 'success');
       setPosGroupPickerOpen(false);
       setPosSelectedGroups([]);
+      setPosComment('');
     } catch {
       showToast('Error al enviar a sucursales', 'error');
     }
     setPosSendingToGroups(false);
-  }, [posSelectedGroups, posCart, posStoreId, posStores, posPayTypeId, posPayTypes, posTotal, clientCard, activeChat, posSendingToGroups, posOrderType]);
+  }, [posSelectedGroups, posCart, posStoreId, posStores, posPayTypeId, posPayTypes, posTotal, clientCard, activeChat, posSendingToGroups, posOrderType, posComment]);
 
   // ── Lista de sucursales únicas (de los chats cargados) ──
   const stores = [...new Set(chats.map(c => c.store).filter(Boolean))].sort();
@@ -1510,6 +1513,16 @@ export default function ChatPage() {
                       </label>
                     ))
                   )}
+                  {/* ── Campo de comentarios ── */}
+                  <div className={styles.posCommentWrap}>
+                    <textarea
+                      className={styles.posCommentInput}
+                      placeholder="Agregar comentarios para la sucursal..."
+                      value={posComment}
+                      onChange={e => setPosComment(e.target.value)}
+                      rows={2}
+                    />
+                  </div>
                   {pinnedGroupsData.length > 0 && (
                     <button
                       className={styles.posGroupSendBtn}
