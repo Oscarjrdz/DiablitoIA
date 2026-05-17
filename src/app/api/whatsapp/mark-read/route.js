@@ -12,6 +12,9 @@ export async function POST(req) {
 
     if (read) {
       await redis.set(`human_read_${cleanPhone}`, '1');
+      // Al marcar como leído también limpiamos el contador de no leídos
+      await redis.del(`chat_unread_${cleanPhone}`);
+      await redis.del(`chat_unread_${cleanPhone}@c.us`);
     } else {
       await redis.del(`human_read_${cleanPhone}`);
     }

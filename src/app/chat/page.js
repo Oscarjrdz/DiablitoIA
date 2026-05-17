@@ -481,7 +481,9 @@ export default function ChatPage() {
         body: JSON.stringify({ phone, read: currentlyNeedsHuman })
       });
       setChats(prev => prev.map(c =>
-        c.phone === phone ? { ...c, needsHuman: !currentlyNeedsHuman } : c
+        c.phone === phone
+          ? { ...c, needsHuman: !currentlyNeedsHuman, ...(currentlyNeedsHuman ? { unread: 0 } : {}) }
+          : c
       ));
       showToast(currentlyNeedsHuman ? 'Marcado como leído' : 'Marcado como no leído', 'success');
     } catch {
