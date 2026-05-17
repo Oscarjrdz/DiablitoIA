@@ -79,7 +79,7 @@ export async function GET() {
         const parsed = typeof histData === 'string' ? JSON.parse(histData) : (histData || []);
         const lastMsg = parsed.length > 0 ? parsed[parsed.length - 1] : null;
 
-        let name = cachedName || phone.slice(-10);
+        let name = String(cachedName ?? phone.slice(-10));
         let isGroup = false;
         if (allPinnedMap[phone]) {
           name = `📌 ${allPinnedMap[phone]}`;

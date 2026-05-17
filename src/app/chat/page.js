@@ -10,12 +10,14 @@ const AVATAR_COLORS = [
   '#f4511e','#f09300'
 ];
 function hashColor(s = '') {
+  const str = typeof s === 'string' ? s : String(s ?? '');
   let h = 0;
-  for (let i = 0; i < s.length; i++) h = s.charCodeAt(i) + ((h << 5) - h);
+  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h);
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 function initials(name = '') {
-  const p = name.trim().split(/\s+/).filter(Boolean);
+  const s = typeof name === 'string' ? name : String(name ?? '');
+  const p = s.trim().split(/\s+/).filter(Boolean);
   if (!p.length) return '?';
   if (p.length === 1) return p[0][0].toUpperCase();
   return (p[0][0] + p[p.length - 1][0]).toUpperCase();
