@@ -24,25 +24,44 @@ export async function GET(req) {
       cursor = data.cursor || null;
     } while (cursor);
 
-    const customers = await Promise.all(allCustomers.map(async (c) => {
+    // Construir mapa de teléfonos únicos con número
+    const uniquePhones = [...new Set(
+      allCustomers
+        .filter(c => c.phone_number)
+        .map(c => '52' + c.phone_number.replace(/\D/g, '').slice(-10))
+    )];
+
+    // Una sola llamada mget para promo_pos + client_store de todos los clientes
+    const promoMap = {};
+    const storeMap = {};
+    if (uniquePhones.length > 0) {
+      const promoKeys = uniquePhones.map(p => `promo_pos_${p}`);
+      const storeKeys = uniquePhones.map(p => `client_store_${p}`);
+      const values = await redis.mget(...promoKeys, ...storeKeys);
+      for (let i = 0; i < uniquePhones.length; i++) {
+        promoMap[uniquePhones[i]] = values[i];
+        storeMap[uniquePhones[i]] = values[uniquePhones.length + i];
+      }
+    }
+
+    const customers = allCustomers.map(c => {
       let tienda = '';
       if (c.note && c.note.includes('Tienda:')) {
         const match = c.note.match(/Tienda:\s*(.+)(?:\n|$)/);
         if (match) tienda = match[1].trim();
       }
-      
+
       let cuponStatus = 'rojo';
       if (c.phone_number) {
-         let cleanPhone = '52' + c.phone_number.replace(/\D/g, '').slice(-10);
-         const status = await redis.get(`promo_pos_${cleanPhone}`);
-         if (status) cuponStatus = status;
-         
-         const rdStore = await redis.get(`client_store_${cleanPhone}`);
-         if (!tienda && rdStore) tienda = rdStore;
+        const cleanPhone = '52' + c.phone_number.replace(/\D/g, '').slice(-10);
+        const status = promoMap[cleanPhone];
+        if (status) cuponStatus = String(status);
+        const rdStore = storeMap[cleanPhone];
+        if (!tienda && rdStore) tienda = String(rdStore);
       }
 
       return { ...c, tienda, cuponStatus };
-    }));
+    });
 
     return NextResponse.json({ success: true, data: customers });
   } catch (error) {
