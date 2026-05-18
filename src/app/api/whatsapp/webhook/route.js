@@ -605,6 +605,100 @@ export async function POST(req) {
        return NextResponse.json({ success: true });
     }
 
+    // ── 👥 CLIENTES REGISTRADOS COMMAND ──
+    if (cleanPhoneCheck.slice(-10) === OWNER_LAST10 && (textMsg === 'CLIENTES REGISTRADOS' || textMsg === 'CLIENTES')) {
+       const configStr = await redis.get('wapp_config');
+       const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
+       const loyverseToken = await redis.get('loyverse_token');
+
+       if (!loyverseToken) {
+           await sendWhatsApp(phoneId, '❌ No hay token de Loyverse configurado.', cfg);
+           return NextResponse.json({ success: true });
+       }
+
+       try {
+           const authH = { Authorization: `Bearer ${loyverseToken}` };
+
+           // Fetch stores
+           const storesRes = await fetch('https://api.loyverse.com/v1.0/stores', { headers: authH });
+           const storesPayload = await storesRes.json();
+           const stores = (storesPayload.stores || []).filter(s => !s.name.toLowerCase().includes('prueba'));
+
+           // Fetch ALL customers with pagination
+           let allCustomers = [], cursor = null, hasMore = true;
+           while (hasMore) {
+               let url = 'https://api.loyverse.com/v1.0/customers?limit=250';
+               if (cursor) url += `&cursor=${cursor}`;
+               const cr = await fetch(url, { headers: authH });
+               const cd = await cr.json();
+               if (cd.customers?.length) allCustomers = allCustomers.concat(cd.customers);
+               cursor = cd.cursor || null;
+               hasMore = !!cursor;
+           }
+
+           // Group by store — extract "Tienda: X" from note field
+           const byStore = {};
+           let noStore = 0;
+           stores.forEach(s => { byStore[s.name] = 0; });
+
+           allCustomers.forEach(c => {
+               const note = c.note || '';
+               const match = note.match(/Tienda:\s*(.+?)(\n|$)/i);
+               if (match) {
+                   const storeName = match[1].trim();
+                   if (byStore[storeName] !== undefined) {
+                       byStore[storeName]++;
+                   } else {
+                       const found = Object.keys(byStore).find(k => k.toLowerCase().includes(storeName.toLowerCase()) || storeName.toLowerCase().includes(k.toLowerCase()));
+                       if (found) {
+                           byStore[found]++;
+                       } else {
+                           if (!byStore[storeName]) byStore[storeName] = 0;
+                           byStore[storeName]++;
+                       }
+                   }
+               } else {
+                   noStore++;
+               }
+           });
+
+           const hora = new Date().toLocaleTimeString('es-MX', { timeZone: 'America/Monterrey', hour: '2-digit', minute: '2-digit', hour12: false });
+           const emojis = ['🔵', '🟢', '🟡', '🟠', '🟣', '🔴'];
+
+           let msg = `👥 *CLIENTES REGISTRADOS*\n`;
+           msg += `📅 Reporte al ${new Date().toLocaleDateString('es-MX', { timeZone: 'America/Monterrey' })} • ⏰ ${hora} hrs\n`;
+           msg += `━━━━━━━━━━━━━━━━━━\n\n`;
+           msg += `📊 *Total:* ${allCustomers.length.toLocaleString('es-MX')} clientes\n\n`;
+           msg += `━━━━━━━━━━━━━━━━━━\n`;
+           msg += `🏪 *POR SUCURSAL*\n━━━━━━━━━━━━━━━━━━\n\n`;
+
+           const sorted = Object.entries(byStore).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+           sorted.forEach(([name, count], i) => {
+               const pct = allCustomers.length > 0 ? ((count / allCustomers.length) * 100).toFixed(1) : '0.0';
+               msg += `${emojis[i % emojis.length]} *${name}*\n`;
+               msg += `   👤 ${count} clientes (${pct}%)\n\n`;
+           });
+
+           if (noStore > 0) {
+               msg += `⚪ *Sin tienda asignada:* ${noStore} clientes\n\n`;
+           }
+
+           const zeroStores = Object.entries(byStore).filter(([, v]) => v === 0).map(([k]) => k);
+           if (zeroStores.length > 0) {
+               msg += `⚪ *Sin clientes:* ${zeroStores.join(', ')}\n\n`;
+           }
+
+           msg += `━━━━━━━━━━━━━━━━━━\n`;
+           msg += `⚡ _El Diablito Intelligence_`;
+
+           await sendWhatsApp(phoneId, msg, cfg);
+       } catch (err) {
+           console.error('❌ Clientes report error:', err.message);
+           await sendWhatsApp(phoneId, `❌ Error: ${err.message}`, cfg);
+       }
+       return NextResponse.json({ success: true });
+    }
+
     if (cleanPhoneCheck.slice(-10) === OWNER_LAST10 && textMsg === 'VENTAS DEL MES') {
        const configStr = await redis.get('wapp_config');
        const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
