@@ -1172,11 +1172,11 @@ export default function ChatPage() {
                   <div className={m.fromMe ? styles.bubbleOut : styles.bubbleIn}>
                     {/* Imagen base64 optimista (antes de que llegue el poll) */}
                     {m.attachment && m.attachmentType === 'image' && (
-                      <img src={m.attachment} alt="" style={{ maxWidth: 260, maxHeight: 260, width: '100%', objectFit: 'cover', borderRadius: 6, display: 'block', marginBottom: 4 }} />
+                      <img src={m.attachment} alt="" style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }} />
                     )}
                     {/* Imagen desde URL (polled del historial: salientes + entrantes + promos) */}
                     {!m.attachment && m.attachmentUrl && m.attachmentType === 'image' && (
-                      <img src={m.attachmentUrl} alt="" style={{ maxWidth: 260, maxHeight: 260, width: '100%', objectFit: 'cover', borderRadius: 6, display: 'block', marginBottom: 4 }} />
+                      <img src={m.attachmentUrl} alt="" style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }} />
                     )}
                     {/* Sticker */}
                     {m.attachmentType === 'sticker' && m.attachmentUrl && (
