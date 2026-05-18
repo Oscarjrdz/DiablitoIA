@@ -125,7 +125,8 @@ export async function GET(request) {
     const sorted = Object.entries(reportData.byStore).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
     sorted.forEach(([name, count]) => {
       const pct = reportData.total > 0 ? ((count / reportData.total) * 100).toFixed(1) : '0.0';
-      msg += `${getStoreEmoji(name)} *${name}:* ${count} (${pct}%)\n`;
+      msg += `${getStoreEmoji(name)} *${name}*\n`;
+      msg += `   👤 ${count} clientes (${pct}%)\n`;
     });
 
     if (reportData.noStore > 0) {

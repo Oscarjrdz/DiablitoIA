@@ -681,8 +681,20 @@ export async function POST(req) {
            const cacheAge = reportData.ts ? Math.round((Date.now() - reportData.ts) / 60000) : 0;
            const storeEmojis = { 'bosques': '🌲', 'valle de lincoln': '🏔️', 'san blas': '⛪', 'titanio': '⚙️', 'palmas': '🌴', 'cordillera': '🏔️' };
            const getEmoji = (n) => { const l = n.toLowerCase(); for (const [k, e] of Object.entries(storeEmojis)) { if (l.includes(k)) return e; } return '🏪'; };
+           const sarcasticPhrases = [
+               "📢 ¡Sin excusas! Aquí están los números crudos de clientes por tienda.",
+               "🧐 Hora del conteo. Unos van como avión y otros como carreta.",
+               "😏 Les dejo los numeritos pa' que vean quién sí jala y quién no.",
+               "💀 Los números no mienten. Les guste o no.",
+               "🤨 ¿Ya vieron sus números? Porque yo sí y hay sorpresas...",
+               "🔍 Auditoría express de registros. Nadie se esconde.",
+               "📋 ¿Cuántos clientes registraron o nomás calentaron silla?",
+               "😤 A ver si es cierto que están registrando o nomás dicen que sí.",
+           ];
+           const phrase = sarcasticPhrases[Math.floor(Math.random() * sarcasticPhrases.length)];
 
-           let msg = `👥 *CLIENTES REGISTRADOS* • ⏰ ${hora} hrs\n`;
+           let msg = `${phrase}\n\n`;
+           msg += `👥 *CLIENTES REGISTRADOS* • ⏰ ${hora} hrs\n`;
            if (cacheAge > 0) msg += `🔄 _Datos de hace ${cacheAge} min_\n`;
            msg += `📊 *Total:* ${reportData.total.toLocaleString('es-MX')} clientes\n`;
            msg += `━━━━━━━━━━━━━━━━━━\n`;
@@ -690,7 +702,8 @@ export async function POST(req) {
            const sorted = Object.entries(reportData.byStore).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
            sorted.forEach(([name, count]) => {
                const pct = reportData.total > 0 ? ((count / reportData.total) * 100).toFixed(1) : '0.0';
-               msg += `${getEmoji(name)} *${name}:* ${count} (${pct}%)\n`;
+               msg += `${getEmoji(name)} *${name}*\n`;
+               msg += `   👤 ${count} clientes (${pct}%)\n`;
            });
 
            if (reportData.noStore > 0) msg += `⚪ *Sin tienda:* ${reportData.noStore}\n`;
