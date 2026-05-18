@@ -380,15 +380,6 @@ export default function ChatPage() {
     fetchClientCard(chat.phone);
     queueProfilePic(chat.phone);
     fetchPOSData();
-    // Persistir "leído por humano" en Redis al abrir el chat
-    if (chat.needsHuman || chat.unread > 0) {
-      fetch('/api/whatsapp/mark-read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: chat.phone, read: true })
-      }).catch(() => {});
-      setChats(prev => prev.map(c => c.phone === chat.phone ? { ...c, needsHuman: false, unread: 0 } : c));
-    }
     msgPollRef.current = setInterval(() => {
       if (activeChatRef.current?.phone === chat.phone) fetchMessages(chat.phone);
     }, 1000);
