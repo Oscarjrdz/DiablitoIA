@@ -87,6 +87,38 @@ async function trackMsgId(msgId, cleanPhone) {
   await redis.setex(`chat_msg_${msgId}`, 604800, cleanPhone);
 }
 
+// ── Race-safe history save ──
+// Re-reads Redis, merges any new messages that arrived during bot processing,
+// appends newEntries, and saves back. Prevents concurrent webhooks from
+// overwriting each other's messages.
+async function mergeAndSave(historyKey, cleanPhone, newEntries) {
+  const freshRaw = await redis.get(historyKey) || await redis.get(`chat_hist_${cleanPhone}`);
+  let fresh = typeof freshRaw === 'string' ? JSON.parse(freshRaw) : (freshRaw || []);
+
+  // Build a Set of existing message signatures to avoid duplicates
+  const existingSigs = new Set();
+  for (const e of fresh) {
+    const p = e.parts?.[0];
+    if (p) existingSigs.add(`${e.role}|${p.text || ''}|${p.ts || ''}`);
+  }
+
+  for (const entry of newEntries) {
+    const p = entry.parts?.[0];
+    const sig = `${entry.role}|${p?.text || ''}|${p?.ts || ''}`;
+    if (!existingSigs.has(sig)) {
+      fresh.push(entry);
+      existingSigs.add(sig);
+    }
+  }
+
+  if (fresh.length > 40) fresh = fresh.slice(-40);
+  const json = JSON.stringify(fresh);
+  await redis.set(historyKey, json);
+  await redis.set(`chat_hist_${cleanPhone}@c.us`, json);
+  await redis.set(`chat_hist_${cleanPhone}`, json);
+  return fresh;
+}
+
 export async function POST(req) {
   try {
     
@@ -1060,8 +1092,6 @@ export async function POST(req) {
 
     // Siempre usar clave normalizada con país para evitar duplicados
     let historyKey = `chat_hist_${cleanPhone}@c.us`;
-    let history = await redis.get(historyKey) || await redis.get(`chat_hist_${phoneId}`);
-    let parsed = typeof history === 'string' ? JSON.parse(history) : (history || []);
     const incomingPart = { text: bodyStr, ts: Date.now() };
     // Guardar URL de imagen/sticker para mostrar en la UI
     const incomingMediaUrl = payload.data.media
@@ -1073,24 +1103,22 @@ export async function POST(req) {
       incomingPart.attachmentType = isSticker ? 'sticker' : 'image';
       incomingPart.hasAttachment = true;
     }
-    parsed.push({ role: 'user', parts: [incomingPart] });
+    const incomingEntry = { role: 'user', parts: [incomingPart] };
+
+    // ★ SAVE IMMEDIATELY — prevents race condition where concurrent
+    // webhooks overwrite each other. The message is persisted in Redis
+    // BEFORE any slow bot processing (Gemini, Loyverse, etc.).
+    let parsed = await mergeAndSave(historyKey, cleanPhone, [incomingEntry]);
+
     await redis.incr(`chat_unread_${cleanPhone}`);
     // Reset human-read flag so the chat shows as "needs attention" again
     await redis.del(`human_read_${cleanPhone}`);
 
-    // ── 🛵 DELIVERY MODE: Si el silencio está activo, guardar mensaje pero NO responder ──
+    // ── 🛵 DELIVERY MODE: Si el silencio está activo, mensaje ya guardado, solo salir ──
     const deliveryActive = await redis.get(`delivery_bot_silence_${cleanPhone}`);
     if (deliveryActive) {
-        if (parsed.length > 40) parsed = parsed.slice(-40);
-        await redis.set(historyKey, JSON.stringify(parsed));
-        await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
-        await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
         console.log(`[Bot] Delivery mode activo para ${cleanPhone} - mensaje guardado, bot silenciado`);
         return NextResponse.json({ success: true, note: 'delivery_mode_silent' });
-    }
-
-    if (parsed.length > 40) {
-        parsed = parsed.slice(-40);
     }
 
     // ── 🔍 IDENTIFICACIÓN: Buscar cliente en Loyverse por teléfono ──
@@ -1168,11 +1196,8 @@ export async function POST(req) {
                         body: JSON.stringify({ token: cfg.wappToken, to: phoneId, image: menuImageUrl, caption: menuCaption })
                     });
                 } catch(e) { console.error('[Bot] Error enviando imagen menú:', e); }
-                parsed.push({ role: 'model', parts: [{ text: menuCaption, ts: Date.now(), attachmentType: 'image', hasAttachment: true, attachmentUrl: menuImageUrl }] });
-                if (parsed.length > 40) parsed = parsed.slice(-40);
-                await redis.set(historyKey, JSON.stringify(parsed));
-                await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
-                await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+                const menuEntry = { role: 'model', parts: [{ text: menuCaption, ts: Date.now(), attachmentType: 'image', hasAttachment: true, attachmentUrl: menuImageUrl }] };
+                await mergeAndSave(historyKey, cleanPhone, [menuEntry]);
                 return NextResponse.json({ success: true });
             }
         }
@@ -1237,11 +1262,7 @@ export async function POST(req) {
             const botMsgId = await sendWhatsApp(phoneId, botReply, cfg);
             const botEntry = { text: botReply, ts: Date.now(), status: 'sent' };
             if (botMsgId) { botEntry.msgId = botMsgId; await trackMsgId(botMsgId, cleanPhone); }
-            parsed.push({ role: 'model', parts: [botEntry] });
-            if (parsed.length > 40) parsed = parsed.slice(-40);
-            await redis.set(historyKey, JSON.stringify(parsed));
-            await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
-            await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+            await mergeAndSave(historyKey, cleanPhone, [{ role: 'model', parts: [botEntry] }]);
         }
         return NextResponse.json({ success: true });
     }
@@ -1251,10 +1272,8 @@ export async function POST(req) {
         await sendWhatsApp(phoneId, '¡Hola! 👋🍔 Bienvenido a *El Diablito Boneless & Burgers*', cfg);
         await new Promise(r => setTimeout(r, 800));
         await sendWhatsApp(phoneId, 'Veo que en nuestro sistema aún no estás registrado. Nos tomará 1 minuto ⏱️, solo compárteme tu *Nombre Completo* 🙋 y tu *Dirección* 📍, al completar tu registro recibes una 🍔 *BURGER GRATIS* 🎁', cfg);
-        parsed.push({ role: 'model', parts: [{ text: 'Hola! Bienvenido al Diablito. Veo que en nuestro sistema aún no estás registrado. Nos tomará 1 minuto, solo compárteme tu Nombre Completo y tu Dirección, al completar tu registro recibes una BURGER GRATIS.', ts: Date.now() }] });
-        await redis.set(historyKey, JSON.stringify(parsed));
-        await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
-        await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+        const welcomeEntry = { role: 'model', parts: [{ text: 'Hola! Bienvenido al Diablito. Veo que en nuestro sistema aún no estás registrado. Nos tomará 1 minuto, solo compárteme tu Nombre Completo y tu Dirección, al completar tu registro recibes una BURGER GRATIS.', ts: Date.now() }] };
+        await mergeAndSave(historyKey, cleanPhone, [welcomeEntry]);
         return NextResponse.json({ success: true });
     }
 
@@ -1265,9 +1284,7 @@ export async function POST(req) {
         const aiToken = cfg.aiToken;
 
         if (!botPrompt || !aiToken) {
-            await redis.set(historyKey, JSON.stringify(parsed));
-            await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
-            await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+            await mergeAndSave(historyKey, cleanPhone, []);
             return NextResponse.json({ success: true });
         }
 
@@ -1384,10 +1401,7 @@ NUNCA omitas el tag.`;
                 const confirmMsgId = await sendWhatsApp(phoneId, confirmMsg, cfg);
                 const confirmEntry = { text: confirmMsg, ts: Date.now(), status: 'sent' };
                 if (confirmMsgId) { confirmEntry.msgId = confirmMsgId; await trackMsgId(confirmMsgId, cleanPhone); }
-                parsed.push({ role: 'model', parts: [confirmEntry] });
-                await redis.set(historyKey, JSON.stringify(parsed));
-                await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
-                await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+                parsed = await mergeAndSave(historyKey, cleanPhone, [{ role: 'model', parts: [confirmEntry] }]);
 
                 // ── Ejecutar registro en Loyverse ──
                 try {
@@ -1461,10 +1475,7 @@ NUNCA omitas el tag.`;
                                                     if (gwRes.ok) {
                                                         await redis.set(`promo_pos_${cleanPhone}`, 'naranja');
                                                         const couponHistEntry = { role: 'model', parts: [{ text: promoText, ts: Date.now(), ...(welcomePromo.image ? { attachmentType: 'image', hasAttachment: true, attachmentUrl: `https://global-sales-prediction.vercel.app/api/promotions/image?id=${welcomePromo.id}` } : {}) }] };
-                                                        parsed.push(couponHistEntry);
-                                                        await redis.set(historyKey, JSON.stringify(parsed));
-                                                        await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
-                                                        await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+                                                        parsed = await mergeAndSave(historyKey, cleanPhone, [couponHistEntry]);
                                                     }
                                                     await redis.del(mutexKey);
                                                 }
@@ -1521,10 +1532,7 @@ NUNCA omitas el tag.`;
                 const insistMsgId = await sendWhatsApp(phoneId, insistMsg, cfg);
                 const insistEntry = { text: insistMsg, ts: Date.now(), status: 'sent' };
                 if (insistMsgId) { insistEntry.msgId = insistMsgId; await trackMsgId(insistMsgId, cleanPhone); }
-                parsed.push({ role: 'model', parts: [insistEntry] });
-                await redis.set(historyKey, JSON.stringify(parsed));
-                await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
-                await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+                await mergeAndSave(historyKey, cleanPhone, [{ role: 'model', parts: [insistEntry] }]);
             }
         } else {
             console.error('Gemini API Error:', await geminiRes.text());
@@ -1533,9 +1541,8 @@ NUNCA omitas el tag.`;
         console.error('❌ Bot IA Error:', botErr);
     }
 
-    await redis.set(historyKey, JSON.stringify(parsed));
-    await redis.set(`chat_hist_${cleanPhone}@c.us`, JSON.stringify(parsed));
-    await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+    // Final fallback save — mergeAndSave ensures no messages are lost
+    await mergeAndSave(historyKey, cleanPhone, []);
 
     return NextResponse.json({ success: true });
   } catch(e) { console.error(e); return NextResponse.json({ success:true }); }
