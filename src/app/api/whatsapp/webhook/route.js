@@ -673,8 +673,8 @@ export async function POST(req) {
                });
 
                reportData = { total: allCustomers.length, byStore, noStore, ts: Date.now() };
-               // Cache for 30 minutes
-               await redis.set('clientes_report_cache', JSON.stringify(reportData), { ex: 1800 });
+               // Cache for 1 hour
+               await redis.set('clientes_report_cache', JSON.stringify(reportData), { ex: 3600 });
            }
 
            const hora = new Date().toLocaleTimeString('es-MX', { timeZone: 'America/Monterrey', hour: '2-digit', minute: '2-digit', hour12: false });
