@@ -371,6 +371,15 @@ export default function ChatPage() {
     fetchClientCard(chat.phone);
     queueProfilePic(chat.phone);
     fetchPOSData();
+    // Persistir "leído por humano" en Redis al abrir el chat
+    if (chat.needsHuman || chat.unread > 0) {
+      fetch('/api/whatsapp/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: chat.phone, read: true })
+      }).catch(() => {});
+      setChats(prev => prev.map(c => c.phone === chat.phone ? { ...c, needsHuman: false, unread: 0 } : c));
+    }
     msgPollRef.current = setInterval(() => {
       if (activeChatRef.current?.phone === chat.phone) fetchMessages(chat.phone);
     }, 2000);
@@ -557,7 +566,11 @@ export default function ChatPage() {
         ? { ...c, lastText: text || '📎 Archivo', lastTs: now, fromMe: true, needsHuman: false, unread: 0 }
         : c
     ));
-    fetch(`/api/whatsapp/history?phone=${encodeURIComponent(phone)}&clearUnread=1`).catch(() => {});
+    fetch('/api/whatsapp/mark-read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, read: true })
+    }).catch(() => {});
     startTransition(async () => {
       addOptimisticMessage(optimistic);
       try {
