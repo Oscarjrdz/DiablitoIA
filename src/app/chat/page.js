@@ -444,6 +444,8 @@ export default function ChatPage() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchVsMessages(); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchPOSData(); }, []);
 
   const openChat = useCallback((chat) => {
     activeChatRef.current = chat; // actualizar ref síncronamente antes de cualquier async
