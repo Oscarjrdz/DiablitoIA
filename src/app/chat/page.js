@@ -179,6 +179,7 @@ export default function ChatPage() {
   const [isOffline, setIsOffline] = useState(false);
   const picQueueRef = useRef([]);
   const picLoadingRef = useRef(0);
+  const picQueuedRef = useRef(new Set());
   const posDataLoadedRef = useRef(false);
 
   // ── React 19 hooks ──
@@ -214,13 +215,22 @@ export default function ChatPage() {
         // para evitar que una respuesta en vuelo sobreescriba un clear reciente.
         setChats(prev => {
           const prevMap = new Map(prev.map(c => [c.phone, c]));
-          return (data.chats || []).map(c => {
+          const next = (data.chats || []).map(c => {
             const local = prevMap.get(c.phone);
             if (local && local.unread === 0 && c.unread > 0 && !c.needsHuman) {
               return { ...c, unread: 0 };
             }
-            return c;
+            return local &&
+              local.unread === c.unread &&
+              local.needsHuman === c.needsHuman &&
+              local.lastTs === c.lastTs &&
+              local.lastText === c.lastText
+              ? local  // sin cambios → misma referencia → React no re-renderiza la fila
+              : c;
           });
+          // Si el array es idéntico en longitud y todas las refs son iguales, no actualizar
+          if (next.length === prev.length && next.every((c, i) => c === prev[i])) return prev;
+          return next;
         });
         failCountRef.current = 0;
         setIsOffline(false);
@@ -236,10 +246,9 @@ export default function ChatPage() {
 
   // ── Profile pic queue (max 3 concurrent) ──
   const queueProfilePic = useCallback((phone) => {
-    setProfilePics(prev => {
-      if (prev[phone] !== undefined) return prev; // already loaded or loading
-      return { ...prev, [phone]: null }; // mark as queued
-    });
+    if (picQueuedRef.current.has(phone)) return;
+    picQueuedRef.current.add(phone);
+    setProfilePics(prev => ({ ...prev, [phone]: null }));
     picQueueRef.current.push(phone);
     drainPicQueue();
   }, []);
@@ -258,7 +267,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     fetchChats();
-    listPollRef.current = setInterval(fetchChats, 8000);
+    listPollRef.current = setInterval(fetchChats, 3000);
     return () => clearInterval(listPollRef.current);
   }, [fetchChats]);
 
@@ -382,7 +391,7 @@ export default function ChatPage() {
     }
     msgPollRef.current = setInterval(() => {
       if (activeChatRef.current?.phone === chat.phone) fetchMessages(chat.phone);
-    }, 2000);
+    }, 1000);
   }, [fetchMessages, fetchClientCard, queueProfilePic, fetchPOSData]);
 
   useEffect(() => () => clearInterval(msgPollRef.current), []);
