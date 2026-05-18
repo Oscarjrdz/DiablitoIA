@@ -441,6 +441,23 @@
   cursor: pointer;
 }
 
+.vsBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #1a3347;
+  color: #7dd3fc;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+.vsBtn:hover { background: #1e4060; }
+
 .botToggle {
   display: flex;
   align-items: center;
@@ -2261,3 +2278,214 @@ select.infoEditInput option { background: #1a2730; color: #e9edef; }
   margin-top: 4px;
 }
 .posModifierConfirmBtn:hover { background: #06cf9c; }
+
+/* ══ VENTA SUGESTIVA ══ */
+.vsModal {
+  position: absolute;
+  bottom: 72px;
+  right: 16px;
+  width: 320px;
+  max-height: 420px;
+  background: #1f2c34;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 120;
+  border: 1px solid #2a3942;
+}
+.vsModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #182026;
+  font-size: 12px;
+  font-weight: 700;
+  color: #7dd3fc;
+  border-bottom: 1px solid #2a3942;
+  flex-shrink: 0;
+}
+.vsAddBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #1a3347;
+  color: #7dd3fc;
+  border: none;
+  border-radius: 8px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.vsAddBtn:hover { background: #1e4060; }
+.vsCloseBtn {
+  background: none;
+  border: none;
+  color: #8696a0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+}
+.vsCloseBtn:hover { color: #fff; }
+.vsForm {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: 1px solid #2a3942;
+  flex-shrink: 0;
+}
+.vsInput {
+  background: #2a3942;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 10px;
+  color: #e9edef;
+  font-size: 12px;
+  outline: none;
+  font-family: inherit;
+}
+.vsTextarea {
+  background: #2a3942;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 10px;
+  color: #e9edef;
+  font-size: 12px;
+  outline: none;
+  resize: none;
+  font-family: inherit;
+}
+.vsImgLabel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #2a3942;
+  color: #8696a0;
+  border-radius: 7px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.vsImgLabel:hover { color: #e9edef; }
+.vsRemoveImg {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: rgba(0,0,0,0.6);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.vsSaveBtn {
+  background: #00a884;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.vsSaveBtn:hover { background: #06cf9c; }
+.vsCancelBtn {
+  background: none;
+  color: #8696a0;
+  border: none;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+.vsCancelBtn:hover { color: #e9edef; }
+.vsList {
+  overflow-y: auto;
+  flex: 1;
+  padding: 6px 0;
+}
+.vsEmpty {
+  text-align: center;
+  color: #8696a0;
+  font-size: 12px;
+  padding: 16px;
+}
+.vsItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  gap: 8px;
+  transition: background 0.12s;
+}
+.vsItem:hover { background: #2a3942; }
+.vsItemInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.vsThumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.vsItemName {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e9edef;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vsItemText {
+  font-size: 11px;
+  color: #8696a0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+.vsItemActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.vsEditBtn, .vsDelBtn {
+  background: none;
+  border: none;
+  color: #8696a0;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+}
+.vsEditBtn:hover { color: #7dd3fc; background: #1a3347; }
+.vsDelBtn:hover { color: #f87171; background: #3a1a1a; }
+.vsSendItemBtn {
+  background: #00a884;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  padding: 4px 7px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+.vsSendItemBtn:hover { background: #06cf9c; }
+.vsSendItemBtn:disabled { opacity: 0.5; cursor: default; }

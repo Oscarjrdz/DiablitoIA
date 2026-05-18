@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef, useCallback, useMemo, useOptimistic, useTransition, useDeferredValue } from 'react';
 import styles from './page.module.css';
-import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, Check, Plus, Phone, User, Users, Pencil } from 'lucide-react';
+import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, Check, Plus, Phone, User, Users, Pencil, ChevronRight, Trash2, ImagePlus } from 'lucide-react';
 
 // ── Avatar con iniciales y color consistente ──
 const AVATAR_COLORS = [
@@ -165,6 +165,12 @@ export default function ChatPage() {
   const [renamingGroupId, setRenamingGroupId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
 
+  // Venta Sugestiva
+  const [vsOpen, setVsOpen] = useState(false);
+  const [vsMessages, setVsMessages] = useState([]);
+  const [vsEditing, setVsEditing] = useState(null); // null | { id?, name, text, image }
+  const [vsSending, setVsSending] = useState(null); // id being sent
+
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -271,7 +277,6 @@ export default function ChatPage() {
     return () => clearInterval(listPollRef.current);
   }, [fetchChats]);
 
-  // Cargar grupos fijados al montar para que el POS los tenga disponibles
   useEffect(() => { fetchGroups(); }, [fetchGroups]);
 
   // ── Cargar mensajes del chat activo (delta-aware) ──
@@ -365,6 +370,81 @@ export default function ChatPage() {
     setPosLoading(false);
   }, []);
 
+  const showToast = useCallback((msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3200);
+  }, []);
+
+  // ── Venta Sugestiva ──
+  const fetchVsMessages = useCallback(async () => {
+    try {
+      const res = await fetch('/api/whatsapp/suggestive-messages');
+      const data = await res.json();
+      if (data.success) setVsMessages(data.messages || []);
+    } catch {}
+  }, []);
+
+  const vsSend = useCallback(async (msg) => {
+    if (!activeChat || vsSending) return;
+    setVsSending(msg.id);
+    try {
+      const res = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: activeChat.phone,
+          text: msg.text,
+          attachment: msg.image || null,
+          attachmentType: msg.image ? 'image' : null
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setVsOpen(false);
+        fetch('/api/whatsapp/mark-read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: activeChat.phone, read: true })
+        }).catch(() => {});
+        setChats(prev => prev.map(c => c.phone === activeChat.phone
+          ? { ...c, lastText: msg.text, lastTs: Date.now(), fromMe: true, needsHuman: false, unread: 0 }
+          : c));
+      } else {
+        showToast('Error al enviar', 'error');
+      }
+    } catch {
+      showToast('Error de conexión', 'error');
+    }
+    setVsSending(null);
+  }, [activeChat, vsSending]);
+
+  const vsSaveMsg = useCallback(async () => {
+    if (!vsEditing?.name?.trim() || !vsEditing?.text?.trim()) return;
+    try {
+      const isNew = !vsEditing.id;
+      const res = await fetch('/api/whatsapp/suggestive-messages', {
+        method: isNew ? 'POST' : 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(vsEditing)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setVsMessages(prev => isNew ? [...prev, data.message] : prev.map(m => m.id === data.message.id ? data.message : m));
+        setVsEditing(null);
+      }
+    } catch {}
+  }, [vsEditing]);
+
+  const vsDeleteMsg = useCallback(async (id) => {
+    try {
+      await fetch(`/api/whatsapp/suggestive-messages?id=${id}`, { method: 'DELETE' });
+      setVsMessages(prev => prev.filter(m => m.id !== id));
+    } catch {}
+  }, []);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchVsMessages(); }, []);
+
   const openChat = useCallback((chat) => {
     activeChatRef.current = chat; // actualizar ref síncronamente antes de cualquier async
     setActiveChat(chat);
@@ -416,11 +496,6 @@ export default function ChatPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone, typing })
     }).catch(() => {});
-  }, []);
-
-  const showToast = useCallback((msg, type = 'success') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3200);
   }, []);
 
   // ── Toggle pin group (defined here so fetchChats and showToast are available) ──
@@ -1053,6 +1128,13 @@ export default function ChatPage() {
             </div>
             <div className={styles.headerIcons}>
               <button
+                className={styles.vsBtn}
+                onClick={() => { setVsOpen(v => !v); setVsEditing(null); }}
+                title="Venta Sugestiva"
+              >
+                💬 Venta Sugestiva
+              </button>
+              <button
                 className={`${styles.botToggle} ${botSilent ? styles.botToggleSilent : styles.botToggleActive}`}
                 title={botSilent ? 'Bot silenciado — clic para reactivar' : 'Bot activo — clic para silenciar'}
                 onClick={async () => {
@@ -1156,6 +1238,96 @@ export default function ChatPage() {
               {(inputText.trim() || attachment) ? <Send size={20} /> : <Mic size={20} />}
             </button>
           </div>
+
+          {/* ── Modal Venta Sugestiva ── */}
+          {vsOpen && (
+            <div className={styles.vsModal}>
+              <div className={styles.vsModalHeader}>
+                <span>💬 Venta Sugestiva</span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className={styles.vsAddBtn} onClick={() => setVsEditing({ name: '', text: '', image: null })}>
+                    <Plus size={13} /> Nuevo
+                  </button>
+                  <button className={styles.vsCloseBtn} onClick={() => { setVsOpen(false); setVsEditing(null); }}>
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Formulario crear/editar */}
+              {vsEditing && (
+                <div className={styles.vsForm}>
+                  <input
+                    className={styles.vsInput}
+                    placeholder="Nombre del mensaje"
+                    value={vsEditing.name}
+                    onChange={e => setVsEditing(p => ({ ...p, name: e.target.value }))}
+                  />
+                  <textarea
+                    className={styles.vsTextarea}
+                    placeholder="Texto del mensaje"
+                    rows={3}
+                    value={vsEditing.text}
+                    onChange={e => setVsEditing(p => ({ ...p, text: e.target.value }))}
+                  />
+                  {vsEditing.image && (
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                      <img src={vsEditing.image} alt="" style={{ height: 60, borderRadius: 6, objectFit: 'cover' }} />
+                      <button className={styles.vsRemoveImg} onClick={() => setVsEditing(p => ({ ...p, image: null }))}><X size={10} /></button>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <label className={styles.vsImgLabel}>
+                      <ImagePlus size={13} /> Imagen
+                      <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        const r = new FileReader();
+                        r.onload = ev => setVsEditing(p => ({ ...p, image: ev.target.result }));
+                        r.readAsDataURL(f);
+                      }} />
+                    </label>
+                    <button className={styles.vsSaveBtn} onClick={vsSaveMsg}>Guardar</button>
+                    <button className={styles.vsCancelBtn} onClick={() => setVsEditing(null)}>Cancelar</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Lista de mensajes */}
+              <div className={styles.vsList}>
+                {vsMessages.length === 0 && !vsEditing && (
+                  <p className={styles.vsEmpty}>Sin mensajes. Crea uno.</p>
+                )}
+                {vsMessages.map(msg => (
+                  <div key={msg.id} className={styles.vsItem}>
+                    <div className={styles.vsItemInfo}>
+                      {msg.image && <img src={msg.image} alt="" className={styles.vsThumb} />}
+                      <div>
+                        <div className={styles.vsItemName}>{msg.name}</div>
+                        <div className={styles.vsItemText}>{msg.text}</div>
+                      </div>
+                    </div>
+                    <div className={styles.vsItemActions}>
+                      <button className={styles.vsEditBtn} onClick={() => setVsEditing({ ...msg })} title="Editar">
+                        <Pencil size={12} />
+                      </button>
+                      <button className={styles.vsDelBtn} onClick={() => vsDeleteMsg(msg.id)} title="Eliminar">
+                        <Trash2 size={12} />
+                      </button>
+                      <button
+                        className={styles.vsSendItemBtn}
+                        onClick={() => vsSend(msg)}
+                        disabled={!!vsSending}
+                        title="Enviar al cliente"
+                      >
+                        {vsSending === msg.id ? '...' : <ChevronRight size={14} />}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         </div>
       ) : (
