@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
 import { generateFolio, buildPromoText } from '@/lib/folio';
 
+// Allow up to 60s for commands that paginate Loyverse (CLIENTES, VENTAS, etc.)
+export const maxDuration = 60;
+
 const FOLIO_REGEX = /^[A-Z]\d{3,4}$/i;
 const FOLIO_EXTRACT = /([A-Z]\d{3,4})/i;
 
@@ -617,73 +620,87 @@ export async function POST(req) {
        }
 
        try {
-           const authH = { Authorization: `Bearer ${loyverseToken}` };
+           // Check Redis cache first (30 min TTL)
+           const cached = await redis.get('clientes_report_cache');
+           let reportData;
 
-           // Fetch stores
-           const storesRes = await fetch('https://api.loyverse.com/v1.0/stores', { headers: authH });
-           const storesPayload = await storesRes.json();
-           const stores = (storesPayload.stores || []).filter(s => !s.name.toLowerCase().includes('prueba'));
+           if (cached) {
+               reportData = typeof cached === 'string' ? JSON.parse(cached) : cached;
+           } else {
+               const authH = { Authorization: `Bearer ${loyverseToken}` };
 
-           // Fetch ALL customers with pagination
-           let allCustomers = [], cursor = null, hasMore = true;
-           while (hasMore) {
-               let url = 'https://api.loyverse.com/v1.0/customers?limit=250';
-               if (cursor) url += `&cursor=${cursor}`;
-               const cr = await fetch(url, { headers: authH });
-               const cd = await cr.json();
-               if (cd.customers?.length) allCustomers = allCustomers.concat(cd.customers);
-               cursor = cd.cursor || null;
-               hasMore = !!cursor;
-           }
+               // Fetch stores
+               const storesRes = await fetch('https://api.loyverse.com/v1.0/stores', { headers: authH, signal: AbortSignal.timeout(8000) });
+               const storesPayload = await storesRes.json();
+               const stores = (storesPayload.stores || []).filter(s => !s.name.toLowerCase().includes('prueba'));
 
-           // Group by store — extract "Tienda: X" from note field
-           const byStore = {};
-           let noStore = 0;
-           stores.forEach(s => { byStore[s.name] = 0; });
-
-           allCustomers.forEach(c => {
-               const note = c.note || '';
-               const match = note.match(/Tienda:\s*(.+?)(\n|$)/i);
-               if (match) {
-                   const storeName = match[1].trim();
-                   if (byStore[storeName] !== undefined) {
-                       byStore[storeName]++;
-                   } else {
-                       const found = Object.keys(byStore).find(k => k.toLowerCase().includes(storeName.toLowerCase()) || storeName.toLowerCase().includes(k.toLowerCase()));
-                       if (found) {
-                           byStore[found]++;
-                       } else {
-                           if (!byStore[storeName]) byStore[storeName] = 0;
-                           byStore[storeName]++;
-                       }
-                   }
-               } else {
-                   noStore++;
+               // Fetch ALL customers with pagination
+               let allCustomers = [], cursor = null, hasMore = true;
+               while (hasMore) {
+                   let url = 'https://api.loyverse.com/v1.0/customers?limit=250';
+                   if (cursor) url += `&cursor=${cursor}`;
+                   const cr = await fetch(url, { headers: authH, signal: AbortSignal.timeout(8000) });
+                   const cd = await cr.json();
+                   if (cd.customers?.length) allCustomers = allCustomers.concat(cd.customers);
+                   cursor = cd.cursor || null;
+                   hasMore = !!cursor;
                }
-           });
+
+               // Group by store
+               const byStore = {};
+               let noStore = 0;
+               stores.forEach(s => { byStore[s.name] = 0; });
+
+               allCustomers.forEach(c => {
+                   const note = c.note || '';
+                   const match = note.match(/Tienda:\s*(.+?)(\n|$)/i);
+                   if (match) {
+                       const storeName = match[1].trim();
+                       if (byStore[storeName] !== undefined) {
+                           byStore[storeName]++;
+                       } else {
+                           const found = Object.keys(byStore).find(k => k.toLowerCase().includes(storeName.toLowerCase()) || storeName.toLowerCase().includes(k.toLowerCase()));
+                           if (found) {
+                               byStore[found]++;
+                           } else {
+                               if (!byStore[storeName]) byStore[storeName] = 0;
+                               byStore[storeName]++;
+                           }
+                       }
+                   } else {
+                       noStore++;
+                   }
+               });
+
+               reportData = { total: allCustomers.length, byStore, noStore, ts: Date.now() };
+               // Cache for 30 minutes
+               await redis.set('clientes_report_cache', JSON.stringify(reportData), { ex: 1800 });
+           }
 
            const hora = new Date().toLocaleTimeString('es-MX', { timeZone: 'America/Monterrey', hour: '2-digit', minute: '2-digit', hour12: false });
            const emojis = ['🔵', '🟢', '🟡', '🟠', '🟣', '🔴'];
+           const cacheAge = reportData.ts ? Math.round((Date.now() - reportData.ts) / 60000) : 0;
 
            let msg = `👥 *CLIENTES REGISTRADOS*\n`;
            msg += `📅 Reporte al ${new Date().toLocaleDateString('es-MX', { timeZone: 'America/Monterrey' })} • ⏰ ${hora} hrs\n`;
+           if (cacheAge > 0) msg += `🔄 _Datos de hace ${cacheAge} min_\n`;
            msg += `━━━━━━━━━━━━━━━━━━\n\n`;
-           msg += `📊 *Total:* ${allCustomers.length.toLocaleString('es-MX')} clientes\n\n`;
+           msg += `📊 *Total:* ${reportData.total.toLocaleString('es-MX')} clientes\n\n`;
            msg += `━━━━━━━━━━━━━━━━━━\n`;
            msg += `🏪 *POR SUCURSAL*\n━━━━━━━━━━━━━━━━━━\n\n`;
 
-           const sorted = Object.entries(byStore).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+           const sorted = Object.entries(reportData.byStore).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
            sorted.forEach(([name, count], i) => {
-               const pct = allCustomers.length > 0 ? ((count / allCustomers.length) * 100).toFixed(1) : '0.0';
+               const pct = reportData.total > 0 ? ((count / reportData.total) * 100).toFixed(1) : '0.0';
                msg += `${emojis[i % emojis.length]} *${name}*\n`;
                msg += `   👤 ${count} clientes (${pct}%)\n\n`;
            });
 
-           if (noStore > 0) {
-               msg += `⚪ *Sin tienda asignada:* ${noStore} clientes\n\n`;
+           if (reportData.noStore > 0) {
+               msg += `⚪ *Sin tienda asignada:* ${reportData.noStore} clientes\n\n`;
            }
 
-           const zeroStores = Object.entries(byStore).filter(([, v]) => v === 0).map(([k]) => k);
+           const zeroStores = Object.entries(reportData.byStore).filter(([, v]) => v === 0).map(([k]) => k);
            if (zeroStores.length > 0) {
                msg += `⚪ *Sin clientes:* ${zeroStores.join(', ')}\n\n`;
            }
