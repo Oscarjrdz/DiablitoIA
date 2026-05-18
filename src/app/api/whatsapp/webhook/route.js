@@ -1062,7 +1062,18 @@ export async function POST(req) {
     let historyKey = `chat_hist_${cleanPhone}@c.us`;
     let history = await redis.get(historyKey) || await redis.get(`chat_hist_${phoneId}`);
     let parsed = typeof history === 'string' ? JSON.parse(history) : (history || []);
-    parsed.push({ role: 'user', parts: [{ text: bodyStr, ts: Date.now() }] });
+    const incomingPart = { text: bodyStr, ts: Date.now() };
+    // Guardar URL de imagen/sticker para mostrar en la UI
+    const incomingMediaUrl = payload.data.media
+      || payload.data.__raw?.message?.imageMessage?.url
+      || payload.data.__raw?.message?.stickerMessage?.url
+      || null;
+    if (incomingMediaUrl) {
+      incomingPart.attachmentUrl = incomingMediaUrl;
+      incomingPart.attachmentType = isSticker ? 'sticker' : 'image';
+      incomingPart.hasAttachment = true;
+    }
+    parsed.push({ role: 'user', parts: [incomingPart] });
     await redis.incr(`chat_unread_${cleanPhone}`);
     // Reset human-read flag so the chat shows as "needs attention" again
     await redis.del(`human_read_${cleanPhone}`);

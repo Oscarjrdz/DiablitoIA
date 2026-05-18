@@ -49,6 +49,7 @@ export async function POST(req) {
 
     if (attachment && attachmentType === 'image') {
       const imageUrl = await toPublicUrl(attachment, host);
+      histEntry.attachmentUrl = imageUrl; // guardar URL para que el poll la muestre
       endpoint = '/messages/image';
       body = { token: wConfig.wappToken, to: wappTo, image: imageUrl, caption: text };
     } else if (attachment && attachmentType === 'audio') {

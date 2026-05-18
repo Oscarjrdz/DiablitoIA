@@ -1170,18 +1170,23 @@ export default function ChatPage() {
                     <Avatar name={activeChat.name} phone={activeChat.phone} size={28} picUrl={profilePics[activeChat.phone]} />
                   )}
                   <div className={m.fromMe ? styles.bubbleOut : styles.bubbleIn}>
-                    {/* Image from base64 (manual send) */}
+                    {/* Imagen base64 optimista (antes de que llegue el poll) */}
                     {m.attachment && m.attachmentType === 'image' && (
                       <img src={m.attachment} alt="" style={{ maxWidth: '100%', borderRadius: 6, display: 'block', marginBottom: 4 }} />
                     )}
-                    {/* Image from URL (coupon/promo) */}
+                    {/* Imagen desde URL (polled del historial: salientes + entrantes + promos) */}
                     {!m.attachment && m.attachmentUrl && m.attachmentType === 'image' && (
-                      <img src={m.attachmentUrl} alt="Cupón" style={{ maxWidth: '100%', borderRadius: 6, display: 'block', marginBottom: 4 }} />
+                      <img src={m.attachmentUrl} alt="" style={{ maxWidth: '100%', borderRadius: 6, display: 'block', marginBottom: 4 }} />
                     )}
-                    {m.attachment && m.attachmentType !== 'image' && (
+                    {/* Sticker */}
+                    {m.attachmentType === 'sticker' && m.attachmentUrl && (
+                      <img src={m.attachmentUrl} alt="Sticker" style={{ maxWidth: 160, borderRadius: 4, display: 'block', marginBottom: 2 }} />
+                    )}
+                    {/* Documento / audio */}
+                    {m.hasAttachment && !m.attachmentUrl && !m.attachment && m.attachmentType !== 'sticker' && (
                       <div className={styles.fileAttach}>
                         <Paperclip size={14} />
-                        <span>Archivo adjunto</span>
+                        <span>{m.attachmentType === 'audio' ? '🎙 Audio' : 'Archivo adjunto'}</span>
                       </div>
                     )}
                     {m.text && <span className={styles.msgText}>{m.text}</span>}
