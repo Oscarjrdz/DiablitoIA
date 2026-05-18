@@ -46,6 +46,7 @@ export async function GET(req) {
         time: ts
           ? new Date(ts).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Monterrey' })
           : '',
+        msgId: part.msgId || null,
         status: part.status || (m.role === 'model' ? 'sent' : null),
         attachmentType: part.attachmentType || null,
         hasAttachment: part.hasAttachment || false,

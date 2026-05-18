@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useRef, useCallback, useMemo, useOptimistic, useTransition, useDeferredValue } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useTransition, useDeferredValue } from 'react';
 import styles from './page.module.css';
 import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, Check, Plus, Phone, User, Users, Pencil, ChevronRight, Trash2, ImagePlus } from 'lucide-react';
 
@@ -187,10 +187,10 @@ export default function ChatPage() {
   const picLoadingRef = useRef(0);
   const picQueuedRef = useRef(new Set());
   const posDataLoadedRef = useRef(false);
+  const msgFetchControllerRef = useRef(null);
 
-  // ── React 19 hooks ──
-  const [optimisticMessages, addOptimisticMessage] = useOptimistic(messages, (state, newMsg) => [...state, newMsg]);
-  const [, startTransition] = useTransition();
+  // ── Mensajes pendientes (optimistas) + React 19 hooks ──
+  const [pendingMsgs, setPendingMsgs] = useState([]);
   const [, startCartTransition] = useTransition();
   const deferredPosSearch = useDeferredValue(posSearch);
 
@@ -282,11 +282,13 @@ export default function ChatPage() {
   // ── Cargar mensajes del chat activo (delta-aware) ──
   const fetchMessages = useCallback(async (phone) => {
     if (!phone) return;
+    msgFetchControllerRef.current?.abort();
+    const controller = new AbortController();
+    msgFetchControllerRef.current = controller;
     try {
-      const res = await fetch(`/api/whatsapp/history?phone=${encodeURIComponent(phone)}`);
+      const res = await fetch(`/api/whatsapp/history?phone=${encodeURIComponent(phone)}`, { signal: controller.signal });
       const data = await res.json();
       if (data.success) {
-        // Descartar respuestas stale de un chat anterior
         if (activeChatRef.current?.phone !== phone) return;
         if (data.msgCount !== lastMsgCountRef.current || data.lastTs !== lastTsRef.current) {
           setMessages(data.messages || []);
@@ -296,7 +298,9 @@ export default function ChatPage() {
         setIsTyping(!!data.isTyping);
         setBotSilent(!!data.botSilent);
       }
-    } catch {}
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+    }
   }, []);
 
   const fetchClientCard = useCallback(async (phone) => {
@@ -448,9 +452,10 @@ export default function ChatPage() {
   useEffect(() => { fetchPOSData(); }, []);
 
   const openChat = useCallback((chat) => {
-    activeChatRef.current = chat; // actualizar ref síncronamente antes de cualquier async
+    activeChatRef.current = chat;
     setActiveChat(chat);
     setMessages([]);
+    setPendingMsgs([]);
     setIsTyping(false);
     setInputText('');
     setAttachment(null);
@@ -476,12 +481,6 @@ export default function ChatPage() {
     if (!el) return;
     isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   }, []);
-
-  useEffect(() => {
-    if (messages.length && isAtBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
-    }
-  }, [messages]);
 
   // ── Auto-resize textarea ──
   const autoResize = () => {
@@ -648,21 +647,22 @@ export default function ChatPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone, read: true })
     }).catch(() => {});
-    startTransition(async () => {
-      addOptimisticMessage(optimistic);
-      try {
-        const res = await fetch('/api/whatsapp/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to: phone, text, attachment: optimistic.attachment, attachmentType: optimistic.attachmentType })
-        });
-        const data = await res.json();
-        if (!data.success) showToast('Error al enviar mensaje', 'error');
-      } catch {
-        showToast('Error de conexión', 'error');
+    // Mostrar mensaje inmediatamente; se limpia cuando el poll confirma el mismo ts
+    setPendingMsgs(prev => [...prev, optimistic]);
+    fetch('/api/whatsapp/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: phone, text, attachment: optimistic.attachment, attachmentType: optimistic.attachmentType })
+    }).then(r => r.json()).then(data => {
+      if (!data.success) {
+        showToast('Error al enviar mensaje', 'error');
+        setPendingMsgs(prev => prev.filter(p => p.ts !== optimistic.ts));
       }
+    }).catch(() => {
+      showToast('Error de conexión', 'error');
+      setPendingMsgs(prev => prev.filter(p => p.ts !== optimistic.ts));
     });
-  }, [inputText, attachment, activeChat, sendTypingStatus, addOptimisticMessage, startTransition]);
+  }, [inputText, attachment, activeChat, sendTypingStatus, showToast]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -829,11 +829,27 @@ export default function ChatPage() {
     return matchSearch && matchStore;
   }), [chats, search, storeFilter]);
 
+  // Combinar mensajes reales + pendientes sin duplicados (por ts+fromMe)
+  const allMessages = useMemo(() => {
+    if (!pendingMsgs.length) return messages;
+    const result = [...messages];
+    for (const p of pendingMsgs) {
+      if (!result.some(m => m.fromMe && m.ts === p.ts)) result.push(p);
+    }
+    return result;
+  }, [messages, pendingMsgs]);
+
+  // Limpiar pendientes que ya confirmó el poll
+  useEffect(() => {
+    if (!pendingMsgs.length) return;
+    setPendingMsgs(prev => prev.filter(p => !messages.some(m => m.fromMe && m.ts === p.ts)));
+  }, [messages]); // eslint-disable-line
+
   const msgsWithSeps = useMemo(() => {
     const result = [];
     let lastLabel = null;
     let addedUndated = false;
-    for (const m of optimisticMessages) {
+    for (const m of allMessages) {
       if (!m.ts) {
         if (!addedUndated) {
           result.push({ _sep: true, label: 'Mensajes anteriores' });
@@ -850,7 +866,14 @@ export default function ChatPage() {
       result.push(m);
     }
     return result;
-  }, [optimisticMessages]);
+  }, [allMessages]);
+
+  // Scroll al fondo cuando llegan mensajes nuevos o se envía uno
+  useEffect(() => {
+    if (allMessages.length && isAtBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+    }
+  }, [allMessages]);
 
   return (
     <div className={styles.root}>
@@ -1167,7 +1190,7 @@ export default function ChatPage() {
               }
               const m = item;
               return (
-                <div key={i} className={m.fromMe ? styles.rowOut : styles.rowIn}>
+                <div key={m.msgId || (m.ts ? `${m.ts}_${m.fromMe ? 'o' : 'i'}` : `f${i}`)} className={m.fromMe ? styles.rowOut : styles.rowIn}>
                   {!m.fromMe && (
                     <Avatar name={activeChat.name} phone={activeChat.phone} size={28} picUrl={profilePics[activeChat.phone]} />
                   )}
