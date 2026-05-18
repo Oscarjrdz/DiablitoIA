@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useOptimistic, useTransition, useDeferredValue } from 'react';
 import styles from './page.module.css';
 import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, Check, Plus, Phone, User, Users, Pencil } from 'lucide-react';
 
@@ -23,7 +23,7 @@ function initials(name = '') {
   return (p[0][0] + p[p.length - 1][0]).toUpperCase();
 }
 
-function Avatar({ name = '', phone = '', size = 49, picUrl = null }) {
+const Avatar = React.memo(function Avatar({ name = '', phone = '', size = 49, picUrl = null }) {
   const [imgOk, setImgOk] = useState(!!picUrl);
   useEffect(() => setImgOk(!!picUrl), [picUrl]);
   const key = name || phone;
@@ -43,10 +43,9 @@ function Avatar({ name = '', phone = '', size = 49, picUrl = null }) {
       }
     </div>
   );
-}
+});
 
-// ── Palomitas dinámicas ──
-function Ticks({ status }) {
+const Ticks = React.memo(function Ticks({ status }) {
   if (!status) return null;
   if (status === 'sent') {
     return <Check size={14} color="#8696a0" strokeWidth={2.5} />;
@@ -61,7 +60,7 @@ function Ticks({ status }) {
       </svg>
     </span>
   );
-}
+});
 
 // ── Formato de tiempo relativo (lista de chats) ──
 function relTime(ts) {
@@ -95,13 +94,13 @@ function variantName(variant) {
 }
 
 // ── Animación de tres puntos (typing) ──
-function TypingDots() {
+const TypingDots = React.memo(function TypingDots() {
   return (
     <span className={styles.typingDots}>
       <span /><span /><span />
     </span>
   );
-}
+});
 
 const ORDER_TYPE_LABELS = { domicilio: '🛵 Domicilio', llevar: '🏃 Para llevar', comer: '🍽️ Para comer aquí' };
 
@@ -181,6 +180,12 @@ export default function ChatPage() {
   const picQueueRef = useRef([]);
   const picLoadingRef = useRef(0);
   const posDataLoadedRef = useRef(false);
+
+  // ── React 19 hooks ──
+  const [optimisticMessages, addOptimisticMessage] = useOptimistic(messages, (state, newMsg) => [...state, newMsg]);
+  const [, startTransition] = useTransition();
+  const [, startCartTransition] = useTransition();
+  const deferredPosSearch = useDeferredValue(posSearch);
 
   // ── Fetch groups from gateway ──
   const fetchGroups = useCallback(async () => {
@@ -528,7 +533,7 @@ export default function ChatPage() {
   };
 
   // ── Enviar mensaje ──
-  const handleSend = useCallback(async () => {
+  const handleSend = useCallback(() => {
     const text = inputText.trim();
     if (!text && !attachment) return;
     if (!activeChat) return;
@@ -543,33 +548,31 @@ export default function ChatPage() {
       attachmentType: attachment?.type || null,
       fromMe: true, ts: now, time: timeStr, status: 'sent'
     };
-    setMessages(prev => [...prev, optimistic]);
     setInputText('');
     clearAttachment();
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    const phone = activeChat.phone;
     setChats(prev => prev.map(c =>
-      c.phone === activeChat.phone
+      c.phone === phone
         ? { ...c, lastText: text || '📎 Archivo', lastTs: now, fromMe: true, needsHuman: false, unread: 0 }
         : c
     ));
-    fetch(`/api/whatsapp/history?phone=${encodeURIComponent(activeChat.phone)}&clearUnread=1`).catch(() => {});
-    try {
-      const res = await fetch('/api/whatsapp/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: activeChat.phone, text, attachment: attachment?.base64 || null, attachmentType: attachment?.type || null })
-      });
-      const data = await res.json();
-      if (!data.success) {
-        // Mark optimistic message as failed
-        setMessages(prev => prev.map((m, i) => i === prev.length - 1 && m.ts === now ? { ...m, status: 'error' } : m));
-        showToast('Error al enviar mensaje', 'error');
+    fetch(`/api/whatsapp/history?phone=${encodeURIComponent(phone)}&clearUnread=1`).catch(() => {});
+    startTransition(async () => {
+      addOptimisticMessage(optimistic);
+      try {
+        const res = await fetch('/api/whatsapp/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: phone, text, attachment: optimistic.attachment, attachmentType: optimistic.attachmentType })
+        });
+        const data = await res.json();
+        if (!data.success) showToast('Error al enviar mensaje', 'error');
+      } catch {
+        showToast('Error de conexión', 'error');
       }
-    } catch {
-      setMessages(prev => prev.map((m, i) => i === prev.length - 1 && m.ts === now ? { ...m, status: 'error' } : m));
-      showToast('Error de conexión', 'error');
-    }
-  }, [inputText, attachment, activeChat, sendTypingStatus]);
+    });
+  }, [inputText, attachment, activeChat, sendTypingStatus, addOptimisticMessage, startTransition]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -586,20 +589,26 @@ export default function ChatPage() {
     const vLabel = variantName(variant);
     const displayName = vLabel ? `${item.item_name} - ${vLabel}` : item.item_name;
     const cartKey = variantId;
-    setPosCart(prev => {
-      const idx = prev.findIndex(c => c.cartKey === cartKey);
-      if (idx >= 0) return prev.map((c, i) => i === idx ? { ...c, qty: c.qty + 1 } : c);
-      return [...prev, { itemId: item.id, variantId, cartKey, name: displayName, price, qty: 1 }];
+    startCartTransition(() => {
+      setPosCart(prev => {
+        const idx = prev.findIndex(c => c.cartKey === cartKey);
+        if (idx >= 0) return prev.map((c, i) => i === idx ? { ...c, qty: c.qty + 1 } : c);
+        return [...prev, { itemId: item.id, variantId, cartKey, name: displayName, price, qty: 1 }];
+      });
     });
-  }, [posStoreId]);
+  }, [posStoreId, startCartTransition]);
 
   const posUpdateQty = useCallback((idx, delta) => {
-    setPosCart(prev => prev.map((c, i) => i === idx ? { ...c, qty: c.qty + delta } : c).filter(c => c.qty > 0));
-  }, []);
+    startCartTransition(() => {
+      setPosCart(prev => prev.map((c, i) => i === idx ? { ...c, qty: c.qty + delta } : c).filter(c => c.qty > 0));
+    });
+  }, [startCartTransition]);
 
   const posRemoveItem = useCallback((idx) => {
-    setPosCart(prev => prev.filter((_, i) => i !== idx));
-  }, []);
+    startCartTransition(() => {
+      setPosCart(prev => prev.filter((_, i) => i !== idx));
+    });
+  }, [startCartTransition]);
 
   const posHandleVariantSelect = useCallback((item, variant) => {
     const applicable = posModifiers.filter(m => item.modifier_ids?.includes(m.id));
@@ -648,9 +657,9 @@ export default function ChatPage() {
 
   const posFiltered = useMemo(
     () => posItems
-      .filter(item => !posSearch || item.item_name.toLowerCase().includes(posSearch.toLowerCase()))
+      .filter(item => !deferredPosSearch || item.item_name.toLowerCase().includes(deferredPosSearch.toLowerCase()))
       .sort((a, b) => a.item_name.localeCompare(b.item_name, 'es')),
-    [posItems, posSearch]
+    [posItems, deferredPosSearch]
   );
 
   
@@ -734,7 +743,7 @@ export default function ChatPage() {
     const result = [];
     let lastLabel = null;
     let addedUndated = false;
-    for (const m of messages) {
+    for (const m of optimisticMessages) {
       if (!m.ts) {
         if (!addedUndated) {
           result.push({ _sep: true, label: 'Mensajes anteriores' });
@@ -751,7 +760,7 @@ export default function ChatPage() {
       result.push(m);
     }
     return result;
-  }, [messages]);
+  }, [optimisticMessages]);
 
   return (
     <div className={styles.root}>
