@@ -54,8 +54,27 @@ export async function GET(req) {
       };
     });
 
-    const lastTs = messages.length > 0 ? messages[messages.length - 1].ts : 0;
-    return NextResponse.json({ success: true, messages, msgCount: messages.length, lastTs, isTyping: !!typingRaw, botSilent: !!botSilenceRaw });
+    // ── Server-side dedup safety net ──
+    // Remove duplicate fromMe messages with identical text within 5s window.
+    // Keep the one with a msgId (or the first one if neither has one).
+    const deduped = [];
+    for (let i = 0; i < messages.length; i++) {
+      const m = messages[i];
+      if (m.fromMe && deduped.length > 0) {
+        const prev = deduped[deduped.length - 1];
+        if (prev.fromMe && prev.text === m.text && m.ts && prev.ts && Math.abs(m.ts - prev.ts) < 5000) {
+          // Duplicate detected — keep the one with msgId
+          if (m.msgId && !prev.msgId) {
+            deduped[deduped.length - 1] = m;
+          }
+          continue; // skip duplicate
+        }
+      }
+      deduped.push(m);
+    }
+
+    const lastTs = deduped.length > 0 ? deduped[deduped.length - 1].ts : 0;
+    return NextResponse.json({ success: true, messages: deduped, msgCount: deduped.length, lastTs, isTyping: !!typingRaw, botSilent: !!botSilenceRaw });
   } catch (e) {
     return NextResponse.json({ success: false, messages: [], isTyping: false });
   }

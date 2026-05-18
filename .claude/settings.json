@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/oscar/Gateway WP/whatsapp-api/data/**)",
+      "Read(//Users/oscar/Gateway WP/whatsapp-api/src/**)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "WebFetch(domain:developer.loyverse.com)",
+      "WebFetch(domain:loyverse.readthedocs.io)",
+      "Bash(node -e \"require\\('fs'\\).readFileSync\\('src/app/chat/page.js', 'utf8'\\); console.log\\('File readable, length:', require\\('fs'\\).readFileSync\\('src/app/chat/page.js', 'utf8'\\).length\\)\")",
+      "Bash(npx next *)",
+      "WebSearch",
+      "WebFetch(domain:help.loyverse.com)",
+      "WebFetch(domain:loyverse.town)",
+      "WebFetch(domain:github.com)",
+      "Bash(git commit -m 'fix: cargar grupos fijados al montar para que el POS los tenga disponibles *)",
+      "WebFetch(domain:developer.didi-food.com)",
+      "WebFetch(domain:www.deliverect.com)",
+      "WebFetch(domain:getorder.biz)",
+      "WebFetch(domain:mipos.gitbook.io)",
+      "WebFetch(domain:developers.deliverect.com)",
+      "WebFetch(domain:www.postman.com)",
+      "Read(//Users/oscar/Desktop/**)",
+      "Bash(node -e \"const { PanelLeftClose, PanelLeftOpen, Copy } = require\\('lucide-react'\\); console.log\\('PanelLeftClose:', !!PanelLeftClose, 'PanelLeftOpen:', !!PanelLeftOpen, 'Copy:', !!Copy\\);\")",
+      "Bash(npm run *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('dependencies',{}\\), indent=2\\)\\)\")",
+      "Bash(git revert *)",
+      "Bash(vercel --prod)",
+      "Bash(vercel --prod --name global-sales-prediction)",
+      "Bash(curl -s \"https://global-sales-prediction.vercel.app/api/loyverse/client-card?phone=528120313481\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(grep -n \"key={i}\\\\|key={index}\\\\|\\\\.map\\(\\(.*,.*i\\)\\\\|\\\\.map\\(\\(.*,.*index\\)\" \"/Users/oscar/Diablito IA/src/app/chat/page.js\")",
+      "Bash(node -e ' *)",
+      "Bash(git commit *)"
+    ],
+    "additionalDirectories": [
+      "/Users/oscar/Desktop"
+    ]
+  }
+}

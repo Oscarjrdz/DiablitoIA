@@ -628,8 +628,10 @@ export default function ChatPage() {
     const timeStr = new Date(now).toLocaleTimeString('es-MX', {
       hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Monterrey'
     });
+    // _localId is a unique client-side identifier used purely for dedup tracking
+    const _localId = `local_${now}_${Math.random().toString(36).slice(2, 7)}`;
     const optimistic = {
-      text, attachment: attachment?.base64 || null,
+      _localId, text, attachment: attachment?.base64 || null,
       attachmentType: attachment?.type || null,
       fromMe: true, ts: now, time: timeStr, status: 'sent'
     };
@@ -647,7 +649,7 @@ export default function ChatPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone, read: true })
     }).catch(() => {});
-    // Mostrar mensaje inmediatamente; se limpia cuando el poll confirma el mismo ts
+    // Show message immediately; cleaned when poll confirms via text+window match
     setPendingMsgs(prev => [...prev, optimistic]);
     fetch('/api/whatsapp/send', {
       method: 'POST',
@@ -656,11 +658,18 @@ export default function ChatPage() {
     }).then(r => r.json()).then(data => {
       if (!data.success) {
         showToast('Error al enviar mensaje', 'error');
-        setPendingMsgs(prev => prev.filter(p => p.ts !== optimistic.ts));
+        setPendingMsgs(prev => prev.filter(p => p._localId !== _localId));
+      } else {
+        // Attach server msgId to this pending msg for precise dedup
+        if (data.msgId) {
+          setPendingMsgs(prev => prev.map(p =>
+            p._localId === _localId ? { ...p, msgId: data.msgId } : p
+          ));
+        }
       }
     }).catch(() => {
       showToast('Error de conexión', 'error');
-      setPendingMsgs(prev => prev.filter(p => p.ts !== optimistic.ts));
+      setPendingMsgs(prev => prev.filter(p => p._localId !== _localId));
     });
   }, [inputText, attachment, activeChat, sendTypingStatus, showToast]);
 
@@ -829,20 +838,31 @@ export default function ChatPage() {
     return matchSearch && matchStore;
   }), [chats, search, storeFilter]);
 
-  // Combinar mensajes reales + pendientes sin duplicados (por ts+fromMe)
+  // ── Helper: check if a poll message matches a pending optimistic message ──
+  const msgMatchesPending = useCallback((serverMsg, pending) => {
+    if (!serverMsg.fromMe) return false;
+    // Match by msgId if both have one
+    if (serverMsg.msgId && pending.msgId && serverMsg.msgId === pending.msgId) return true;
+    // Match by identical text + timestamp within 60s window
+    if (serverMsg.text === pending.text && serverMsg.ts && pending.ts && Math.abs(serverMsg.ts - pending.ts) < 60000) return true;
+    return false;
+  }, []);
+
+  // Combinar mensajes reales + pendientes sin duplicados (text + time-window match)
   const allMessages = useMemo(() => {
     if (!pendingMsgs.length) return messages;
     const result = [...messages];
     for (const p of pendingMsgs) {
-      if (!result.some(m => m.fromMe && m.ts === p.ts)) result.push(p);
+      // Only append if no server message already matches this pending
+      if (!result.some(m => msgMatchesPending(m, p))) result.push(p);
     }
     return result;
-  }, [messages, pendingMsgs]);
+  }, [messages, pendingMsgs, msgMatchesPending]);
 
   // Limpiar pendientes que ya confirmó el poll
   useEffect(() => {
     if (!pendingMsgs.length) return;
-    setPendingMsgs(prev => prev.filter(p => !messages.some(m => m.fromMe && m.ts === p.ts)));
+    setPendingMsgs(prev => prev.filter(p => !messages.some(m => msgMatchesPending(m, p))));
   }, [messages]); // eslint-disable-line
 
   const msgsWithSeps = useMemo(() => {

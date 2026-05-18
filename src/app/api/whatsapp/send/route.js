@@ -91,7 +91,8 @@ export async function POST(req) {
     await redis.set(`chat_hist_${redisPhone}`, JSON.stringify(parsed));
     await redis.set(`human_read_${redisPhone}`, '1');
     await redis.del(`delivery_mode_${redisPhone}`);
-    return NextResponse.json({ success: true });
+    const sentMsgId = parsed[parsed.length - 1]?.parts?.[0]?.msgId || null;
+    return NextResponse.json({ success: true, msgId: sentMsgId, ts });
   } catch (e) {
     console.error('Send message error:', e);
     return NextResponse.json({ success: false });
