@@ -1,18 +1,28 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
 
+// Si el attachment es base64, lo almacena en Redis y devuelve una URL pública
+async function toPublicUrl(base64, host) {
+  if (!base64 || !base64.startsWith('data:')) return base64;
+  const id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  await redis.set(`temp_img_${id}`, base64, { ex: 3600 });
+  return `https://${host}/api/whatsapp/temp-image?id=${id}`;
+}
+
 export async function POST(req) {
   try {
     const { to, text, attachment, attachmentType } = await req.json();
     if (!to) return NextResponse.json({ success: false });
+
+    const host = req.headers.get('host');
 
     let isGroup = to.includes('@g.us');
     let wappTo = to;
     let redisPhone = to;
 
     if (isGroup) {
-      wappTo = to; // Keep @g.us
-      redisPhone = '52' + to.replace(/\D/g, '').slice(-10); // How it's currently saved in Redis by webhook
+      wappTo = to;
+      redisPhone = '52' + to.replace(/\D/g, '').slice(-10);
     } else {
       let cleanTo = to.replace(/\D/g, '');
       if (!cleanTo.startsWith('52')) cleanTo = '52' + cleanTo;
@@ -38,8 +48,9 @@ export async function POST(req) {
     let body = { token: wConfig.wappToken, to: wappTo, body: text };
 
     if (attachment && attachmentType === 'image') {
+      const imageUrl = await toPublicUrl(attachment, host);
       endpoint = '/messages/image';
-      body = { token: wConfig.wappToken, to: wappTo, image: attachment, caption: text };
+      body = { token: wConfig.wappToken, to: wappTo, image: imageUrl, caption: text };
     } else if (attachment && attachmentType === 'audio') {
       endpoint = '/messages/audio';
       body = { token: wConfig.wappToken, to: wappTo, audio: attachment };
@@ -57,7 +68,6 @@ export async function POST(req) {
     if (raw.ok) {
       try {
         const sendData = await raw.json();
-        // Debug: guardar respuesta del gateway para diagnóstico
         await redis.set('debug_last_send_response', JSON.stringify(sendData));
         const rawId = sendData?.messageId
           || sendData?.key?.id
@@ -68,9 +78,7 @@ export async function POST(req) {
           || sendData?.msgId;
         const msgId = typeof rawId === 'object' ? (rawId?._serialized || null) : rawId;
         if (msgId) {
-          // Save msgId → phone mapping for ACK tracking (7 days TTL)
           await redis.setex(`chat_msg_${msgId}`, 604800, redisPhone);
-          // Store msgId in the last history entry
           parsed[parsed.length - 1].parts[0].msgId = msgId;
         }
       } catch {}
@@ -80,7 +88,6 @@ export async function POST(req) {
 
     await redis.set(hKey, JSON.stringify(parsed));
     await redis.set(`chat_hist_${redisPhone}`, JSON.stringify(parsed));
-    // Mark as human-read and clear delivery ring when a human sends a message
     await redis.set(`human_read_${redisPhone}`, '1');
     await redis.del(`delivery_mode_${redisPhone}`);
     return NextResponse.json({ success: true });
