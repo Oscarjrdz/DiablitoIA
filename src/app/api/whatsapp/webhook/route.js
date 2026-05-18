@@ -689,10 +689,13 @@ export async function POST(req) {
            msg += `━━━━━━━━━━━━━━━━━━\n`;
            msg += `🏪 *POR SUCURSAL*\n━━━━━━━━━━━━━━━━━━\n\n`;
 
+           const storeEmojis = { 'bosques': '🌲', 'valle de lincoln': '🏔️', 'san blas': '⛪', 'titanio': '⚙️', 'palmas': '🌴', 'cordillera': '🏔️' };
+           const getEmoji = (n) => { const l = n.toLowerCase(); for (const [k, e] of Object.entries(storeEmojis)) { if (l.includes(k)) return e; } return '🏪'; };
+
            const sorted = Object.entries(reportData.byStore).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-           sorted.forEach(([name, count], i) => {
+           sorted.forEach(([name, count]) => {
                const pct = reportData.total > 0 ? ((count / reportData.total) * 100).toFixed(1) : '0.0';
-               msg += `${emojis[i % emojis.length]} *${name}*\n`;
+               msg += `${getEmoji(name)} *${name}*\n`;
                msg += `   👤 ${count} clientes (${pct}%)\n\n`;
            });
 
