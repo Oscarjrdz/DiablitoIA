@@ -103,6 +103,8 @@ function TypingDots() {
   );
 }
 
+const ORDER_TYPE_LABELS = { domicilio: '🛵 Domicilio', llevar: '🏃 Para llevar', comer: '🍽️ Para comer aquí' };
+
 export default function ChatPage() {
   const [chats, setChats] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
@@ -180,8 +182,6 @@ export default function ChatPage() {
   const picLoadingRef = useRef(0);
   const posDataLoadedRef = useRef(false);
 
-  useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
-
   // ── Fetch groups from gateway ──
   const fetchGroups = useCallback(async () => {
     setLoadingGroups(true);
@@ -251,14 +251,6 @@ export default function ChatPage() {
     }
   }, []);
 
-  const fetchProfilePic = useCallback(async (phone) => {
-    try {
-      const res = await fetch(`/api/whatsapp/profile-pic?phone=${encodeURIComponent(phone)}`);
-      const data = await res.json();
-      setProfilePics(prev => ({ ...prev, [phone]: data.url || null }));
-    } catch {}
-  }, []);
-
   useEffect(() => {
     fetchChats();
     listPollRef.current = setInterval(fetchChats, 8000);
@@ -275,7 +267,8 @@ export default function ChatPage() {
       const res = await fetch(`/api/whatsapp/history?phone=${encodeURIComponent(phone)}`);
       const data = await res.json();
       if (data.success) {
-        // Only update if message count or last timestamp changed (delta check)
+        // Descartar respuestas stale de un chat anterior
+        if (activeChatRef.current?.phone !== phone) return;
         if (data.msgCount !== lastMsgCountRef.current || data.lastTs !== lastTsRef.current) {
           setMessages(data.messages || []);
           lastMsgCountRef.current = data.msgCount || 0;
@@ -338,7 +331,7 @@ export default function ChatPage() {
       }
     } catch { showToast('Error de conexión', 'error'); }
     setSavingField(false);
-  }, [clientCard, editAddress, editStore]);
+  }, [clientCard, editAddress, editStore, editName, activeChat]);
 
   const fetchPOSData = useCallback(async () => {
     if (posDataLoadedRef.current) return;
@@ -359,23 +352,24 @@ export default function ChatPage() {
   }, []);
 
   const openChat = useCallback((chat) => {
+    activeChatRef.current = chat; // actualizar ref síncronamente antes de cualquier async
     setActiveChat(chat);
     setMessages([]);
     setIsTyping(false);
     setInputText('');
     setAttachment(null);
+    isAtBottomRef.current = true;
     lastMsgCountRef.current = 0;
     lastTsRef.current = 0;
     clearInterval(msgPollRef.current);
     fetchMessages(chat.phone);
     fetchClientCard(chat.phone);
-    // Load profile pic if needed
-    if (!profilePics[chat.phone]) fetchProfilePic(chat.phone);
+    queueProfilePic(chat.phone);
     fetchPOSData();
     msgPollRef.current = setInterval(() => {
       if (activeChatRef.current?.phone === chat.phone) fetchMessages(chat.phone);
     }, 2000);
-  }, [fetchMessages, fetchProfilePic, fetchClientCard, profilePics, fetchPOSData]);
+  }, [fetchMessages, fetchClientCard, queueProfilePic, fetchPOSData]);
 
   useEffect(() => () => clearInterval(msgPollRef.current), []);
 
@@ -410,11 +404,10 @@ export default function ChatPage() {
     }).catch(() => {});
   }, []);
 
-  // ── Toast helper ──
-  const showToast = (msg, type = 'success') => {
+  const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3200);
-  };
+  }, []);
 
   // ── Toggle pin group (defined here so fetchChats and showToast are available) ──
   const togglePinGroup = useCallback(async (group) => {
@@ -660,8 +653,7 @@ export default function ChatPage() {
     [posItems, posSearch]
   );
 
-  const ORDER_TYPE_LABELS = { domicilio: '🛵 Domicilio', llevar: '🏃 Para llevar', comer: '🍽️ Para comer aquí' };
-
+  
   const posSendSummary = useCallback(async () => {
     if (!posCart.length || !activeChat || posSending) return;
     setPosSending(true);
@@ -727,36 +719,39 @@ export default function ChatPage() {
     setPosSendingToGroups(false);
   }, [posSelectedGroups, posCart, posStoreId, posStores, posPayTypeId, posPayTypes, posTotal, clientCard, activeChat, posSendingToGroups, posOrderType, posComment]);
 
-  // ── Lista de sucursales únicas (de los chats cargados) ──
-  const stores = [...new Set(chats.map(c => c.store).filter(Boolean))].sort();
+  const stores = useMemo(
+    () => [...new Set(chats.map(c => c.store).filter(Boolean))].sort(),
+    [chats]
+  );
 
-  // ── Filtrar chats por búsqueda y/o sucursal ──
-  const filtered = chats.filter(c => {
+  const filtered = useMemo(() => chats.filter(c => {
     const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
     const matchStore = !storeFilter || c.store === storeFilter;
     return matchSearch && matchStore;
-  });
+  }), [chats, search, storeFilter]);
 
-  // ── Inyectar separadores de fecha en mensajes ──
-  const msgsWithSeps = [];
-  let lastLabel = null;
-  let addedUndated = false;
-  for (const m of messages) {
-    if (!m.ts) {
-      if (!addedUndated) {
-        msgsWithSeps.push({ _sep: true, label: 'Mensajes anteriores' });
-        addedUndated = true;
+  const msgsWithSeps = useMemo(() => {
+    const result = [];
+    let lastLabel = null;
+    let addedUndated = false;
+    for (const m of messages) {
+      if (!m.ts) {
+        if (!addedUndated) {
+          result.push({ _sep: true, label: 'Mensajes anteriores' });
+          addedUndated = true;
+        }
+        result.push(m);
+        continue;
       }
-      msgsWithSeps.push(m);
-      continue;
+      const label = dayLabel(m.ts);
+      if (label && label !== lastLabel) {
+        result.push({ _sep: true, label });
+        lastLabel = label;
+      }
+      result.push(m);
     }
-    const label = dayLabel(m.ts);
-    if (label && label !== lastLabel) {
-      msgsWithSeps.push({ _sep: true, label });
-      lastLabel = label;
-    }
-    msgsWithSeps.push(m);
-  }
+    return result;
+  }, [messages]);
 
   return (
     <div className={styles.root}>
