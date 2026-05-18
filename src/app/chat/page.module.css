@@ -2282,8 +2282,8 @@ select.infoEditInput option { background: #1a2730; color: #e9edef; }
 /* ══ VENTA SUGESTIVA ══ */
 .vsModal {
   position: absolute;
-  bottom: 72px;
-  right: 16px;
+  top: 62px;
+  right: 12px;
   width: 320px;
   max-height: 420px;
   background: #1f2c34;
