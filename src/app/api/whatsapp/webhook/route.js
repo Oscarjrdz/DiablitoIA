@@ -678,35 +678,24 @@ export async function POST(req) {
            }
 
            const hora = new Date().toLocaleTimeString('es-MX', { timeZone: 'America/Monterrey', hour: '2-digit', minute: '2-digit', hour12: false });
-           const emojis = ['🔵', '🟢', '🟡', '🟠', '🟣', '🔴'];
            const cacheAge = reportData.ts ? Math.round((Date.now() - reportData.ts) / 60000) : 0;
-
-           let msg = `👥 *CLIENTES REGISTRADOS*\n`;
-           msg += `📅 Reporte al ${new Date().toLocaleDateString('es-MX', { timeZone: 'America/Monterrey' })} • ⏰ ${hora} hrs\n`;
-           if (cacheAge > 0) msg += `🔄 _Datos de hace ${cacheAge} min_\n`;
-           msg += `━━━━━━━━━━━━━━━━━━\n\n`;
-           msg += `📊 *Total:* ${reportData.total.toLocaleString('es-MX')} clientes\n\n`;
-           msg += `━━━━━━━━━━━━━━━━━━\n`;
-           msg += `🏪 *POR SUCURSAL*\n━━━━━━━━━━━━━━━━━━\n\n`;
-
            const storeEmojis = { 'bosques': '🌲', 'valle de lincoln': '🏔️', 'san blas': '⛪', 'titanio': '⚙️', 'palmas': '🌴', 'cordillera': '🏔️' };
            const getEmoji = (n) => { const l = n.toLowerCase(); for (const [k, e] of Object.entries(storeEmojis)) { if (l.includes(k)) return e; } return '🏪'; };
+
+           let msg = `👥 *CLIENTES REGISTRADOS* • ⏰ ${hora} hrs\n`;
+           if (cacheAge > 0) msg += `🔄 _Datos de hace ${cacheAge} min_\n`;
+           msg += `📊 *Total:* ${reportData.total.toLocaleString('es-MX')} clientes\n`;
+           msg += `━━━━━━━━━━━━━━━━━━\n`;
 
            const sorted = Object.entries(reportData.byStore).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
            sorted.forEach(([name, count]) => {
                const pct = reportData.total > 0 ? ((count / reportData.total) * 100).toFixed(1) : '0.0';
-               msg += `${getEmoji(name)} *${name}*\n`;
-               msg += `   👤 ${count} clientes (${pct}%)\n\n`;
+               msg += `${getEmoji(name)} *${name}:* ${count} (${pct}%)\n`;
            });
 
-           if (reportData.noStore > 0) {
-               msg += `⚪ *Sin tienda asignada:* ${reportData.noStore} clientes\n\n`;
-           }
-
+           if (reportData.noStore > 0) msg += `⚪ *Sin tienda:* ${reportData.noStore}\n`;
            const zeroStores = Object.entries(reportData.byStore).filter(([, v]) => v === 0).map(([k]) => k);
-           if (zeroStores.length > 0) {
-               msg += `⚪ *Sin clientes:* ${zeroStores.join(', ')}\n\n`;
-           }
+           if (zeroStores.length > 0) msg += `⚪ *Sin clientes:* ${zeroStores.join(', ')}\n`;
 
            msg += `━━━━━━━━━━━━━━━━━━\n`;
            msg += `⚡ _El Diablito Intelligence_`;
