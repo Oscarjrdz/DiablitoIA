@@ -102,6 +102,78 @@ const TypingDots = React.memo(function TypingDots() {
   );
 });
 
+// ── Sintetizador de Alarma Nuclear (Web Audio API) ──
+class NuclearAlarm {
+  constructor() {
+    this.ctx = null;
+    this.oscillators = [];
+    this.gainNode = null;
+    this.active = false;
+  }
+
+  start() {
+    if (this.active) {
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(() => {});
+      }
+      return;
+    }
+    this.active = true;
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      this.ctx = new AudioContext();
+
+      this.gainNode = this.ctx.createGain();
+      this.gainNode.gain.setValueAtTime(0.12, this.ctx.currentTime);
+      this.gainNode.connect(this.ctx.destination);
+
+      const osc1 = this.ctx.createOscillator();
+      const osc2 = this.ctx.createOscillator();
+      osc1.type = 'sawtooth';
+      osc2.type = 'sawtooth';
+
+      osc1.frequency.setValueAtTime(440, this.ctx.currentTime);
+      osc2.frequency.setValueAtTime(444, this.ctx.currentTime);
+
+      const lfo = this.ctx.createOscillator();
+      lfo.type = 'sine';
+      lfo.frequency.setValueAtTime(0.5, this.ctx.currentTime); // 2 segundos por ciclo
+
+      const lfoGain = this.ctx.createGain();
+      lfoGain.gain.setValueAtTime(140, this.ctx.currentTime); // modulación +/- 140Hz
+
+      lfo.connect(lfoGain);
+      lfoGain.connect(osc1.frequency);
+      lfoGain.connect(osc2.frequency);
+
+      osc1.connect(this.gainNode);
+      osc2.connect(this.gainNode);
+
+      lfo.start();
+      osc1.start();
+      osc2.start();
+
+      this.oscillators = [osc1, osc2, lfo];
+    } catch (e) {
+      console.warn("No se pudo iniciar la síntesis de audio:", e);
+    }
+  }
+
+  stop() {
+    if (!this.active) return;
+    this.active = false;
+    this.oscillators.forEach(o => {
+      try { o.stop(); } catch(e) {}
+    });
+    this.oscillators = [];
+    if (this.ctx) {
+      try { this.ctx.close(); } catch(e) {}
+      this.ctx = null;
+    }
+  }
+}
+
 const ORDER_TYPE_LABELS = { domicilio: '🛵 Domicilio', llevar: '🏃 Para llevar', comer: '🍽️ Para comer aquí' };
 
 export default function ChatPage() {
@@ -193,6 +265,49 @@ export default function ChatPage() {
   const [pendingMsgs, setPendingMsgs] = useState([]);
   const [, startCartTransition] = useTransition();
   const deferredPosSearch = useDeferredValue(posSearch);
+
+  // ── Alarma Nuclear de Domicilio / Recoger ──
+  const [dismissedAlerts, setDismissedAlerts] = useState({});
+  const alarmRef = useRef(null);
+
+  const activeAlarms = useMemo(() => {
+    return chats.filter(c => c.deliveryMode && c.needsHuman && dismissedAlerts[c.phone] !== c.lastTs);
+  }, [chats, dismissedAlerts]);
+
+  useEffect(() => {
+    if (activeAlarms.length > 0) {
+      if (!alarmRef.current) {
+        alarmRef.current = new NuclearAlarm();
+      }
+      alarmRef.current.start();
+    } else {
+      if (alarmRef.current) {
+        alarmRef.current.stop();
+        alarmRef.current = null;
+      }
+    }
+    return () => {
+      if (alarmRef.current) {
+        alarmRef.current.stop();
+        alarmRef.current = null;
+      }
+    };
+  }, [activeAlarms]);
+
+  // Autoresume al hacer clic/teclear para evadir autoplay block
+  useEffect(() => {
+    const handleGesture = () => {
+      if (activeAlarms.length > 0 && alarmRef.current) {
+        alarmRef.current.start();
+      }
+    };
+    document.addEventListener('click', handleGesture);
+    document.addEventListener('keydown', handleGesture);
+    return () => {
+      document.removeEventListener('click', handleGesture);
+      document.removeEventListener('keydown', handleGesture);
+    };
+  }, [activeAlarms]);
 
   // ── Fetch groups from gateway ──
   const fetchGroups = useCallback(async () => {
@@ -2002,6 +2117,60 @@ export default function ChatPage() {
                 <p className={styles.groupsLoading}>No se encontraron grupos</p>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Alerta Nuclear de Pedido Activo ── */}
+      {activeAlarms.length > 0 && (
+        <div className={styles.alarmOverlay}>
+          <div className={styles.alarmBox}>
+            <div className={styles.alarmHeader}>
+              <div className={styles.alarmRadiationIcon}>☢️</div>
+              <h2 className={styles.alarmTitle}>🚨 ¡ALERTA NUCLEAR DE PEDIDO! 🚨</h2>
+            </div>
+            
+            <p className={styles.alarmDescription}>
+              Hay <strong>{activeAlarms.length}</strong> {activeAlarms.length === 1 ? 'cliente esperando' : 'clientes esperando'} atención urgente de Domicilio o Pasar por Pedido:
+            </p>
+
+            <div className={styles.alarmClientList}>
+              {activeAlarms.map(c => (
+                <button
+                  key={c.phone}
+                  className={styles.alarmClientItem}
+                  onClick={() => {
+                    openChat(c);
+                    // Silenciar esta alerta individual
+                    setDismissedAlerts(prev => ({ ...prev, [c.phone]: c.lastTs }));
+                  }}
+                  title="Ir al chat del cliente"
+                >
+                  <span className={styles.alarmClientSymbol}>🛵</span>
+                  <div className={styles.alarmClientDetails}>
+                    <div className={styles.alarmClientName}>{c.name}</div>
+                    <div className={styles.alarmClientPhone}>{c.phone.replace(/^52/, '').replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3')}</div>
+                  </div>
+                  <span className={styles.alarmClientArrow}>➔</span>
+                </button>
+              ))}
+            </div>
+
+            <button
+              className={styles.alarmDismissBtn}
+              onClick={() => {
+                // Silenciar todos los actualmente sonando
+                setDismissedAlerts(prev => {
+                  const next = { ...prev };
+                  activeAlarms.forEach(c => {
+                    next[c.phone] = c.lastTs;
+                  });
+                  return next;
+                });
+              }}
+            >
+              ☢️ SILENCIAR ALARMA Y ATENDER ☢️
+            </button>
           </div>
         </div>
       )}

@@ -35,3 +35,4 @@ yarn-error.log*
 # scratch
 get_last_payload.js
 force_corte.js
+.env*.local

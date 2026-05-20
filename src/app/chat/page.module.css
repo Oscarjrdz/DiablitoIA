@@ -2495,3 +2495,229 @@ select.infoEditInput option { background: #1a2730; color: #e9edef; }
 }
 .vsSendItemBtn:hover { background: #06cf9c; }
 .vsSendItemBtn:disabled { opacity: 0.5; cursor: default; }
+
+/* ══ ALERTA NUCLEAR DE PEDIDOS ══ */
+.alarmOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 20, 26, 0.75);
+  backdrop-filter: blur(12px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: alarmPulseOverlay 2s infinite ease-in-out;
+  padding: 20px;
+}
+
+@keyframes alarmPulseOverlay {
+  0%, 100% { box-shadow: inset 0 0 100px rgba(239, 68, 68, 0.2); }
+  50% { box-shadow: inset 0 0 150px rgba(239, 68, 68, 0.45); }
+}
+
+.alarmBox {
+  background: #182229;
+  border: 3px solid #ff6000;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 520px;
+  padding: 30px;
+  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.8), 0 0 25px rgba(255, 96, 0, 0.35);
+  position: relative;
+  overflow: hidden;
+  animation: alarmPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Hazard line at top */
+.alarmBox::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: repeating-linear-gradient(
+    -45deg,
+    #ff6000,
+    #ff6000 10px,
+    #182229 10px,
+    #182229 20px
+  );
+}
+
+@keyframes alarmPop {
+  from { transform: scale(0.85); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.alarmHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.alarmRadiationIcon {
+  font-size: 56px;
+  color: #ff6000;
+  line-height: 1;
+  text-shadow: 0 0 15px rgba(255, 96, 0, 0.5);
+  animation: alarmSpin 3s linear infinite;
+}
+
+@keyframes alarmSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.alarmTitle {
+  font-size: 24px;
+  font-weight: 800;
+  color: #ef4444;
+  margin: 0;
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+  letter-spacing: 0.5px;
+  animation: textFlash 1s infinite alternate;
+}
+
+@keyframes textFlash {
+  from { opacity: 0.8; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1.02); }
+}
+
+.alarmDescription {
+  font-size: 15px;
+  color: #e9edef;
+  text-align: center;
+  margin: 0 0 24px 0;
+  line-height: 1.5;
+}
+
+.alarmDescription strong {
+  color: #ffaa00;
+  font-size: 18px;
+  text-shadow: 0 0 5px rgba(255, 170, 0, 0.3);
+}
+
+.alarmClientList {
+  width: 100%;
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 26px;
+  padding-right: 4px;
+}
+
+.alarmClientList::-webkit-scrollbar {
+  width: 6px;
+}
+.alarmClientList::-webkit-scrollbar-thumb {
+  background: #ff600044;
+  border-radius: 10px;
+}
+.alarmClientList::-webkit-scrollbar-thumb:hover {
+  background: #ff600088;
+}
+
+.alarmClientItem {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #202c33;
+  border: 1px solid #2a3942;
+  border-radius: 12px;
+  padding: 12px 16px;
+  width: 100%;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+}
+
+.alarmClientItem:hover {
+  background: #26353d;
+  border-color: #ffaa00;
+  box-shadow: 0 4px 12px rgba(255, 170, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.alarmClientSymbol {
+  font-size: 24px;
+  background: rgba(255, 96, 0, 0.15);
+  padding: 6px;
+  border-radius: 10px;
+  line-height: 1;
+}
+
+.alarmClientDetails {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.alarmClientName {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e9edef;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alarmClientPhone {
+  font-size: 13px;
+  color: #8696a0;
+  font-family: monospace;
+}
+
+.alarmClientArrow {
+  color: #8696a0;
+  font-size: 16px;
+  transition: transform 0.2s;
+}
+
+.alarmClientItem:hover .alarmClientArrow {
+  color: #ffaa00;
+  transform: translateX(4px);
+}
+
+.alarmDismissBtn {
+  background: linear-gradient(135deg, #ef4444, #ea580c);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  padding: 16px 24px;
+  font-size: 16px;
+  font-weight: 800;
+  width: 100%;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 0.5px;
+  animation: btnPulse 1.8s infinite;
+}
+
+.alarmDismissBtn:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  background: linear-gradient(135deg, #f43f5e, #f97316);
+}
+
+.alarmDismissBtn:active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
+}
+
+@keyframes btnPulse {
+  0% { box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 4px 25px rgba(239, 68, 68, 0.7); }
+  100% { box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); }
+}
