@@ -125,7 +125,7 @@ class NuclearAlarm {
       this.ctx = new AudioContext();
 
       this.gainNode = this.ctx.createGain();
-      this.gainNode.gain.setValueAtTime(0.12, this.ctx.currentTime);
+      this.gainNode.gain.setValueAtTime(0.6, this.ctx.currentTime);
       this.gainNode.connect(this.ctx.destination);
 
       const osc1 = this.ctx.createOscillator();
@@ -2141,7 +2141,8 @@ export default function ChatPage() {
                   className={styles.alarmClientItem}
                   onClick={() => {
                     openChat(c);
-                    // Silenciar esta alerta individual
+                    // Silenciar esta alerta individual y persistir en el servidor
+                    toggleHumanRead(c.phone, true);
                     setDismissedAlerts(prev => ({ ...prev, [c.phone]: c.lastTs }));
                   }}
                   title="Ir al chat del cliente"
@@ -2158,8 +2159,8 @@ export default function ChatPage() {
 
             <button
               className={styles.alarmDismissBtn}
-              onClick={() => {
-                // Silenciar todos los actualmente sonando
+              onClick={async () => {
+                // Silenciar todos los actualmente sonando localmente de inmediato para cerrar el modal
                 setDismissedAlerts(prev => {
                   const next = { ...prev };
                   activeAlarms.forEach(c => {
@@ -2167,6 +2168,31 @@ export default function ChatPage() {
                   });
                   return next;
                 });
+
+                // Persistir el estado "atendido" (leído) de todos los clientes en el servidor (Redis)
+                const alarmsToDismiss = [...activeAlarms];
+                try {
+                  await Promise.all(
+                    alarmsToDismiss.map(c =>
+                      fetch('/api/whatsapp/mark-read', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ phone: c.phone, read: true })
+                      })
+                    )
+                  );
+                  // Actualizar la lista de chats localmente para reflejar que ya no requieren atención humana
+                  const phones = alarmsToDismiss.map(c => c.phone);
+                  setChats(prev => prev.map(c =>
+                    phones.includes(c.phone)
+                      ? { ...c, needsHuman: false, unread: 0 }
+                      : c
+                  ));
+                  showToast('Alarmas silenciadas y atendidas en el servidor', 'success');
+                } catch (e) {
+                  console.error('Error al silenciar alarmas en el servidor:', e);
+                  showToast('Error al guardar el estado atendido en el servidor', 'error');
+                }
               }}
             >
               ☢️ SILENCIAR ALARMA Y ATENDER ☢️
