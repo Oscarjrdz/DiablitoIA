@@ -62,55 +62,47 @@ export async function GET(request) {
 
     const authH = { Authorization: `Bearer ${loyverseToken}` };
 
-    // Check Redis cache first (1 hour TTL)
-    const cached = await redis.get('clientes_report_cache');
-    let reportData;
+    // Always fetch fresh data from Loyverse
+    const storesRes = await fetch('https://api.loyverse.com/v1.0/stores', { headers: authH, signal: AbortSignal.timeout(8000) });
+    const storesPayload = await storesRes.json();
+    const stores = (storesPayload.stores || []).filter(s => !s.name.toLowerCase().includes('prueba'));
 
-    if (cached) {
-      reportData = typeof cached === 'string' ? JSON.parse(cached) : cached;
-    } else {
-      const storesRes = await fetch('https://api.loyverse.com/v1.0/stores', { headers: authH, signal: AbortSignal.timeout(8000) });
-      const storesPayload = await storesRes.json();
-      const stores = (storesPayload.stores || []).filter(s => !s.name.toLowerCase().includes('prueba'));
-
-      let allCustomers = [], cursor = null, hasMore = true;
-      while (hasMore) {
-        let url = 'https://api.loyverse.com/v1.0/customers?limit=250';
-        if (cursor) url += `&cursor=${cursor}`;
-        const cr = await fetch(url, { headers: authH, signal: AbortSignal.timeout(8000) });
-        const cd = await cr.json();
-        if (cd.customers?.length) allCustomers = allCustomers.concat(cd.customers);
-        cursor = cd.cursor || null;
-        hasMore = !!cursor;
-      }
-
-      const byStore = {};
-      let noStore = 0;
-      stores.forEach(s => { byStore[s.name] = 0; });
-
-      allCustomers.forEach(c => {
-        const note = c.note || '';
-        const match = note.match(/Tienda:\s*(.+?)(\n|$)/i);
-        if (match) {
-          const storeName = match[1].trim();
-          if (byStore[storeName] !== undefined) {
-            byStore[storeName]++;
-          } else {
-            const found = Object.keys(byStore).find(k =>
-              k.toLowerCase().includes(storeName.toLowerCase()) ||
-              storeName.toLowerCase().includes(k.toLowerCase())
-            );
-            if (found) byStore[found]++;
-            else { if (!byStore[storeName]) byStore[storeName] = 0; byStore[storeName]++; }
-          }
-        } else {
-          noStore++;
-        }
-      });
-
-      reportData = { total: allCustomers.length, byStore, noStore, ts: Date.now() };
-      await redis.set('clientes_report_cache', JSON.stringify(reportData), { ex: 3600 });
+    let allCustomers = [], cursor = null, hasMore = true;
+    while (hasMore) {
+      let url = 'https://api.loyverse.com/v1.0/customers?limit=250';
+      if (cursor) url += `&cursor=${cursor}`;
+      const cr = await fetch(url, { headers: authH, signal: AbortSignal.timeout(8000) });
+      const cd = await cr.json();
+      if (cd.customers?.length) allCustomers = allCustomers.concat(cd.customers);
+      cursor = cd.cursor || null;
+      hasMore = !!cursor;
     }
+
+    const byStore = {};
+    let noStore = 0;
+    stores.forEach(s => { byStore[s.name] = 0; });
+
+    allCustomers.forEach(c => {
+      const note = c.note || '';
+      const match = note.match(/Tienda:\s*(.+?)(\n|$)/i);
+      if (match) {
+        const storeName = match[1].trim();
+        if (byStore[storeName] !== undefined) {
+          byStore[storeName]++;
+        } else {
+          const found = Object.keys(byStore).find(k =>
+            k.toLowerCase().includes(storeName.toLowerCase()) ||
+            storeName.toLowerCase().includes(k.toLowerCase())
+          );
+          if (found) byStore[found]++;
+          else { if (!byStore[storeName]) byStore[storeName] = 0; byStore[storeName]++; }
+        }
+      } else {
+        noStore++;
+      }
+    });
+
+    const reportData = { total: allCustomers.length, byStore, noStore };
 
     // Build compact message
     const now = new Date();
