@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
 import { generateFolio, buildPromoText } from '@/lib/folio';
+import { saveBotMessage } from '@/lib/chatHistory';
 
 export async function POST(req) {
   try {
@@ -84,8 +85,27 @@ export async function POST(req) {
     if (res.ok) {
       const sendRes = await res.json();
       await redis.set(`promo_pos_${cleanPhone}`, 'naranja');
-      const msgId = sendRes.messageId || sendRes?.key?.id || sendRes?.data?.key?.id;
-      if (msgId) await redis.set(`promo_msg_${msgId}`, cleanPhone);
+      
+      const rawId = sendRes?.messageId
+        || sendRes?.key?.id
+        || sendRes?.data?.key?.id
+        || sendRes?.response?.key?.id
+        || sendRes?.response?.id
+        || sendRes?.id
+        || sendRes?.msgId;
+      const msgId = typeof rawId === 'object' ? (rawId?._serialized || null) : rawId;
+      if (msgId) {
+        await redis.setex(`chat_msg_${msgId}`, 604800, cleanPhone);
+      }
+
+      await saveBotMessage(
+        cleanPhone,
+        promoText,
+        finalCustomerName,
+        targetPromo.image ? `https://global-sales-prediction.vercel.app/api/promotions/image?id=${targetPromo.id}&ts=${Date.now()}` : null,
+        msgId
+      );
+
       return NextResponse.json({ success: true, folio });
     } else {
       await redis.set(`promo_pos_${cleanPhone}`, 'rojo');

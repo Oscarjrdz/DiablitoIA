@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
 import { generateFolio, buildPromoText } from '@/lib/folio';
+import { saveBotMessage } from '@/lib/chatHistory';
 
 const LOYVERSE_API_URL = 'https://api.loyverse.com/v1.0/customers';
 
@@ -193,8 +194,26 @@ export async function POST(req) {
             if (gwRes.ok) {
               const sendRes = await gwRes.json();
               await redis.set(`promo_pos_${cleanPhone}`, 'naranja');
-              const msgId = sendRes.messageId || sendRes?.key?.id || sendRes?.data?.key?.id;
-              if (msgId) await redis.set(`promo_msg_${msgId}`, cleanPhone);
+              
+              const rawId = sendRes?.messageId
+                || sendRes?.key?.id
+                || sendRes?.data?.key?.id
+                || sendRes?.response?.key?.id
+                || sendRes?.response?.id
+                || sendRes?.id
+                || sendRes?.msgId;
+              const msgId = typeof rawId === 'object' ? (rawId?._serialized || null) : rawId;
+              if (msgId) {
+                await redis.setex(`chat_msg_${msgId}`, 604800, cleanPhone);
+              }
+
+              await saveBotMessage(
+                cleanPhone,
+                promoText,
+                body.nombre || '',
+                welcomePromo.image ? `https://global-sales-prediction.vercel.app/api/promotions/image?id=${welcomePromo.id}&ts=${Date.now()}` : null,
+                msgId
+              );
             } else {
                await redis.set(`promo_pos_${cleanPhone}`, 'rojo');
             }

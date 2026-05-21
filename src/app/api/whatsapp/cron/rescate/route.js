@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
 import { generateFolio, buildPromoText } from '@/lib/folio';
+import { saveBotMessage } from '@/lib/chatHistory';
 
 // ── 💤 CRON: RESCATE DE CLIENTES INACTIVOS ──
 // Revisa todos los clientes de Loyverse y les manda cupón automático
@@ -59,13 +60,38 @@ async function sendWithPresence(phoneId, text, cfg, promo) {
     };
   }
 
-  const res = await fetch(`${baseUrl}${endpoint}`, {
+  let res = await fetch(`${baseUrl}${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(wBody)
   });
 
-  return res.ok;
+  // FALLBACK: Si falla la imagen, enviar como texto plano
+  if (!res.ok && endpoint === '/messages/image') {
+    res = await fetch(`${baseUrl}/messages/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, to: phoneId, body: text })
+    });
+  }
+
+  if (res.ok) {
+    let msgId = null;
+    try {
+      const sendRes = await res.json();
+      const rawId = sendRes?.messageId
+        || sendRes?.key?.id
+        || sendRes?.data?.key?.id
+        || sendRes?.response?.key?.id
+        || sendRes?.response?.id
+        || sendRes?.id
+        || sendRes?.msgId;
+      msgId = typeof rawId === 'object' ? (rawId?._serialized || null) : rawId;
+    } catch (err) {}
+    return { ok: true, msgId };
+  }
+
+  return { ok: false };
 }
 
 export async function GET(req) {
@@ -198,9 +224,22 @@ export async function GET(req) {
         }
 
         // Enviar con presencia simulada
-        const ok = await sendWithPresence(cleanPhone + '@c.us', promoText, cfg, promo);
+        const sendResult = await sendWithPresence(cleanPhone + '@c.us', promoText, cfg, promo);
 
-        if (ok) {
+        if (sendResult.ok) {
+          const { msgId } = sendResult;
+          if (msgId) {
+            await redis.setex(`chat_msg_${msgId}`, 604800, cleanPhone);
+          }
+
+          await saveBotMessage(
+            cleanPhone,
+            promoText,
+            customer.name,
+            promo.image ? `https://global-sales-prediction.vercel.app/api/promotions/image?id=${promo.id}&ts=${Date.now()}` : null,
+            msgId
+          );
+
           // Lock con TTL = triggerDays (en segundos). Cuando expire, el siguiente ciclo puede mandar de nuevo.
           const ttlSeconds = triggerDays * 24 * 60 * 60;
           await redis.set(lockKey, '1');

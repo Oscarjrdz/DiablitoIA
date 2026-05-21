@@ -1,24 +1,7 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
 import { generateFolio, buildPromoText } from '@/lib/folio';
-
-// Guarda un mensaje del bot en el historial de chat de Redis
-async function saveBotMessage(phone, text, name) {
-  if (!phone || !text) return;
-  let cleanPhone = phone.replace(/\D/g, '');
-  if (!cleanPhone.startsWith('52')) cleanPhone = '52' + cleanPhone;
-  const histKey = `chat_hist_${cleanPhone}@c.us`;
-  try {
-    const raw = await redis.get(histKey);
-    const parsed = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : [];
-    parsed.push({ role: 'model', parts: [{ text, ts: Date.now() }] });
-    if (parsed.length > 40) parsed.splice(0, parsed.length - 40);
-    await redis.set(histKey, JSON.stringify(parsed));
-    await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
-    // Asegurarse de que el nombre esté en caché para que aparezca en la lista
-    if (name) await redis.set(`client_name_${cleanPhone}`, name);
-  } catch (e) { console.error('[saveBotMessage]', e); }
-}
+import { saveBotMessage } from '@/lib/chatHistory';
 
 export async function POST(req) {
   try {
@@ -130,7 +113,12 @@ export async function POST(req) {
                                          await resW.text().catch(()=>null);
                                          await redis.set(`promo_pos_${rPhone}`, 'naranja');
                                          await redis.del(mutexKey);
-                                         await saveBotMessage(rPhone, promoTextW, custData.name);
+                                         await saveBotMessage(
+                                             rPhone,
+                                             promoTextW,
+                                             custData.name,
+                                             welcomePromoW.image ? `https://global-sales-prediction.vercel.app/api/promotions/image?id=${welcomePromoW.id}&ts=${Date.now()}` : null
+                                          );
                                          console.log(`[Receipt] Cupón de bienvenida enviado a ${rPhone} (nuevo cliente)`);
                                       }
                                    }
@@ -152,7 +140,7 @@ export async function POST(req) {
                             const msgText = `Hola ${nameToUse}, gracias por tu visita, esperamos que disfrutes de:\n${itemsText}\n\nRecuerda que entre mas compres mas puntos acumulas, hasta ahora tienes *${points} puntos*.`;
 
                             try {
-                               await fetch(`https://gatewaywapp-production.up.railway.app/${wappInstance}/messages/chat`, {
+                               await fetch(`https://gatewaywapp-production.railway.app/${wappInstance}/messages/chat`, {
                                   method: 'POST',
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({ token: wappToken, to: rPhone + '@c.us', body: msgText })
@@ -233,7 +221,7 @@ export async function POST(req) {
                                            caption: promoText
                                         };
                                      }
-                                     let resPromo = await fetch(`https://gatewaywapp-production.up.railway.app/${wappInstance}${endpoint}`, {
+                                     let resPromo = await fetch(`https://gatewaywapp-production.railway.app/${wappInstance}${endpoint}`, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify(promoReqBody)
@@ -241,7 +229,7 @@ export async function POST(req) {
                                      
                                      // FALLBACK: Si falla la imagen, enviar como texto plano
                                      if (!resPromo.ok && endpoint === '/messages/image') {
-                                         resPromo = await fetch(`https://gatewaywapp-production.up.railway.app/${wappInstance}/messages/chat`, {
+                                         resPromo = await fetch(`https://gatewaywapp-production.railway.app/${wappInstance}/messages/chat`, {
                                              method: 'POST',
                                              headers: { 'Content-Type': 'application/json' },
                                              body: JSON.stringify({
@@ -251,8 +239,29 @@ export async function POST(req) {
                                              })
                                          });
                                      }
-                                     await resPromo.text().catch(()=>null);
-                                     await saveBotMessage(rPhone, promoText, custData.name);
+                                      let msgId = null;
+                                      try {
+                                         const sendRes = await resPromo.json();
+                                         const rawId = sendRes?.messageId
+                                            || sendRes?.key?.id
+                                            || sendRes?.data?.key?.id
+                                            || sendRes?.response?.key?.id
+                                            || sendRes?.response?.id
+                                            || sendRes?.id
+                                            || sendRes?.msgId;
+                                         msgId = typeof rawId === 'object' ? (rawId?._serialized || null) : rawId;
+                                         if (msgId) {
+                                            await redis.setex(`chat_msg_${msgId}`, 604800, rPhone);
+                                         }
+                                      } catch {}
+
+                                      await saveBotMessage(
+                                         rPhone,
+                                         promoText,
+                                         custData.name,
+                                         promo.image ? `https://global-sales-prediction.vercel.app/api/promotions/image?id=${promo.id}&ts=${Date.now()}` : null,
+                                         msgId
+                                      );
                                      limiteVentas = true; // Activar el candado, no se enviarán más promos iterables este turno
                                   }
                                }
@@ -463,9 +472,26 @@ export async function POST(req) {
       if (welcomePromo.id) { await redis.incr(`promo_sent_count_${welcomePromo.id}`); }
       const sendRes = await gwRes.json();
       await redis.set(`promo_pos_${cleanPhone}`, 'naranja');
-      const msgId = sendRes.messageId || sendRes?.key?.id || sendRes?.data?.key?.id;
-      if (msgId) await redis.set(`promo_msg_${msgId}`, cleanPhone);
-      await saveBotMessage(cleanPhone, promoText, customerData?.name);
+      
+      const rawId = sendRes?.messageId
+        || sendRes?.key?.id
+        || sendRes?.data?.key?.id
+        || sendRes?.response?.key?.id
+        || sendRes?.response?.id
+        || sendRes?.id
+        || sendRes?.msgId;
+      const msgId = typeof rawId === 'object' ? (rawId?._serialized || null) : rawId;
+      if (msgId) {
+        await redis.setex(`chat_msg_${msgId}`, 604800, cleanPhone);
+      }
+
+      await saveBotMessage(
+        cleanPhone,
+        promoText,
+        customerData?.name,
+        welcomePromo.image ? `https://global-sales-prediction.vercel.app/api/promotions/image?id=${welcomePromo.id}&ts=${Date.now()}` : null,
+        msgId
+      );
     } else {
       await redis.set(`promo_pos_${cleanPhone}`, 'rojo');
     }
