@@ -904,6 +904,7 @@ export default function ChatPage() {
     setPosSendingToGroups(true);
     const clientName = clientCard?.client?.name || activeChat?.name || 'Cliente';
     const clientPhone = (activeChat?.phone || '').replace(/^52/, '').replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3');
+    const clientAddress = clientCard?.client?.address || '';
     const storeName = posStores.find(s => s.id === posStoreId)?.name || '';
     const paymentName = posPayTypes.find(pt => pt.id === posPayTypeId)?.name || '';
     const orderLabel = ORDER_TYPE_LABELS[posOrderType] || posOrderType;
@@ -918,6 +919,7 @@ export default function ChatPage() {
       `📱 *Tel:* ${clientPhone}\n` +
       `🕐 *Hora:* ${hora} hrs\n` +
       `🚚 *Tipo:* ${orderLabel}\n` +
+      (clientAddress ? `🏠 *Domicilio:* ${clientAddress}\n` : '') +
       (storeName ? `🏪 *Sucursal:* ${storeName}\n` : '') +
       `\n📋 *Pedido:*\n${lines}\n\n` +
       (paymentName ? `💳 *Pago:* ${paymentName}\n` : '') +
