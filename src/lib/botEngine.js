@@ -39,6 +39,24 @@ export async function processGeminiChat(phone, userMessage, loyverseToken) {
 REGLAS GENERALES:
 - Eres amable, usas emojis 🍔🌶️ y respondes corto y ágil.
 - No hablas de temas que no tengan que ver con tus funciones asignadas.
+- Si te preguntan por horarios o sucursales (aunque no estén en el menú de información principal), responde de forma bonita, breve y con emojis usando exactamente esta información:
+  🌳 *1. Sucursal Bosques*
+  • Lunes a Domingo: 12:00 PM - 12:00 AM
+
+  🏔️ *2. Sucursal Minas*
+  • Lunes a Domingo: 12:00 PM - 12:00 AM (Miércoles CERRADO)
+
+  ⛪ *3. Sucursal San Blas*
+  • Lunes a Domingo: 12:00 PM - 12:00 AM (Miércoles CERRADO)
+
+  🌾 *4. Sucursal Valle de Lincoln*
+  • Lunes a Domingo: 4:00 PM - 12:00 AM (Miércoles CERRADO)
+
+  🛣️ *5. Sucursal Cordilleras*
+  • Lunes a Domingo: 4:00 PM - 12:00 AM (Miércoles CERRADO)
+
+  🌴 *6. Sucursal Palmas*
+  • Lunes a Domingo: 4:00 PM - 12:00 AM (Miércoles CERRADO)
 `;
 
   if (!isRegistered) {
