@@ -430,9 +430,32 @@ export default function ChatPage() {
   }, []);
 
   const saveClientField = useCallback(async (field) => {
-    if (!clientCard?.client?.customerId) return;
     setSavingField(true);
     try {
+      // Si no hay cliente en Loyverse, crearlo primero (solo aplica para nombre)
+      if (!clientCard?.client?.customerId) {
+        if (field !== 'name') { setSavingField(false); return; }
+        const res = await fetch('/api/loyverse/client-card', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: editName, phone: clientCard.client.phone })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          setClientCard(prev => ({
+            ...prev,
+            client: { ...prev.client, name: editName, customerId: data.customer?.id || prev.client.customerId }
+          }));
+          setChats(prev => prev.map(c => c.phone === activeChat?.phone ? { ...c, name: editName } : c));
+          showToast('Cliente registrado correctamente', 'success');
+          setEditingField(null);
+        } else {
+          showToast('Error al registrar cliente', 'error');
+        }
+        setSavingField(false);
+        return;
+      }
+
       const body = { id: clientCard.client.customerId };
       if (field === 'name') { body.name = editName; body._phone = clientCard.client.phone; }
       if (field === 'address') body.address = editAddress;
@@ -1546,11 +1569,11 @@ export default function ChatPage() {
                 ) : (
                   <div className={styles.infoNameRow}>
                     <div className={styles.infoName}>{clientCard?.client?.name || activeChat.name}</div>
-                    {clientCard?.client?.customerId && (
+                    {clientCard?.client && (
                       <button className={styles.infoEditBtn} onClick={() => {
-                        setEditName(clientCard?.client?.name || activeChat.name);
+                        setEditName(clientCard?.client?.name || '');
                         setEditingField('name');
-                      }}>Editar</button>
+                      }}>{clientCard?.client?.customerId ? 'Editar' : 'Capturar'}</button>
                     )}
                   </div>
                 )}
