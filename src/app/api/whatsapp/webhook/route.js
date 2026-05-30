@@ -1379,7 +1379,7 @@ export async function POST(req) {
         else {
             // Mensajes de agradecimiento/despedida — no mostrar menú
             const isFarewell = /^(bye|adios|adiós|hasta luego|hasta pronto|hasta mañana|nos vemos|chao|chau|cuídate|cuídate\s*mucho|ahí\s*nos\s*vemos)[\s\p{Emoji}]*$/iu.test(bodyStr.trim());
-            const isGratitude = !isFarewell && /^(gracias|grac|muchas gracias|mil gracias|ok gracias|de nada|de nada de nada|no hay de que|no hay de qué|con mucho gusto|fue un placer|claro que sí|con gusto|todo bien|perfecto gracias|gracias\s*[\p{Emoji}]*)[\s\p{Emoji}]*$/iu.test(bodyStr.trim());
+            const isGratitude = !isFarewell && /^(gracias|grac|muchas gracias|mil gracias|ok gracias|de nada|de nada de nada|no hay de que|no hay de qué|con mucho gusto|fue un placer|claro que sí|con gusto|todo bien|perfecto gracias|gracias\s*[\p{Emoji}]*|no\s+gracias|nada\s+gracias|gracias\s+no\s+quiero|gracias\s+no\s+necesito|gracias\s+no\s+quiero\s+nada|gracias\s+no\s+necesito\s+nada|no\s+quiero\s+nada|no\s+necesito\s+nada|nada\s+m[aá]s|eso\s+es\s+todo|ya\s+es\s+todo|estoy\s+bien|ya\s+estoy\s+bien|solo\s+era\s+eso|era\s+todo|con\s+eso\s+es\s+todo)[\s,.\p{Emoji}]*$/iu.test(bodyStr.trim());
             if (isFarewell) {
                 const farewells = [
                     `Hasta luego *${clientName}* 👋`,
