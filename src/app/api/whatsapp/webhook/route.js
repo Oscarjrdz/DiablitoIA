@@ -1375,9 +1375,9 @@ export async function POST(req) {
 
 ¡Te esperamos para consentirte! 🍔🌶️🔥`;
         }
-        // ── Default: IA clasifica intención (domicilio / pasar a recoger / ninguno) ──
+        // ── Default: IA clasifica intención (domicilio / pasar a recoger / horarios / ninguno) ──
         else {
-            let orderType = 'none'; // none, delivery, pickup
+            let orderType = 'none'; // none, delivery, pickup, horarios
             try {
                 const aiToken = cfg.aiToken;
                 if (aiToken) {
@@ -1385,7 +1385,7 @@ export async function POST(req) {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            contents: [{ role: 'user', parts: [{ text: `Eres un clasificador de una hamburguesería. El cliente escribió: "${bodyStr}"\n\nClasifica la intención del cliente:\n- Si quiere PEDIR A DOMICILIO (que le lleven comida a su casa), responde: DOMICILIO\n- Si quiere PEDIR PARA PASAR A RECOGER (pickup, pasar por su comida), responde: PASAR\n- Si quiere ORDENAR COMIDA pero no especifica cómo, responde: DOMICILIO\n- Si NO quiere ordenar comida, responde: NINGUNO\n\nResponde SOLO con una palabra: DOMICILIO, PASAR o NINGUNO.` }] }],
+                            contents: [{ role: 'user', parts: [{ text: `Eres un clasificador de una hamburguesería. El cliente escribió: "${bodyStr}"\n\nClasifica la intención del cliente:\n- Si quiere PEDIR A DOMICILIO (que le lleven comida a su casa), responde: DOMICILIO\n- Si quiere PEDIR PARA PASAR A RECOGER (pickup, pasar por su comida), responde: PASAR\n- Si quiere ORDENAR COMIDA pero no especifica cómo, responde: DOMICILIO\n- Si pregunta por HORARIOS, SUCURSALES, ubicaciones, a qué hora abren, dónde están, o cualquier cosa relacionada con saber los horarios de atención, responde: HORARIOS\n- Si NO quiere ordenar comida ni pregunta horarios, responde: NINGUNO\n\nResponde SOLO con una palabra: DOMICILIO, PASAR, HORARIOS o NINGUNO.` }] }],
                             generationConfig: { maxOutputTokens: 5, temperature: 0.1 }
                         })
                     });
@@ -1394,6 +1394,7 @@ export async function POST(req) {
                         const answer = (classifyData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim().toUpperCase();
                         if (answer.includes('DOMICILIO')) orderType = 'delivery';
                         else if (answer.includes('PASAR')) orderType = 'pickup';
+                        else if (answer.includes('HORARIO')) orderType = 'horarios';
                     }
                 }
             } catch(e) { console.error('[Bot] Error clasificando intención:', e); }
@@ -1408,6 +1409,34 @@ export async function POST(req) {
                 await redis.set(`delivery_mode_${cleanPhone}`, '1');
                 await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1');
                 console.log(`[Bot] Pickup mode activado para ${cleanPhone} - IA detectó pasar a recoger`);
+            } else if (orderType === 'horarios') {
+                botReply = `📅 *Nuestros horarios por sucursal:*
+
+🌳 *1. Sucursal Bosques*
+• Lunes a Domingo: 12:00 PM - 12:00 AM
+
+🏔️ *2. Sucursal Minas*
+• Lunes a Domingo: 12:00 PM - 12:00 AM
+*(Miércoles CERRADO)*
+
+⛪ *3. Sucursal San Blas*
+• Lunes a Domingo: 12:00 PM - 12:00 AM
+*(Miércoles CERRADO)*
+
+🌾 *4. Sucursal Valle de Lincoln*
+• Lunes a Domingo: 4:00 PM - 12:00 AM
+*(Miércoles CERRADO)*
+
+🛣️ *5. Sucursal Cordilleras*
+• Lunes a Domingo: 4:00 PM - 12:00 AM
+*(Miércoles CERRADO)*
+
+🌴 *6. Sucursal Palmas*
+• Lunes a Domingo: 4:00 PM - 12:00 AM
+*(Miércoles CERRADO)*
+
+¡Te esperamos para consentirte! 🍔🌶️🔥`;
+                console.log(`[Bot] Horarios respondidos para ${cleanPhone} - IA detectó intención horarios`);
             } else {
                 botReply = `¡Hola *${clientName}*! 🍔 Qué gusto verte de vuelta. 😊\n\n${menuMsg}`;
             }
