@@ -1288,7 +1288,7 @@ export async function POST(req) {
 
     // ── 🟢 CLIENTE REGISTRADO: Respuestas determinísticas con estados ──
     if (isRegistered && clientName) {
-        const menuMsg = `¿En qué te puedo ayudar? 😊\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
+        const menuMsg = `¿En qué te puedo ayudar? 😊\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃\n4️⃣ Conocer nuestros Horarios 📅`;
         const userText = bodyStr.trim().toLowerCase();
         const botState = await redis.get(`bot_state_${cleanPhone}`);
         let botReply = '';
@@ -1300,7 +1300,7 @@ export async function POST(req) {
             const isNo = /^(no|nel|nop|nah|2)$/i.test(userText);
 
             if (isNo) {
-                botReply = `Ok 👍 Entonces dime, ¿en qué te puedo ayudar?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
+                botReply = `Ok 👍 Entonces dime, ¿en qué te puedo ayudar?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃\n4️⃣ Conocer nuestros Horarios 📅`;
             } else {
                 // Sí o cualquier otra cosa → enviar imagen del menú
                 const menuImageUrl = 'https://global-sales-prediction.vercel.app/menu-mayo-2025.jpg';
@@ -1335,6 +1335,35 @@ export async function POST(req) {
             await redis.set(`delivery_mode_${cleanPhone}`, '1');
             await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1');
             console.log(`[Bot] Pickup mode activado para ${cleanPhone} - opción 3 explícita`);
+        }
+        // ── Opción 4 explícita: Conocer nuestros horarios ──
+        else if (textMsg === '4' || /\bhorario\b/i.test(userText) || /\bsucursal\b/i.test(userText)) {
+            botReply = `📅 *Nuestros horarios por sucursal:*
+
+🌳 *1. Sucursal Bosques*
+• Lunes a Domingo: 12:00 PM - 12:00 AM
+
+🏔️ *2. Sucursal Minas*
+• Lunes a Domingo: 12:00 PM - 12:00 AM
+*(Miércoles CERRADO)*
+
+⛪ *3. Sucursal San Blas*
+• Lunes a Domingo: 12:00 PM - 12:00 AM
+*(Miércoles CERRADO)*
+
+🌾 *4. Sucursal Valle de Lincoln*
+• Lunes a Domingo: 4:00 PM - 12:00 AM
+*(Miércoles CERRADO)*
+
+🛣️ *5. Sucursal Cordilleras*
+• Lunes a Domingo: 4:00 PM - 12:00 AM
+*(Miércoles CERRADO)*
+
+🌴 *6. Sucursal Palmas*
+• Lunes a Domingo: 4:00 PM - 12:00 AM
+*(Miércoles CERRADO)*
+
+¡Te esperamos para consentirte! 🍔🌶️🔥`;
         }
         // ── Default: IA clasifica intención (domicilio / pasar a recoger / ninguno) ──
         else {
@@ -1512,7 +1541,7 @@ NUNCA omitas el tag.`;
             if (regMatch) {
                 // ── ✅ REGISTRO DETECTADO: Mensaje determinístico de confirmación ──
                 const clientData = { name: regMatch[1].trim(), address: regMatch[2].trim(), city: regMatch[3].trim() };
-                const confirmMsg = `¡Perfecto *${clientData.name}*! 🎉🔥\n\n¡Ya estás registrado! 🚀 Tu 🍔 *BURGER GRATIS* de bienvenida te espera.\n\n¿En qué te ayudo hoy?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
+                const confirmMsg = `¡Perfecto *${clientData.name}*! 🎉🔥\n\n¡Ya estás registrado! 🚀 Tu 🍔 *BURGER GRATIS* de bienvenida te espera.\n\n¿En qué te ayudo hoy?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃\n4️⃣ Conocer nuestros Horarios 📅`;
                 
                 const confirmMsgId = await sendWhatsApp(phoneId, confirmMsg, cfg);
                 const confirmEntry = { text: confirmMsg, ts: Date.now(), status: 'sent' };
