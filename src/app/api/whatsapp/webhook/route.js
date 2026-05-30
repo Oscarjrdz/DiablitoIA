@@ -1375,43 +1375,9 @@ export async function POST(req) {
 
 ¡Te esperamos para consentirte! 🍔🌶️🔥`;
         }
-        // ── Default: IA clasifica intención (domicilio / pasar a recoger / horarios / ninguno) ──
+        // ── Default: IA clasifica intención ──
         else {
-            // Mensajes de agradecimiento/despedida — no mostrar menú
-            const isFarewell = /^(bye|adios|adiós|hasta luego|hasta pronto|hasta mañana|nos vemos|chao|chau|cuídate|cuídate\s*mucho|ahí\s*nos\s*vemos)[\s\p{Emoji}]*$/iu.test(bodyStr.trim());
-            const isGratitude = !isFarewell && /^(gracias|grac|muchas gracias|mil gracias|ok gracias|de nada|de nada de nada|no hay de que|no hay de qué|con mucho gusto|fue un placer|claro que sí|con gusto|todo bien|perfecto gracias|gracias\s*[\p{Emoji}]*|no\s+gracias|nada\s+gracias|gracias\s+no\s+quiero|gracias\s+no\s+necesito|gracias\s+no\s+quiero\s+nada|gracias\s+no\s+necesito\s+nada|no\s+quiero\s+nada|no\s+necesito\s+nada|nada\s+m[aá]s|eso\s+es\s+todo|ya\s+es\s+todo|estoy\s+bien|ya\s+estoy\s+bien|solo\s+era\s+eso|era\s+todo|con\s+eso\s+es\s+todo)[\s,.\p{Emoji}]*$/iu.test(bodyStr.trim());
-            if (isFarewell) {
-                const farewells = [
-                    `Hasta luego *${clientName}* 👋`,
-                    `Bye *${clientName}*, fue un placer 😊`,
-                    `¡Hasta pronto *${clientName}*! 🙌`,
-                    `Nos vemos *${clientName}* 👋`,
-                    `¡Cuídate *${clientName}*! 😊`,
-                    `Bye bye *${clientName}* 👋`,
-                    `¡Hasta la próxima *${clientName}*! 🍔`,
-                    `Chao *${clientName}*, que te vaya bien 😊`,
-                    `¡Que te vaya bonito *${clientName}*! 👋`,
-                    `Hasta luego *${clientName}*, aquí estaremos 😊`,
-                ];
-                botReply = farewells[Math.floor(Math.random() * farewells.length)];
-                console.log(`[Bot] Despedida detectada para ${cleanPhone} — no se muestra menú`);
-            } else if (isGratitude) {
-                const thankReplies = [
-                    `Por nada *${clientName}* 😊`,
-                    `¡Para eso estamos *${clientName}*! 😊`,
-                    `No hay de qué *${clientName}* 🙌`,
-                    `¡Con gusto *${clientName}*! 😊`,
-                    `De nada *${clientName}*, a la orden 😊`,
-                    `¡Es un placer *${clientName}*! 🍔`,
-                    `Por supuesto *${clientName}*, aquí estamos 😊`,
-                    `¡De nada *${clientName}*! Cuando gustes 🙌`,
-                    `Claro que sí *${clientName}*, para servirte 😊`,
-                    `A ti *${clientName}*, gracias por preferirnos 🍔`,
-                ];
-                botReply = thankReplies[Math.floor(Math.random() * thankReplies.length)];
-                console.log(`[Bot] Agradecimiento detectado para ${cleanPhone} — no se muestra menú`);
-            } else {
-            let orderType = 'none'; // none, delivery, pickup, horarios
+            let orderType = 'none'; // none, delivery, pickup, horarios, gracias, despedida
             try {
                 const aiToken = cfg.aiToken;
                 if (aiToken) {
@@ -1419,8 +1385,8 @@ export async function POST(req) {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            contents: [{ role: 'user', parts: [{ text: `Eres un clasificador de una hamburguesería. El cliente escribió: "${bodyStr}"\n\nClasifica la intención del cliente:\n- Si quiere PEDIR A DOMICILIO (que le lleven comida a su casa), responde: DOMICILIO\n- Si quiere PEDIR PARA PASAR A RECOGER (pickup, pasar por su comida), responde: PASAR\n- Si quiere ORDENAR COMIDA pero no especifica cómo, responde: DOMICILIO\n- Si pregunta por HORARIOS, SUCURSALES, ubicaciones, a qué hora abren, dónde están, o cualquier cosa relacionada con saber los horarios de atención, responde: HORARIOS\n- Si NO quiere ordenar comida ni pregunta horarios, responde: NINGUNO\n\nResponde SOLO con una palabra: DOMICILIO, PASAR, HORARIOS o NINGUNO.` }] }],
-                            generationConfig: { maxOutputTokens: 5, temperature: 0.1 }
+                            contents: [{ role: 'user', parts: [{ text: `Eres un clasificador de mensajes de clientes de una hamburguesería. El cliente escribió: "${bodyStr}"\n\nClasifica la intención:\n- Si quiere PEDIR A DOMICILIO (que le lleven comida a su casa), responde: DOMICILIO\n- Si quiere PEDIR PARA PASAR A RECOGER (pickup, pasar por su comida), responde: PASAR\n- Si pregunta por HORARIOS, SUCURSALES, ubicaciones, a qué hora abren, dónde están, responde: HORARIOS\n- Si está AGRADECIENDO, diciendo gracias, de nada, no quiero nada, ya estoy bien, eso es todo, o cualquier variante de agradecimiento o que ya no necesita nada, responde: GRACIAS\n- Si se está DESPIDIENDO (bye, hasta luego, chao, nos vemos, cuídate, adiós), responde: DESPEDIDA\n- Si ninguna de las anteriores aplica, responde: NINGUNO\n\nResponde SOLO con una palabra: DOMICILIO, PASAR, HORARIOS, GRACIAS, DESPEDIDA o NINGUNO.` }] }],
+                            generationConfig: { maxOutputTokens: 10, temperature: 0.1 }
                         })
                     });
                     if (classifyRes.ok) {
@@ -1429,6 +1395,8 @@ export async function POST(req) {
                         if (answer.includes('DOMICILIO')) orderType = 'delivery';
                         else if (answer.includes('PASAR')) orderType = 'pickup';
                         else if (answer.includes('HORARIO')) orderType = 'horarios';
+                        else if (answer.includes('GRACIAS')) orderType = 'gracias';
+                        else if (answer.includes('DESPEDIDA')) orderType = 'despedida';
                     }
                 }
             } catch(e) { console.error('[Bot] Error clasificando intención:', e); }
@@ -1443,6 +1411,36 @@ export async function POST(req) {
                 await redis.set(`delivery_mode_${cleanPhone}`, '1');
                 await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1');
                 console.log(`[Bot] Pickup mode activado para ${cleanPhone} - IA detectó pasar a recoger`);
+            } else if (orderType === 'gracias') {
+                const thankReplies = [
+                    `Por nada *${clientName}* 😊`,
+                    `¡Para eso estamos *${clientName}*! 😊`,
+                    `No hay de qué *${clientName}* 🙌`,
+                    `De nada *${clientName}*, a la orden 😊`,
+                    `¡Es un placer *${clientName}*! 🍔`,
+                    `Por supuesto *${clientName}*, aquí estamos 😊`,
+                    `¡De nada *${clientName}*! Cuando gustes 🙌`,
+                    `Claro que sí *${clientName}*, para servirte 😊`,
+                    `A ti *${clientName}*, gracias por preferirnos 🍔`,
+                    `¡Con mucho gusto *${clientName}*! 😊`,
+                ];
+                botReply = thankReplies[Math.floor(Math.random() * thankReplies.length)];
+                console.log(`[Bot] Agradecimiento detectado para ${cleanPhone} - IA`);
+            } else if (orderType === 'despedida') {
+                const farewells = [
+                    `Hasta luego *${clientName}* 👋`,
+                    `Bye *${clientName}*, fue un placer 😊`,
+                    `¡Hasta pronto *${clientName}*! 🙌`,
+                    `Nos vemos *${clientName}* 👋`,
+                    `¡Cuídate *${clientName}*! 😊`,
+                    `Bye bye *${clientName}* 👋`,
+                    `¡Hasta la próxima *${clientName}*! 🍔`,
+                    `Chao *${clientName}*, que te vaya bien 😊`,
+                    `¡Que te vaya bonito *${clientName}*! 👋`,
+                    `Hasta luego *${clientName}*, aquí estaremos 😊`,
+                ];
+                botReply = farewells[Math.floor(Math.random() * farewells.length)];
+                console.log(`[Bot] Despedida detectada para ${cleanPhone} - IA`);
             } else if (orderType === 'horarios') {
                 botReply = `📅 *Nuestros horarios por sucursal:*
 
@@ -1473,7 +1471,6 @@ export async function POST(req) {
                 console.log(`[Bot] Horarios respondidos para ${cleanPhone} - IA detectó intención horarios`);
             } else {
                 botReply = `¡Hola *${clientName}*! 🍔 Qué gusto verte de vuelta. 😊\n\n${menuMsg}`;
-            }
             }
         }
 
