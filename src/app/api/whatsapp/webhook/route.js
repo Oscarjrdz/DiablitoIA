@@ -1337,7 +1337,17 @@ export async function POST(req) {
             console.log(`[Bot] Pickup mode activado para ${cleanPhone} - opción 3 explícita`);
         }
         // ── Opción 4 explícita: Conocer nuestros horarios ──
-        else if (textMsg === '4' || /\bhorario\b/i.test(userText) || /\bsucursal\b/i.test(userText)) {
+        else if (
+            textMsg === '4' ||
+            userText.includes('horario') ||
+            userText.includes('sucursal') ||
+            userText.includes('abren') ||
+            userText.includes('abiert') ||
+            userText.includes('direcci') ||
+            userText.includes('ubicaci') ||
+            userText.includes('donde estan') ||
+            userText.includes('dónde están')
+        ) {
             botReply = `📅 *Nuestros horarios por sucursal:*
 
 🌳 *1. Sucursal Bosques*
