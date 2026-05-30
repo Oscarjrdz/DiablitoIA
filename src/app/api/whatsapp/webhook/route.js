@@ -1378,9 +1378,37 @@ export async function POST(req) {
         // ── Default: IA clasifica intención (domicilio / pasar a recoger / horarios / ninguno) ──
         else {
             // Mensajes de agradecimiento/despedida — no mostrar menú
-            const isGratitude = /^(gracias|grac|muchas gracias|mil gracias|ok gracias|gracias\s*[\p{Emoji}]*|bye|adios|adiós|hasta luego|hasta pronto|chao|chau|que\s*(lo|les?)\s*(disfrut|aproveche|vaya\s*bien)|👍|🙏)[\s\p{Emoji}]*$/iu.test(bodyStr.trim());
-            if (isGratitude) {
-                botReply = `¡Con gusto *${clientName}*! 😊 Estamos para servirte cuando gustes. 🍔🔥`;
+            const isFarewell = /^(bye|adios|adiós|hasta luego|hasta pronto|hasta mañana|nos vemos|chao|chau|cuídate|cuídate\s*mucho|ahí\s*nos\s*vemos)[\s\p{Emoji}]*$/iu.test(bodyStr.trim());
+            const isGratitude = !isFarewell && /^(gracias|grac|muchas gracias|mil gracias|ok gracias|de nada|de nada de nada|no hay de que|no hay de qué|con mucho gusto|fue un placer|claro que sí|con gusto|todo bien|perfecto gracias|gracias\s*[\p{Emoji}]*)[\s\p{Emoji}]*$/iu.test(bodyStr.trim());
+            if (isFarewell) {
+                const farewells = [
+                    `Hasta luego *${clientName}* 👋`,
+                    `Bye *${clientName}*, fue un placer 😊`,
+                    `¡Hasta pronto *${clientName}*! 🙌`,
+                    `Nos vemos *${clientName}* 👋`,
+                    `¡Cuídate *${clientName}*! 😊`,
+                    `Bye bye *${clientName}* 👋`,
+                    `¡Hasta la próxima *${clientName}*! 🍔`,
+                    `Chao *${clientName}*, que te vaya bien 😊`,
+                    `¡Que te vaya bonito *${clientName}*! 👋`,
+                    `Hasta luego *${clientName}*, aquí estaremos 😊`,
+                ];
+                botReply = farewells[Math.floor(Math.random() * farewells.length)];
+                console.log(`[Bot] Despedida detectada para ${cleanPhone} — no se muestra menú`);
+            } else if (isGratitude) {
+                const thankReplies = [
+                    `Por nada *${clientName}* 😊`,
+                    `¡Para eso estamos *${clientName}*! 😊`,
+                    `No hay de qué *${clientName}* 🙌`,
+                    `¡Con gusto *${clientName}*! 😊`,
+                    `De nada *${clientName}*, a la orden 😊`,
+                    `¡Es un placer *${clientName}*! 🍔`,
+                    `Por supuesto *${clientName}*, aquí estamos 😊`,
+                    `¡De nada *${clientName}*! Cuando gustes 🙌`,
+                    `Claro que sí *${clientName}*, para servirte 😊`,
+                    `A ti *${clientName}*, gracias por preferirnos 🍔`,
+                ];
+                botReply = thankReplies[Math.floor(Math.random() * thankReplies.length)];
                 console.log(`[Bot] Agradecimiento detectado para ${cleanPhone} — no se muestra menú`);
             } else {
             let orderType = 'none'; // none, delivery, pickup, horarios
