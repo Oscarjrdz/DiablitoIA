@@ -1377,6 +1377,12 @@ export async function POST(req) {
         }
         // ── Default: IA clasifica intención (domicilio / pasar a recoger / horarios / ninguno) ──
         else {
+            // Mensajes de agradecimiento/despedida — no mostrar menú
+            const isGratitude = /^(gracias|grac|muchas gracias|mil gracias|ok gracias|gracias\s*[\p{Emoji}]*|bye|adios|adiós|hasta luego|hasta pronto|chao|chau|que\s*(lo|les?)\s*(disfrut|aproveche|vaya\s*bien)|👍|🙏)[\s\p{Emoji}]*$/iu.test(bodyStr.trim());
+            if (isGratitude) {
+                botReply = `¡Con gusto *${clientName}*! 😊 Estamos para servirte cuando gustes. 🍔🔥`;
+                console.log(`[Bot] Agradecimiento detectado para ${cleanPhone} — no se muestra menú`);
+            } else {
             let orderType = 'none'; // none, delivery, pickup, horarios
             try {
                 const aiToken = cfg.aiToken;
@@ -1439,6 +1445,7 @@ export async function POST(req) {
                 console.log(`[Bot] Horarios respondidos para ${cleanPhone} - IA detectó intención horarios`);
             } else {
                 botReply = `¡Hola *${clientName}*! 🍔 Qué gusto verte de vuelta. 😊\n\n${menuMsg}`;
+            }
             }
         }
 
