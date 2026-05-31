@@ -1078,6 +1078,7 @@ export async function POST(req) {
         await redis.set(`chat_hist_${cleanGroupPhone}`, JSON.stringify(gParsed));
         await redis.incr(`chat_unread_${cleanGroupPhone}`);
         await redis.del(`human_read_${cleanGroupPhone}`);
+        await redis.set('sse_notify', JSON.stringify({ ts: Date.now(), phone: cleanGroupPhone }));
 
         // Save group JID mapping so the groups API can discover all groups
         await redis.set(`group_jid_${cleanGroupPhone}`, phoneId);
@@ -1270,6 +1271,7 @@ export async function POST(req) {
     // webhooks overwrite each other. The message is persisted in Redis
     // BEFORE any slow bot processing (Gemini, Loyverse, etc.).
     let parsed = await mergeAndSave(historyKey, cleanPhone, [incomingEntry]);
+    await redis.set('sse_notify', JSON.stringify({ ts: Date.now(), phone: cleanPhone }));
 
     await redis.incr(`chat_unread_${cleanPhone}`);
     // Reset human-read flag so the chat shows as "needs attention" again
@@ -1524,6 +1526,7 @@ export async function POST(req) {
             const botEntry = { text: botReply, ts: Date.now(), status: 'sent' };
             if (botMsgId) { botEntry.msgId = botMsgId; await trackMsgId(botMsgId, cleanPhone); }
             await mergeAndSave(historyKey, cleanPhone, [{ role: 'model', parts: [botEntry] }]);
+            await redis.set('sse_notify', JSON.stringify({ ts: Date.now(), phone: cleanPhone }));
         }
         return NextResponse.json({ success: true });
     }

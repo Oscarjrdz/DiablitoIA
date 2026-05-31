@@ -373,6 +373,8 @@ export default function ChatPage() {
   const posDataLoadedRef = useRef(false);
   const msgFetchControllerRef = useRef(null);
   const tabVisibleRef = useRef(true);
+  const sseConnectedRef = useRef(false);
+  const sseRef = useRef(null);
 
   // ── Mensajes pendientes (optimistas) + React 19 hooks ──
   const [pendingMsgs, setPendingMsgs] = useState([]);
@@ -538,10 +540,12 @@ export default function ChatPage() {
       if (tabVisibleRef.current) {
         fetchChats();
         if (activeChatRef.current?.phone) fetchMessages(activeChatRef.current.phone);
-        listPollRef.current = setInterval(fetchChats, 3000);
+        const li = sseConnectedRef.current ? 10000 : 3000;
+        const mi = sseConnectedRef.current ? 10000 : 2000;
+        listPollRef.current = setInterval(fetchChats, li);
         msgPollRef.current = setInterval(() => {
           if (activeChatRef.current?.phone) fetchMessages(activeChatRef.current.phone);
-        }, 2000);
+        }, mi);
       } else {
         clearInterval(listPollRef.current);
         clearInterval(msgPollRef.current);
@@ -720,6 +724,52 @@ export default function ChatPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchVsMessages(); }, []);
 
+  // ── SSE: notificaciones en tiempo real desde el servidor ──
+  useEffect(() => {
+    const connect = () => {
+      const es = new EventSource('/api/whatsapp/sse');
+      sseRef.current = es;
+
+      es.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === 'connected') {
+            sseConnectedRef.current = true;
+            // SSE activo → polling como fallback lento
+            clearInterval(listPollRef.current);
+            listPollRef.current = setInterval(fetchChats, 10000);
+            if (msgPollRef.current) {
+              clearInterval(msgPollRef.current);
+              msgPollRef.current = setInterval(() => {
+                if (activeChatRef.current?.phone) fetchMessages(activeChatRef.current.phone);
+              }, 10000);
+            }
+          } else if (data.type === 'update') {
+            // Fetch inmediato para el teléfono que cambió
+            if (activeChatRef.current?.phone === data.phone) fetchMessages(data.phone);
+            fetchChats();
+          }
+        } catch {}
+      };
+
+      es.onerror = () => {
+        sseConnectedRef.current = false;
+        es.close();
+        // SSE caído → polling rápido como fallback
+        clearInterval(listPollRef.current);
+        listPollRef.current = setInterval(fetchChats, 3000);
+        // Reconectar en 5s (EventSource no auto-reconecta en todos los browsers con CORS)
+        setTimeout(connect, 5000);
+      };
+    };
+
+    connect();
+    return () => {
+      sseRef.current?.close();
+      sseConnectedRef.current = false;
+    };
+  }, [fetchChats, fetchMessages]);
+
   const openChat = useCallback((chat) => {
     activeChatRef.current = chat;
     setActiveChat(chat);
@@ -738,7 +788,7 @@ export default function ChatPage() {
     fetchPOSData();
     msgPollRef.current = setInterval(() => {
       if (activeChatRef.current?.phone === chat.phone) fetchMessages(chat.phone);
-    }, 2000);
+    }, sseConnectedRef.current ? 10000 : 2000);
   }, [fetchMessages, fetchClientCard, queueProfilePic, fetchPOSData]);
 
   useEffect(() => () => clearInterval(msgPollRef.current), []);
