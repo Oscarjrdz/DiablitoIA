@@ -260,6 +260,7 @@ export default function ChatPage() {
   const picQueuedRef = useRef(new Set());
   const posDataLoadedRef = useRef(false);
   const msgFetchControllerRef = useRef(null);
+  const tabVisibleRef = useRef(true);
 
   // ── Mensajes pendientes (optimistas) + React 19 hooks ──
   const [pendingMsgs, setPendingMsgs] = useState([]);
@@ -385,6 +386,28 @@ export default function ChatPage() {
         .finally(() => { picLoadingRef.current--; drainPicQueue(); });
     }
   }, []);
+
+  // ── Pausar/reanudar polls según visibilidad del tab ──
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      tabVisibleRef.current = document.visibilityState === 'visible';
+      if (tabVisibleRef.current) {
+        // Tab vuelve a estar visible: fetch inmediato + reiniciar polls
+        fetchChats();
+        if (activeChatRef.current?.phone) fetchMessages(activeChatRef.current.phone);
+        listPollRef.current = setInterval(fetchChats, 3000);
+        msgPollRef.current = setInterval(() => {
+          if (activeChatRef.current?.phone) fetchMessages(activeChatRef.current.phone);
+        }, 2000);
+      } else {
+        // Tab oculto: parar todos los polls
+        clearInterval(listPollRef.current);
+        clearInterval(msgPollRef.current);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [fetchChats, fetchMessages]);
 
   useEffect(() => {
     fetchChats();
@@ -607,7 +630,7 @@ export default function ChatPage() {
     fetchPOSData();
     msgPollRef.current = setInterval(() => {
       if (activeChatRef.current?.phone === chat.phone) fetchMessages(chat.phone);
-    }, 1000);
+    }, 2000);
   }, [fetchMessages, fetchClientCard, queueProfilePic, fetchPOSData]);
 
   useEffect(() => () => clearInterval(msgPollRef.current), []);
