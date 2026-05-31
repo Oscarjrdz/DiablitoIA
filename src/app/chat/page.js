@@ -176,6 +176,118 @@ class NuclearAlarm {
 
 const ORDER_TYPE_LABELS = { domicilio: '🛵 Domicilio', llevar: '🏃 Para llevar', comer: '🍽️ Para comer aquí' };
 
+// ── ChatRow — memoizado: solo re-renderiza el chat que realmente cambió ──
+const ChatRow = React.memo(function ChatRow({ chat, isActive, picUrl, onOpen, onToggleRead, onDelete }) {
+  return (
+    <div
+      className={`${styles.chatItem} ${isActive ? styles.chatActive : ''}`}
+      onClick={() => onOpen(chat)}
+    >
+      <div className={styles.avatarWrap}>
+        <div className={chat.deliveryMode ? styles.deliveryRing : undefined}>
+          <Avatar name={chat.name} phone={chat.phone} size={49} picUrl={picUrl} />
+        </div>
+        {chat.unread > 0 && <span className={styles.avatarBadge}>{chat.unread > 99 ? '99+' : chat.unread}</span>}
+      </div>
+      <div className={styles.chatMeta}>
+        <div className={styles.chatRow1}>
+          <span className={styles.chatName}>{chat.name}</span>
+          <span className={chat.unread > 0 ? styles.chatTimeUnread : styles.chatTime}>
+            {relTime(chat.lastTs)}
+          </span>
+        </div>
+        <div className={styles.chatRow2}>
+          <span className={styles.chatPreview}>
+            {chat.fromMe && <Ticks status="delivered" />}
+            {chat.fromMe && ' '}
+            {chat.lastText || <em style={{ opacity: 0.4 }}>Sin mensajes</em>}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+            {chat.botSilent && <span className={styles.botSilentBadge} title="Bot silenciado">🤖💤</span>}
+            {chat.needsHuman && <span className={styles.needsHumanBadge} title="Sin atención humana">●</span>}
+          </div>
+        </div>
+      </div>
+      <div className={styles.chatActionBtns}>
+        <button
+          className={styles.chatMarkBtn}
+          onClick={e => { e.stopPropagation(); onToggleRead(chat.phone, chat.needsHuman); }}
+          title={chat.needsHuman ? 'Marcar como leído' : 'Marcar como no leído'}
+        >
+          {chat.needsHuman ? (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          ) : (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" />
+              <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" />
+              <line x1="1" y1="1" x2="23" y2="23" />
+            </svg>
+          )}
+        </button>
+        <button
+          className={styles.chatDeleteBtn}
+          onClick={e => { e.stopPropagation(); onDelete(chat); }}
+          title="Eliminar chat"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            <path d="M10 11v6M14 11v6" />
+            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}, (prev, next) =>
+  prev.chat === next.chat &&
+  prev.isActive === next.isActive &&
+  prev.picUrl === next.picUrl
+);
+
+// ── MessageBubble — memoizado para evitar re-renders en cada poll ──
+const MessageBubble = React.memo(function MessageBubble({ m, chatName, chatPhone, picUrl }) {
+  return (
+    <div className={m.fromMe ? styles.rowOut : styles.rowIn}>
+      {!m.fromMe && <Avatar name={chatName} phone={chatPhone} size={28} picUrl={picUrl} />}
+      <div className={m.fromMe ? styles.bubbleOut : styles.bubbleIn}>
+        {m.attachment && m.attachmentType === 'image' && (
+          <img src={m.attachment} alt="" decoding="async" style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }} />
+        )}
+        {!m.attachment && m.attachmentUrl && m.attachmentType === 'image' && (
+          <img src={m.attachmentUrl} alt="" loading="lazy" decoding="async" style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }} />
+        )}
+        {m.attachmentType === 'sticker' && m.attachmentUrl && (
+          <img src={m.attachmentUrl} alt="Sticker" loading="lazy" decoding="async" style={{ maxWidth: 160, borderRadius: 4, display: 'block', marginBottom: 2 }} />
+        )}
+        {m.hasAttachment && !m.attachmentUrl && !m.attachment && m.attachmentType !== 'sticker' && (
+          <div className={styles.fileAttach}>
+            <Paperclip size={14} />
+            <span>{m.attachmentType === 'audio' ? '🎙 Audio' : 'Archivo adjunto'}</span>
+          </div>
+        )}
+        {m.text && <span className={styles.msgText}>{m.text}</span>}
+        <div className={styles.msgMeta}>
+          {m.time && <span className={styles.msgTime}>{m.time}</span>}
+          {m.fromMe && <Ticks status={m.status} />}
+          {m.status === 'error' && (
+            <span title="Error al enviar" style={{ color: '#ef4444', fontSize: 12, marginLeft: 2 }}>⚠️</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}, (prev, next) =>
+  prev.m.msgId === next.m.msgId &&
+  prev.m.status === next.m.status &&
+  prev.m.text === next.m.text &&
+  prev.m.attachmentUrl === next.m.attachmentUrl &&
+  prev.picUrl === next.picUrl
+);
+
 export default function ChatPage() {
   const [chats, setChats] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
@@ -1245,70 +1357,15 @@ export default function ChatPage() {
             <p className={styles.tip}>{storeFilter ? `Sin chats en ${storeFilter}` : 'Sin chats aún'}</p>
           )}
           {filtered.map(chat => (
-            <div
+            <ChatRow
               key={chat.phone}
-              className={`${styles.chatItem} ${activeChat?.phone === chat.phone ? styles.chatActive : ''}`}
-              onClick={() => openChat(chat)}
-            >
-              <div className={styles.avatarWrap}>
-                <div className={chat.deliveryMode ? styles.deliveryRing : undefined}>
-                  <Avatar name={chat.name} phone={chat.phone} size={49} picUrl={profilePics[chat.phone]} />
-                </div>
-                {chat.unread > 0 && <span className={styles.avatarBadge}>{chat.unread > 99 ? '99+' : chat.unread}</span>}
-              </div>
-              <div className={styles.chatMeta}>
-                <div className={styles.chatRow1}>
-                  <span className={styles.chatName}>{chat.name}</span>
-                  <span className={chat.unread > 0 ? styles.chatTimeUnread : styles.chatTime}>
-                    {relTime(chat.lastTs)}
-                  </span>
-                </div>
-                <div className={styles.chatRow2}>
-                  <span className={styles.chatPreview}>
-                    {chat.fromMe && <Ticks status="delivered" />}
-                    {chat.fromMe && ' '}
-                    {chat.lastText || <em style={{ opacity: 0.4 }}>Sin mensajes</em>}
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                    {chat.botSilent && <span className={styles.botSilentBadge} title="Bot silenciado">🤖💤</span>}
-                    {chat.needsHuman && <span className={styles.needsHumanBadge} title="Sin atención humana">●</span>}
-
-                  </div>
-                </div>
-              </div>
-              <div className={styles.chatActionBtns}>
-                <button
-                  className={styles.chatMarkBtn}
-                  onClick={e => { e.stopPropagation(); toggleHumanRead(chat.phone, chat.needsHuman); }}
-                  title={chat.needsHuman ? 'Marcar como leído' : 'Marcar como no leído'}
-                >
-                  {chat.needsHuman ? (
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  ) : (
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" />
-                      <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" />
-                      <line x1="1" y1="1" x2="23" y2="23" />
-                    </svg>
-                  )}
-                </button>
-                <button
-                  className={styles.chatDeleteBtn}
-                  onClick={e => { e.stopPropagation(); setChatToDelete(chat); }}
-                  title="Eliminar chat"
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                    <path d="M10 11v6M14 11v6" />
-                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                  </svg>
-                </button>
-              </div>
-            </div>
+              chat={chat}
+              isActive={activeChat?.phone === chat.phone}
+              picUrl={profilePics[chat.phone]}
+              onOpen={openChat}
+              onToggleRead={toggleHumanRead}
+              onDelete={setChatToDelete}
+            />
           ))}
         </div>
       </div>
@@ -1369,40 +1426,13 @@ export default function ChatPage() {
               }
               const m = item;
               return (
-                <div key={m.msgId || (m.ts ? `${m.ts}_${m.fromMe ? 'o' : 'i'}` : `f${i}`)} className={m.fromMe ? styles.rowOut : styles.rowIn}>
-                  {!m.fromMe && (
-                    <Avatar name={activeChat.name} phone={activeChat.phone} size={28} picUrl={profilePics[activeChat.phone]} />
-                  )}
-                  <div className={m.fromMe ? styles.bubbleOut : styles.bubbleIn}>
-                    {/* Imagen base64 optimista (antes de que llegue el poll) */}
-                    {m.attachment && m.attachmentType === 'image' && (
-                      <img src={m.attachment} alt="" decoding="async" style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }} />
-                    )}
-                    {/* Imagen desde URL (polled del historial: salientes + entrantes + promos) */}
-                    {!m.attachment && m.attachmentUrl && m.attachmentType === 'image' && (
-                      <img src={m.attachmentUrl} alt="" loading="lazy" decoding="async" style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }} />
-                    )}
-                    {/* Sticker */}
-                    {m.attachmentType === 'sticker' && m.attachmentUrl && (
-                      <img src={m.attachmentUrl} alt="Sticker" loading="lazy" decoding="async" style={{ maxWidth: 160, borderRadius: 4, display: 'block', marginBottom: 2 }} />
-                    )}
-                    {/* Documento / audio */}
-                    {m.hasAttachment && !m.attachmentUrl && !m.attachment && m.attachmentType !== 'sticker' && (
-                      <div className={styles.fileAttach}>
-                        <Paperclip size={14} />
-                        <span>{m.attachmentType === 'audio' ? '🎙 Audio' : 'Archivo adjunto'}</span>
-                      </div>
-                    )}
-                    {m.text && <span className={styles.msgText}>{m.text}</span>}
-                    <div className={styles.msgMeta}>
-                      {m.time && <span className={styles.msgTime}>{m.time}</span>}
-                      {m.fromMe && <Ticks status={m.status} />}
-                      {m.status === 'error' && (
-                        <span title="Error al enviar" style={{ color: '#ef4444', fontSize: 12, marginLeft: 2 }}>⚠️</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                <MessageBubble
+                  key={m.msgId || (m.ts ? `${m.ts}_${m.fromMe ? 'o' : 'i'}` : `f${i}`)}
+                  m={m}
+                  chatName={activeChat.name}
+                  chatPhone={activeChat.phone}
+                  picUrl={profilePics[activeChat.phone]}
+                />
               );
             })}
             {/* Indicador "escribiendo" al final de los mensajes */}
