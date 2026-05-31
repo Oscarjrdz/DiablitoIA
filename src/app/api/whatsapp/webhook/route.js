@@ -90,6 +90,28 @@ async function trackMsgId(msgId, cleanPhone) {
   await redis.setex(`chat_msg_${msgId}`, 604800, cleanPhone);
 }
 
+// ── Descarga y cachea media en Redis; devuelve la URL del proxy ──
+async function cacheMedia(msgId, rawUrl, isSticker) {
+    try {
+        let b64, mimeType;
+        if (rawUrl.startsWith('data:')) {
+            const [header, data] = rawUrl.split(',');
+            mimeType = header.split(':')[1]?.split(';')[0] || 'image/jpeg';
+            b64 = data;
+        } else {
+            const res = await fetch(rawUrl);
+            if (!res.ok) return null;
+            mimeType = res.headers.get('content-type') || (isSticker ? 'image/webp' : 'image/jpeg');
+            b64 = Buffer.from(await res.arrayBuffer()).toString('base64');
+        }
+        await redis.setex(`media_${msgId}`, 7 * 24 * 3600, JSON.stringify({ mimeType, b64 }));
+        return `/api/media?id=${msgId}`;
+    } catch (e) {
+        console.error('[Media] Error cacheando media:', e);
+        return null;
+    }
+}
+
 // ── Race-safe history save ──
 // Re-reads Redis, merges any new messages that arrived during bot processing,
 // appends newEntries, and saves back. Prevents concurrent webhooks from
@@ -1014,13 +1036,26 @@ export async function POST(req) {
         await redis.ltrim('debug_group_payload', 0, 10);
 
         // Prevent duplicates for outgoing messages sent from the Web UI
+        const isStickerGroup = payload.data.type === 'sticker' || !!payload.data.__raw?.message?.stickerMessage;
         let isImageActual = payload.data.type === 'image' || !!payload.data.__raw?.message?.imageMessage;
         let finalBody = bodyStr;
         if (isImageActual) finalBody = '[Imagen] ' + finalBody;
+        if (isStickerGroup) finalBody = '[Sticker]';
 
         const fromMe = payload.data.fromMe !== undefined ? payload.data.fromMe : payload.data.key?.fromMe;
         const msgId = payload.data.id || payload.data.key?.id;
-        
+
+        // Cachear media para mostrar en la UI
+        const groupRawMediaUrl = payload.data.media
+            || payload.data.__raw?.message?.imageMessage?.url
+            || payload.data.__raw?.message?.stickerMessage?.url
+            || null;
+        const groupMediaType = isStickerGroup ? 'sticker' : (isImageActual ? 'image' : null);
+        let groupMediaProxyUrl = null;
+        if (groupRawMediaUrl && groupMediaType && msgId) {
+            groupMediaProxyUrl = await cacheMedia(msgId, groupRawMediaUrl, isStickerGroup);
+        }
+
         if (fromMe) {
             if (msgId) {
                 const isFromWebUI = await redis.get(`chat_msg_${msgId}`);
@@ -1028,7 +1063,13 @@ export async function POST(req) {
             }
             gParsed.push({ role: 'model', parts: [{ text: finalBody, ts: Date.now() }] });
         } else {
-            gParsed.push({ role: 'user', parts: [{ text: `${senderName}: ${finalBody}`, ts: Date.now() }] });
+            const gPart = { text: `${senderName}: ${finalBody}`, ts: Date.now() };
+            if (groupMediaProxyUrl) {
+                gPart.attachmentUrl = groupMediaProxyUrl;
+                gPart.attachmentType = groupMediaType;
+                gPart.hasAttachment = true;
+            }
+            gParsed.push({ role: 'user', parts: [gPart] });
         }
         
         if (gParsed.length > 40) gParsed = gParsed.slice(-40);
@@ -1209,15 +1250,19 @@ export async function POST(req) {
     // Siempre usar clave normalizada con país para evitar duplicados
     let historyKey = `chat_hist_${cleanPhone}@c.us`;
     const incomingPart = { text: bodyStr, ts: Date.now() };
-    // Guardar URL de imagen/sticker para mostrar en la UI
-    const incomingMediaUrl = payload.data.media
+    // Cachear imagen/sticker y guardar URL del proxy para mostrar en la UI
+    const incomingRawMediaUrl = payload.data.media
       || payload.data.__raw?.message?.imageMessage?.url
       || payload.data.__raw?.message?.stickerMessage?.url
       || null;
-    if (incomingMediaUrl) {
-      incomingPart.attachmentUrl = incomingMediaUrl;
-      incomingPart.attachmentType = isSticker ? 'sticker' : 'image';
-      incomingPart.hasAttachment = true;
+    if (incomingRawMediaUrl) {
+      const incomingMsgId = payload.data.id || payload.data.key?.id || `ind_${Date.now()}`;
+      const proxyUrl = await cacheMedia(incomingMsgId, incomingRawMediaUrl, isSticker);
+      if (proxyUrl) {
+        incomingPart.attachmentUrl = proxyUrl;
+        incomingPart.attachmentType = isSticker ? 'sticker' : 'image';
+        incomingPart.hasAttachment = true;
+      }
     }
     const incomingEntry = { role: 'user', parts: [incomingPart] };
 
