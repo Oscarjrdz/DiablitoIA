@@ -37,7 +37,7 @@ const Avatar = React.memo(function Avatar({ name = '', phone = '', size = 49, pi
       letterSpacing: 0.5, userSelect: 'none', position: 'relative'
     }}>
       {picUrl && imgOk
-        ? <img src={picUrl} alt="" onError={() => setImgOk(false)}
+        ? <img src={picUrl} alt="" onError={() => setImgOk(false)} loading="lazy" decoding="async"
             style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
         : initials(name || phone.slice(-4))
       }
@@ -387,28 +387,6 @@ export default function ChatPage() {
     }
   }, []);
 
-  // ── Pausar/reanudar polls según visibilidad del tab ──
-  useEffect(() => {
-    const onVisibilityChange = () => {
-      tabVisibleRef.current = document.visibilityState === 'visible';
-      if (tabVisibleRef.current) {
-        // Tab vuelve a estar visible: fetch inmediato + reiniciar polls
-        fetchChats();
-        if (activeChatRef.current?.phone) fetchMessages(activeChatRef.current.phone);
-        listPollRef.current = setInterval(fetchChats, 3000);
-        msgPollRef.current = setInterval(() => {
-          if (activeChatRef.current?.phone) fetchMessages(activeChatRef.current.phone);
-        }, 2000);
-      } else {
-        // Tab oculto: parar todos los polls
-        clearInterval(listPollRef.current);
-        clearInterval(msgPollRef.current);
-      }
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-  }, [fetchChats, fetchMessages]);
-
   useEffect(() => {
     fetchChats();
     listPollRef.current = setInterval(fetchChats, 3000);
@@ -440,6 +418,26 @@ export default function ChatPage() {
       if (e.name === 'AbortError') return;
     }
   }, []);
+
+  // ── Pausar/reanudar polls según visibilidad del tab (declarado después de fetchMessages) ──
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      tabVisibleRef.current = document.visibilityState === 'visible';
+      if (tabVisibleRef.current) {
+        fetchChats();
+        if (activeChatRef.current?.phone) fetchMessages(activeChatRef.current.phone);
+        listPollRef.current = setInterval(fetchChats, 3000);
+        msgPollRef.current = setInterval(() => {
+          if (activeChatRef.current?.phone) fetchMessages(activeChatRef.current.phone);
+        }, 2000);
+      } else {
+        clearInterval(listPollRef.current);
+        clearInterval(msgPollRef.current);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [fetchChats, fetchMessages]);
 
   const fetchClientCard = useCallback(async (phone) => {
     setLoadingCard(true);
@@ -609,8 +607,6 @@ export default function ChatPage() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchVsMessages(); }, []);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchPOSData(); }, []);
 
   const openChat = useCallback((chat) => {
     activeChatRef.current = chat;
@@ -1380,15 +1376,15 @@ export default function ChatPage() {
                   <div className={m.fromMe ? styles.bubbleOut : styles.bubbleIn}>
                     {/* Imagen base64 optimista (antes de que llegue el poll) */}
                     {m.attachment && m.attachmentType === 'image' && (
-                      <img src={m.attachment} alt="" style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }} />
+                      <img src={m.attachment} alt="" decoding="async" style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }} />
                     )}
                     {/* Imagen desde URL (polled del historial: salientes + entrantes + promos) */}
                     {!m.attachment && m.attachmentUrl && m.attachmentType === 'image' && (
-                      <img src={m.attachmentUrl} alt="" style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }} />
+                      <img src={m.attachmentUrl} alt="" loading="lazy" decoding="async" style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }} />
                     )}
                     {/* Sticker */}
                     {m.attachmentType === 'sticker' && m.attachmentUrl && (
-                      <img src={m.attachmentUrl} alt="Sticker" style={{ maxWidth: 160, borderRadius: 4, display: 'block', marginBottom: 2 }} />
+                      <img src={m.attachmentUrl} alt="Sticker" loading="lazy" decoding="async" style={{ maxWidth: 160, borderRadius: 4, display: 'block', marginBottom: 2 }} />
                     )}
                     {/* Documento / audio */}
                     {m.hasAttachment && !m.attachmentUrl && !m.attachment && m.attachmentType !== 'sticker' && (
@@ -1875,7 +1871,7 @@ export default function ChatPage() {
                       title={item.item_name}
                     >
                       {item.image_url ? (
-                        <img src={item.image_url} alt="" className={styles.posProductImg} />
+                        <img src={item.image_url} alt="" loading="lazy" decoding="async" className={styles.posProductImg} />
                       ) : (
                         <div className={styles.posProductPlaceholder}>
                           {item.item_name.charAt(0).toUpperCase()}
