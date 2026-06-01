@@ -1008,9 +1008,9 @@ export default function ChatPage() {
     // Show message immediately; cleaned when poll confirms via text+window match
     setPendingMsgs(prev => [...prev, optimistic]);
     // Siempre bajar al fondo — dos intentos para darle tiempo a Virtuoso de agregar el ítem
-    const scrollToBottom = () => virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'smooth' });
+    const scrollToBottom = () => virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'auto' });
     setTimeout(scrollToBottom, 50);
-    setTimeout(scrollToBottom, 200);
+    setTimeout(scrollToBottom, 300);
     fetch('/api/whatsapp/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1532,7 +1532,7 @@ export default function ChatPage() {
             className={styles.messages}
             style={{ overflowX: 'hidden' }}
             data={msgsWithSeps}
-            followOutput="smooth"
+            followOutput="auto"
             contentContainerStyle={{ padding: '12px 6% 20px' }}
             computeItemKey={(index, item) =>
               item._sep ? `sep-${index}` :
