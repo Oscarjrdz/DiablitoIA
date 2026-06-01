@@ -1268,18 +1268,15 @@ export default function ChatPage() {
     virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior });
   }, []);
 
-  // Al cambiar de chat: scroll inmediato + reintento cuando llegan los mensajes reales
+  // Al cambiar de chat: scroll al fondo con reintentos hasta que Virtuoso mida los ítems
   useEffect(() => {
     if (!activeChat) return;
     scrollToBottom('auto');
-    const t = setTimeout(() => scrollToBottom('auto'), 300);
-    return () => clearTimeout(t);
+    const t1 = setTimeout(() => scrollToBottom('auto'), 150);
+    const t2 = setTimeout(() => scrollToBottom('auto'), 500);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [activeChat?.phone, scrollToBottom]);
-
-  // Cuando llegan mensajes nuevos (poll/SSE): scroll si estamos cerca del fondo
-  useEffect(() => {
-    if (msgsWithSeps.length > 0) scrollToBottom('smooth');
-  }, [msgsWithSeps.length, scrollToBottom]);
+  // followOutput="smooth" maneja los mensajes nuevos — no se necesita otro useEffect
 
   return (
     <div className={styles.root}>
