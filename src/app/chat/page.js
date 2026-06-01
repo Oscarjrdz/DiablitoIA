@@ -1009,6 +1009,8 @@ export default function ChatPage() {
     }).catch(() => {});
     // Show message immediately; cleaned when poll confirms via text+window match
     setPendingMsgs(prev => [...prev, optimistic]);
+    // Siempre bajar al fondo cuando el usuario manda un mensaje
+    setTimeout(() => virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'smooth' }), 30);
     fetch('/api/whatsapp/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
