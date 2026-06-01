@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef, useCallback, useMemo, useTransition, useDeferredValue } from 'react';
-import { Virtuoso } from 'react-virtuoso';
+import { Virtuoso, VirtuosoGrid } from 'react-virtuoso';
 import styles from './page.module.css';
 import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, Check, Plus, Phone, User, Users, Pencil, ChevronRight, Trash2, ImagePlus } from 'lucide-react';
 
@@ -289,6 +289,39 @@ const MessageBubble = React.memo(function MessageBubble({ m, chatName, chatPhone
   prev.picUrl === next.picUrl
 );
 
+// ── PosProductCard — memoizado: re-renderiza solo si cambia qty en carrito o precio ──
+const PosProductCard = React.memo(function PosProductCard({ item, totalInCart, posStoreId, onOpen }) {
+  const hasMulti = item.variants?.length > 1;
+  const firstVariant = item.variants?.[0];
+  let price = firstVariant?.default_price || 0;
+  if (posStoreId && firstVariant?.stores) {
+    const sp = firstVariant.stores.find(s => s.store_id === posStoreId)?.price;
+    if (sp != null) price = sp;
+  }
+  return (
+    <div
+      className={`${styles.posProductCard} ${totalInCart > 0 ? styles.posProductInCart : ''}`}
+      onClick={() => onOpen(item, firstVariant, hasMulti)}
+      title={item.item_name}
+    >
+      {item.image_url ? (
+        <img src={item.image_url} alt="" loading="lazy" decoding="async" className={styles.posProductImg} />
+      ) : (
+        <div className={styles.posProductPlaceholder}>{item.item_name.charAt(0).toUpperCase()}</div>
+      )}
+      <div className={styles.posProductName}>{item.item_name}</div>
+      <div className={styles.posProductPrice}>
+        {hasMulti ? 'Ver variantes' : `$${price.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`}
+      </div>
+      {totalInCart > 0 && <div className={styles.posProductQtyBadge}>{totalInCart}</div>}
+    </div>
+  );
+}, (prev, next) =>
+  prev.totalInCart === next.totalInCart &&
+  prev.posStoreId === next.posStoreId &&
+  prev.item === next.item
+);
+
 export default function ChatPage() {
   const [chats, setChats] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
@@ -366,6 +399,7 @@ export default function ChatPage() {
   const lastMsgCountRef = useRef(0);
   const lastTsRef = useRef(0);
   const msgCacheRef = useRef(new Map());
+  const clientCacheRef = useRef(new Map());
   const failCountRef = useRef(0);
   const [isOffline, setIsOffline] = useState(false);
   const picQueueRef = useRef([]);
@@ -558,12 +592,21 @@ export default function ChatPage() {
   }, [fetchChats, fetchMessages]);
 
   const fetchClientCard = useCallback(async (phone) => {
-    setLoadingCard(true);
-    setClientCard(null);
+    const cached = clientCacheRef.current.get(phone);
+    if (cached) {
+      setClientCard(cached);
+      setLoadingCard(false);
+    } else {
+      setLoadingCard(true);
+      setClientCard(null);
+    }
     try {
       const res = await fetch(`/api/loyverse/client-card?phone=${encodeURIComponent(phone)}`);
       const data = await res.json();
-      if (data.success) setClientCard(data);
+      if (data.success) {
+        clientCacheRef.current.set(phone, data);
+        setClientCard(data);
+      }
     } catch {}
     setLoadingCard(false);
   }, []);
@@ -1035,6 +1078,11 @@ export default function ChatPage() {
     }
   }, [posModifiers, posAddItemVariant]);
 
+  const posHandleCardOpen = useCallback((item, firstVariant, hasMulti) => {
+    if (hasMulti) setPosVariantPicker({ item });
+    else posHandleVariantSelect(item, firstVariant);
+  }, [posHandleVariantSelect]);
+
   const posAddItemWithModifiers = useCallback(() => {
     if (!posModifierPicker) return;
     const { item, variant } = posModifierPicker;
@@ -1070,11 +1118,18 @@ export default function ChatPage() {
   const posTotal = useMemo(() => posCart.reduce((sum, c) => sum + c.price * c.qty, 0), [posCart]);
 
   const posFiltered = useMemo(
-    () => posItems
-      .filter(item => !deferredPosSearch || item.item_name.toLowerCase().includes(deferredPosSearch.toLowerCase()))
-      .sort((a, b) => a.item_name.localeCompare(b.item_name, 'es')),
+    () => !deferredPosSearch
+      ? posItems
+      : posItems.filter(item => item.item_name.toLowerCase().includes(deferredPosSearch.toLowerCase())),
     [posItems, deferredPosSearch]
   );
+
+  // Mapa de cantidades en carrito por itemId — evita re-renders en cascada del grid
+  const cartTotals = useMemo(() => {
+    const map = {};
+    for (const c of posCart) map[c.itemId] = (map[c.itemId] || 0) + c.qty;
+    return map;
+  }, [posCart]);
 
   
   const posSendSummary = useCallback(async () => {
@@ -1929,42 +1984,19 @@ export default function ChatPage() {
             ) : posFiltered.length === 0 ? (
               <div className={styles.posLoading}>{posSearch ? 'Sin resultados' : 'Sin productos'}</div>
             ) : (
-              <div className={styles.posGrid}>
-                {posFiltered.map(item => {
-                  const hasMulti = item.variants?.length > 1;
-                  const firstVariant = item.variants?.[0];
-                  let price = firstVariant?.default_price || 0;
-                  if (posStoreId && firstVariant?.stores) {
-                    const sp = firstVariant.stores.find(s => s.store_id === posStoreId)?.price;
-                    if (sp != null) price = sp;
-                  }
-                  const totalInCart = posCart.filter(c => c.itemId === item.id).reduce((s, c) => s + c.qty, 0);
-                  return (
-                    <div
-                      key={item.id}
-                      className={`${styles.posProductCard} ${totalInCart > 0 ? styles.posProductInCart : ''}`}
-                      onClick={() => hasMulti
-                        ? setPosVariantPicker({ item })
-                        : posHandleVariantSelect(item, firstVariant)
-                      }
-                      title={item.item_name}
-                    >
-                      {item.image_url ? (
-                        <img src={item.image_url} alt="" loading="lazy" decoding="async" className={styles.posProductImg} />
-                      ) : (
-                        <div className={styles.posProductPlaceholder}>
-                          {item.item_name.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                      <div className={styles.posProductName}>{item.item_name}</div>
-                      <div className={styles.posProductPrice}>
-                        {hasMulti ? 'Ver variantes' : `$${price.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`}
-                      </div>
-                      {totalInCart > 0 && <div className={styles.posProductQtyBadge}>{totalInCart}</div>}
-                    </div>
-                  );
-                })}
-              </div>
+              <VirtuosoGrid
+                style={{ flex: 1, minHeight: 0, overflowX: 'hidden' }}
+                data={posFiltered}
+                listClassName={styles.posGrid}
+                itemContent={(index, item) => (
+                  <PosProductCard
+                    item={item}
+                    totalInCart={cartTotals[item.id] || 0}
+                    posStoreId={posStoreId}
+                    onOpen={posHandleCardOpen}
+                  />
+                )}
+              />
             )}
           </div>
 

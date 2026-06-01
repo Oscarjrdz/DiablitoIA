@@ -3,8 +3,19 @@ import { redis } from '@/lib/redis';
 
 const BASE = 'https://api.loyverse.com/v1.0';
 
-export async function GET() {
+export async function GET(req) {
   try {
+    // ── Cache Redis 30 min — evita 7+ llamadas a Loyverse por apertura de chat ──
+    const { searchParams } = req ? new URL(req.url) : { searchParams: new URLSearchParams() };
+    const bust = searchParams.get('bust');
+    if (!bust) {
+      const cached = await redis.get('pos_cache_v2');
+      if (cached) {
+        const parsed = typeof cached === 'string' ? JSON.parse(cached) : cached;
+        return NextResponse.json({ ...parsed, _cached: true });
+      }
+    }
+
     const token = await redis.get('loyverse_token');
     if (!token) return NextResponse.json({ success: false, error: 'No Loyverse token' }, { status: 500 });
     const headers = { Authorization: `Bearer ${token}` };
@@ -35,13 +46,17 @@ export async function GET() {
     const payTypesData = payTypesRes.ok ? await payTypesRes.json() : {};
     const modifiersData = modifiersRes.ok ? await modifiersRes.json() : {};
 
-    return NextResponse.json({
+    const result = {
       success: true,
-      items: allItems.filter(i => !i.deleted_at && i.variants?.length > 0),
+      items: allItems
+        .filter(i => !i.deleted_at && i.variants?.length > 0)
+        .sort((a, b) => a.item_name.localeCompare(b.item_name, 'es')), // pre-ordenado
       stores: storesData.stores || [],
       paymentTypes: payTypesData.payment_types || [],
       modifiers: modifiersData.modifiers || []
-    });
+    };
+    await redis.setex('pos_cache_v2', 1800, JSON.stringify(result)); // 30 min
+    return NextResponse.json(result);
   } catch (e) {
     return NextResponse.json({ success: false, error: e.message }, { status: 500 });
   }

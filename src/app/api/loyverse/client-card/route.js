@@ -98,6 +98,14 @@ export async function GET(req) {
     if (!phone.startsWith('52')) phone = '52' + phone;
     const phone10 = phone.slice(-10);
 
+    // ── Cache Redis 5 min — evita escanear Loyverse en cada apertura de chat ──
+    const cacheKey = `client_card_v2_${phone10}`;
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      const parsed = typeof cached === 'string' ? JSON.parse(cached) : cached;
+      return NextResponse.json({ ...parsed, _cached: true });
+    }
+
     const loyverseToken = await redis.get('loyverse_token');
     if (!loyverseToken) return NextResponse.json({ success: false, error: 'No token' }, { status: 500 });
     const headers = { 'Authorization': `Bearer ${loyverseToken}` };
@@ -174,7 +182,7 @@ export async function GET(req) {
     const name = cachedName || primary?.name || phone10;
     const duplicateRecords = allCustomers.length > 1;
 
-    return NextResponse.json({
+    const result = {
       success: true,
       client: {
         name,
@@ -191,7 +199,10 @@ export async function GET(req) {
       },
       receipts,
       coupons
-    });
+    };
+    // Guardar en cache 5 min (no cachear si no se encontró cliente en Loyverse)
+    if (primary) await redis.setex(cacheKey, 300, JSON.stringify(result));
+    return NextResponse.json(result);
   } catch (e) {
     console.error('[client-card]', e);
     return NextResponse.json({ success: false, error: e.message }, { status: 500 });
@@ -261,12 +272,14 @@ export async function PATCH(req) {
       return NextResponse.json({ success: false, error: err }, { status: 500 });
     }
 
-    // Actualizar Redis según campo modificado
+    // Actualizar Redis según campo modificado + invalidar cache
     if (_phone) {
       let cleanPhone = _phone.replace(/\D/g, '');
       if (!cleanPhone.startsWith('52')) cleanPhone = '52' + cleanPhone;
+      const phone10 = cleanPhone.slice(-10);
       if (_storeRedis !== undefined) await redis.set(`client_store_${cleanPhone}`, _storeRedis);
       if (name !== undefined) await redis.set(`client_name_${cleanPhone}`, name);
+      await redis.del(`client_card_v2_${phone10}`);
     }
 
     return NextResponse.json({ success: true });
