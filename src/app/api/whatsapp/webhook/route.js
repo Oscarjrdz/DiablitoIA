@@ -423,12 +423,23 @@ export async function POST(req) {
            console.error("Error procesando imagen para folio:", err); 
            await redis.lpush('debug_image_logs', JSON.stringify({ step: 'ERROR', error: err.message }));
        }
-       // FIX#5: Si no es folio, informar al usuario en vez de silencio
+       // No es folio — guardar la imagen en historial para verla en la UI
        try {
-           const cfgFb = await redis.get('wapp_config');
-           const cfgFallback = typeof cfgFb === 'string' ? JSON.parse(cfgFb) : (cfgFb || {});
-           await sendWhatsApp(phoneId, '📸 Recibí tu imagen pero no encontré un código de cupón.\n\nSi tienes un cupón, asegúrate de que el folio (ej. *F666*) sea visible en la foto. 😊', cfgFallback);
-       } catch(e) {}
+           const imgMsgId = payload.data.id || payload.data.key?.id || `img_${Date.now()}`;
+           const proxyUrl = await cacheMedia(imgMsgId, payload.data.media, false);
+           const imagePart = {
+               text: textMsg || '',
+               ts: Date.now(),
+               hasAttachment: true,
+               attachmentType: 'image',
+               ...(proxyUrl ? { attachmentUrl: proxyUrl } : {})
+           };
+           const histKey = `chat_hist_${cleanPhoneGlobal}@c.us`;
+           await mergeAndSave(histKey, cleanPhoneGlobal, [{ role: 'user', parts: [imagePart] }]);
+           await redis.incr(`chat_unread_${cleanPhoneGlobal}`);
+           await redis.del(`human_read_${cleanPhoneGlobal}`);
+           await redis.set('sse_notify', JSON.stringify({ ts: Date.now(), phone: cleanPhoneGlobal }));
+       } catch(e) { console.error('[Image] Error guardando imagen en historial:', e); }
        return NextResponse.json({ success: true });
     }
 
