@@ -1263,20 +1263,26 @@ export default function ChatPage() {
     return result;
   }, [allMessages, isTyping]);
 
-  // Scroll al fondo cuando se abre un chat o llegan mensajes nuevos
-  const scrollToBottom = useCallback((behavior = 'auto') => {
-    virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior });
+  const isAtBottomRef = useRef(true);
+
+  const scrollToBottom = useCallback(() => {
+    virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'auto' });
   }, []);
 
-  // Al cambiar de chat: scroll al fondo con reintentos hasta que Virtuoso mida los ítems
+  // Al cambiar de chat: scroll al fondo con reintentos
   useEffect(() => {
     if (!activeChat) return;
-    scrollToBottom('auto');
-    const t1 = setTimeout(() => scrollToBottom('auto'), 150);
-    const t2 = setTimeout(() => scrollToBottom('auto'), 500);
+    isAtBottomRef.current = true;
+    scrollToBottom();
+    const t1 = setTimeout(scrollToBottom, 150);
+    const t2 = setTimeout(scrollToBottom, 500);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [activeChat?.phone, scrollToBottom]);
-  // followOutput="smooth" maneja los mensajes nuevos — no se necesita otro useEffect
+
+  // Mensajes nuevos: scroll solo si el usuario está cerca del fondo
+  useEffect(() => {
+    if (msgsWithSeps.length > 0 && isAtBottomRef.current) scrollToBottom();
+  }, [msgsWithSeps.length, scrollToBottom]);
 
   return (
     <div className={styles.root}>
@@ -1532,7 +1538,8 @@ export default function ChatPage() {
             className={styles.messages}
             style={{ overflowX: 'hidden' }}
             data={msgsWithSeps}
-            followOutput="auto"
+            atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
+            atBottomThreshold={120}
             contentContainerStyle={{ padding: '12px 6% 20px' }}
             computeItemKey={(index, item) =>
               item._sep ? `sep-${index}` :
