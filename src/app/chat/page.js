@@ -1520,7 +1520,7 @@ export default function ChatPage() {
             atBottomThreshold={80}
             initialTopMostItemIndex={msgsWithSeps.length > 0 ? { index: msgsWithSeps.length - 1, align: 'end' } : 0}
             increaseViewportBy={{ top: 0, bottom: 200 }}
-            contentContainerStyle={{ padding: '12px 6% 16px' }}
+            contentContainerStyle={{ padding: '12px 6% 16px', paddingLeft: 'calc(6% + 6px)' }}
             computeItemKey={(index, item) =>
               item._sep ? `sep-${index}` :
               item._typing ? 'typing' :
