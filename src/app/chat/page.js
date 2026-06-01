@@ -1544,7 +1544,7 @@ export default function ChatPage() {
             data={msgsWithSeps}
             atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
             atBottomThreshold={120}
-            contentContainerStyle={{ padding: '12px 6% 20px' }}
+            contentContainerStyle={{ padding: '12px 6% 36px' }}
             computeItemKey={(index, item) =>
               item._sep ? `sep-${index}` :
               item._typing ? 'typing' :
