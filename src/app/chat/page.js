@@ -1265,11 +1265,15 @@ export default function ChatPage() {
   const isAtBottomRef = useRef(true);
   const scrollerRef = useRef(null);
 
-  // scrollTop = scrollHeight siempre llega al fondo real sin depender de medidas de Virtuoso
+  // RAF doble: espera al frame donde Virtuoso ya pintó el nuevo ítem
   const scrollToBottom = useCallback(() => {
-    if (scrollerRef.current) {
-      scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight + 9999;
-    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (scrollerRef.current) {
+          scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight + 9999;
+        }
+      });
+    });
   }, []);
 
   // Al cambiar de chat: scroll al fondo con reintentos hasta que carguen los ítems
