@@ -524,6 +524,7 @@
 .rowIn {
   align-self: flex-start;
   margin-right: auto;
+  margin-left: 10px;
 }
 
 /* Burbujas — position:relative + padding-bottom reserva espacio para la meta */
