@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef, useCallback, useMemo, useTransition, useDeferredValue } from 'react';
+import { Virtuoso } from 'react-virtuoso';
 import styles from './page.module.css';
 import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, Check, Plus, Phone, User, Users, Pencil, ChevronRight, Trash2, ImagePlus } from 'lucide-react';
 
@@ -355,7 +356,7 @@ export default function ChatPage() {
   const [vsEditing, setVsEditing] = useState(null); // null | { id?, name, text, image }
   const [vsSending, setVsSending] = useState(null); // id being sent
 
-  const messagesEndRef = useRef(null);
+  const virtuosoRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const activeChatRef = useRef(null);
@@ -364,7 +365,7 @@ export default function ChatPage() {
   const typingTimerRef = useRef(null);
   const lastMsgCountRef = useRef(0);
   const lastTsRef = useRef(0);
-  const isAtBottomRef = useRef(true);
+  const msgCacheRef = useRef(new Map());
   const failCountRef = useRef(0);
   const [isOffline, setIsOffline] = useState(false);
   const picQueueRef = useRef([]);
@@ -521,6 +522,7 @@ export default function ChatPage() {
       if (data.success) {
         if (activeChatRef.current?.phone !== phone) return;
         if (data.msgCount !== lastMsgCountRef.current || data.lastTs !== lastTsRef.current) {
+          msgCacheRef.current.set(phone, data.messages || []);
           setMessages(data.messages || []);
           lastMsgCountRef.current = data.msgCount || 0;
           lastTsRef.current = data.lastTs || 0;
@@ -773,12 +775,12 @@ export default function ChatPage() {
   const openChat = useCallback((chat) => {
     activeChatRef.current = chat;
     setActiveChat(chat);
-    setMessages([]);
+    // Mostrar cache inmediatamente si existe, sin pantalla en blanco
+    setMessages(msgCacheRef.current.get(chat.phone) || []);
     setPendingMsgs([]);
     setIsTyping(false);
     setInputText('');
     setAttachment(null);
-    isAtBottomRef.current = true;
     lastMsgCountRef.current = 0;
     lastTsRef.current = 0;
     clearInterval(msgPollRef.current);
@@ -786,20 +788,14 @@ export default function ChatPage() {
     fetchClientCard(chat.phone);
     queueProfilePic(chat.phone);
     fetchPOSData();
+    // Ir al fondo después de que Virtuoso monte los mensajes
+    setTimeout(() => virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'auto' }), 50);
     msgPollRef.current = setInterval(() => {
       if (activeChatRef.current?.phone === chat.phone) fetchMessages(chat.phone);
     }, sseConnectedRef.current ? 10000 : 2000);
   }, [fetchMessages, fetchClientCard, queueProfilePic, fetchPOSData]);
 
   useEffect(() => () => clearInterval(msgPollRef.current), []);
-
-  // ── Smart scroll: only auto-scroll when user is at bottom ──
-  const messagesContainerRef = useRef(null);
-  const handleScroll = useCallback(() => {
-    const el = messagesContainerRef.current;
-    if (!el) return;
-    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-  }, []);
 
   // ── Auto-resize textarea ──
   const autoResize = () => {
@@ -1206,15 +1202,9 @@ export default function ChatPage() {
       }
       result.push(m);
     }
+    if (isTyping) result.push({ _typing: true });
     return result;
-  }, [allMessages]);
-
-  // Scroll al fondo cuando llegan mensajes nuevos o se envía uno
-  useEffect(() => {
-    if (allMessages.length && isAtBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
-    }
-  }, [allMessages]);
+  }, [allMessages, isTyping]);
 
   return (
     <div className={styles.root}>
@@ -1465,37 +1455,41 @@ export default function ChatPage() {
             </div>
           </div>
 
-          <div className={styles.messages} ref={messagesContainerRef} onScroll={handleScroll}>
-            {msgsWithSeps.map((item, i) => {
+          <Virtuoso
+            ref={virtuosoRef}
+            className={styles.messages}
+            data={msgsWithSeps}
+            followOutput={(isAtBottom) => isAtBottom ? 'auto' : false}
+            initialTopMostItemIndex={msgsWithSeps.length > 0 ? msgsWithSeps.length - 1 : 0}
+            computeItemKey={(index, item) =>
+              item._sep ? `sep-${index}` :
+              item._typing ? 'typing' :
+              item.msgId || (item.ts ? `${item.ts}_${item.fromMe ? 'o' : 'i'}` : `f${index}`)
+            }
+            itemContent={(index, item) => {
               if (item._sep) {
+                return <div className={styles.dateSep}><span>{item.label}</span></div>;
+              }
+              if (item._typing) {
                 return (
-                  <div key={'s' + i} className={styles.dateSep}>
-                    <span>{item.label}</span>
+                  <div className={styles.rowIn}>
+                    <Avatar name={activeChat.name} phone={activeChat.phone} size={28} picUrl={profilePics[activeChat.phone]} />
+                    <div className={styles.bubbleIn} style={{ padding: '10px 14px' }}>
+                      <TypingDots />
+                    </div>
                   </div>
                 );
               }
-              const m = item;
               return (
                 <MessageBubble
-                  key={m.msgId || (m.ts ? `${m.ts}_${m.fromMe ? 'o' : 'i'}` : `f${i}`)}
-                  m={m}
+                  m={item}
                   chatName={activeChat.name}
                   chatPhone={activeChat.phone}
                   picUrl={profilePics[activeChat.phone]}
                 />
               );
-            })}
-            {/* Indicador "escribiendo" al final de los mensajes */}
-            {isTyping && (
-              <div className={styles.rowIn}>
-                <Avatar name={activeChat.name} phone={activeChat.phone} size={28} picUrl={profilePics[activeChat.phone]} />
-                <div className={styles.bubbleIn} style={{ padding: '10px 14px' }}>
-                  <TypingDots />
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
+            }}
+          />
 
           {attachment && (
             <div className={styles.attachBar}>
