@@ -831,8 +831,6 @@ export default function ChatPage() {
     fetchClientCard(chat.phone);
     queueProfilePic(chat.phone);
     fetchPOSData();
-    // Ir al fondo después de que Virtuoso monte los mensajes
-    setTimeout(() => virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'auto' }), 80);
     msgPollRef.current = setInterval(() => {
       if (activeChatRef.current?.phone === chat.phone) fetchMessages(chat.phone);
     }, sseConnectedRef.current ? 10000 : 2000);
@@ -1265,6 +1263,24 @@ export default function ChatPage() {
     return result;
   }, [allMessages, isTyping]);
 
+  // Scroll al fondo cuando se abre un chat o llegan mensajes nuevos
+  const scrollToBottom = useCallback((behavior = 'auto') => {
+    virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior });
+  }, []);
+
+  // Al cambiar de chat: scroll inmediato + reintento cuando llegan los mensajes reales
+  useEffect(() => {
+    if (!activeChat) return;
+    scrollToBottom('auto');
+    const t = setTimeout(() => scrollToBottom('auto'), 300);
+    return () => clearTimeout(t);
+  }, [activeChat?.phone, scrollToBottom]);
+
+  // Cuando llegan mensajes nuevos (poll/SSE): scroll si estamos cerca del fondo
+  useEffect(() => {
+    if (msgsWithSeps.length > 0) scrollToBottom('smooth');
+  }, [msgsWithSeps.length, scrollToBottom]);
+
   return (
     <div className={styles.root}>
 
@@ -1519,12 +1535,8 @@ export default function ChatPage() {
             className={styles.messages}
             style={{ overflowX: 'hidden' }}
             data={msgsWithSeps}
-            followOutput={(isAtBottom) => isAtBottom ? 'auto' : false}
-            alignToBottom
-            atBottomThreshold={80}
-            initialTopMostItemIndex={msgsWithSeps.length > 0 ? { index: msgsWithSeps.length - 1, align: 'end' } : 0}
-            increaseViewportBy={{ top: 0, bottom: 200 }}
-            contentContainerStyle={{ padding: '12px 6% 16px' }}
+            followOutput="smooth"
+            contentContainerStyle={{ padding: '12px 6% 20px' }}
             computeItemKey={(index, item) =>
               item._sep ? `sep-${index}` :
               item._typing ? 'typing' :
