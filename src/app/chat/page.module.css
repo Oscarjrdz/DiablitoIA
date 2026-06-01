@@ -518,9 +518,13 @@
 }
 .rowOut {
   align-self: flex-end;
+  margin-left: auto;
   flex-direction: row-reverse;
 }
-.rowIn { align-self: flex-start; }
+.rowIn {
+  align-self: flex-start;
+  margin-right: auto;
+}
 
 /* Burbujas — position:relative + padding-bottom reserva espacio para la meta */
 .bubbleOut {
