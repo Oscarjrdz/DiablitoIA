@@ -1008,7 +1008,6 @@ export default function ChatPage() {
     // Show message immediately; cleaned when poll confirms via text+window match
     setPendingMsgs(prev => [...prev, optimistic]);
     // Siempre bajar al fondo — dos intentos para darle tiempo a Virtuoso de agregar el ítem
-    const scrollToBottom = () => virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'auto' });
     setTimeout(scrollToBottom, 50);
     setTimeout(scrollToBottom, 300);
     fetch('/api/whatsapp/send', {
@@ -1264,18 +1263,22 @@ export default function ChatPage() {
   }, [allMessages, isTyping]);
 
   const isAtBottomRef = useRef(true);
+  const scrollerRef = useRef(null);
 
+  // scrollTop = scrollHeight siempre llega al fondo real sin depender de medidas de Virtuoso
   const scrollToBottom = useCallback(() => {
-    virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'auto' });
+    if (scrollerRef.current) {
+      scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight + 9999;
+    }
   }, []);
 
-  // Al cambiar de chat: scroll al fondo con reintentos
+  // Al cambiar de chat: scroll al fondo con reintentos hasta que carguen los ítems
   useEffect(() => {
     if (!activeChat) return;
     isAtBottomRef.current = true;
     scrollToBottom();
-    const t1 = setTimeout(scrollToBottom, 150);
-    const t2 = setTimeout(scrollToBottom, 500);
+    const t1 = setTimeout(scrollToBottom, 100);
+    const t2 = setTimeout(scrollToBottom, 400);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [activeChat?.phone, scrollToBottom]);
 
@@ -1535,6 +1538,7 @@ export default function ChatPage() {
 
           <Virtuoso
             ref={virtuosoRef}
+            scrollerRef={(el) => { scrollerRef.current = el; }}
             className={styles.messages}
             style={{ overflowX: 'hidden' }}
             data={msgsWithSeps}
