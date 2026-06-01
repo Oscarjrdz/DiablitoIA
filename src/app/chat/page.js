@@ -1282,9 +1282,13 @@ export default function ChatPage() {
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [activeChat?.phone, scrollToBottom]);
 
-  // Mensajes nuevos: scroll solo si el usuario está cerca del fondo
+  // Mensajes nuevos: leer posición DOM directamente para evitar race con atBottomStateChange
   useEffect(() => {
-    if (msgsWithSeps.length > 0 && isAtBottomRef.current) scrollToBottom();
+    if (!msgsWithSeps.length) return;
+    const el = scrollerRef.current;
+    if (!el) { scrollToBottom(); return; }
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distFromBottom < 350) scrollToBottom();
   }, [msgsWithSeps.length, scrollToBottom]);
 
   return (
