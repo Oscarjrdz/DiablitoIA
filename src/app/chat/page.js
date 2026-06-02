@@ -933,33 +933,18 @@ export default function ChatPage() {
   };
 
   // ── Toggle human read/unread ──
-  const markAllUnread = useCallback(async () => {
-    const individual = chats.filter(c => !c.isGroup);
-    if (!individual.length) return;
-    const anyUnread = individual.some(c => c.unread > 0);
-    if (anyUnread) {
-      // Hay no leídos → limpiar todos
-      setChats(prev => prev.map(c => c.isGroup ? c : { ...c, unread: 0, needsHuman: false }));
-      await Promise.all(individual.map(c =>
-        fetch('/api/whatsapp/mark-read', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: c.phone, read: true })
-        })
-      ));
-      showToast('Todos los chats marcados como leídos', 'success');
-    } else {
-      // Todos leídos → marcar todos como no leídos
-      setChats(prev => prev.map(c => c.isGroup ? c : { ...c, unread: 1, needsHuman: true }));
-      await Promise.all(individual.map(c =>
-        fetch('/api/whatsapp/mark-read', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: c.phone, read: false })
-        })
-      ));
-      showToast(`${individual.length} chats marcados como no leídos`, 'success');
-    }
+  const markAllRead = useCallback(async () => {
+    const toRead = chats.filter(c => !c.isGroup && c.unread > 0);
+    if (!toRead.length) return;
+    setChats(prev => prev.map(c => c.isGroup ? c : { ...c, unread: 0, needsHuman: false }));
+    await Promise.all(toRead.map(c =>
+      fetch('/api/whatsapp/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: c.phone, read: true })
+      })
+    ));
+    showToast('Todos los chats marcados como leídos', 'success');
   }, [chats, showToast]);
 
   const toggleHumanRead = useCallback(async (phone, currentlyNeedsHuman) => {
@@ -1399,9 +1384,9 @@ export default function ChatPage() {
           </button>
           <button
             className={styles.markAllUnreadBtn}
-            onClick={markAllUnread}
-            title={chats.some(c => !c.isGroup && c.unread > 0) ? 'Marcar todos como leídos' : 'Marcar todos como no leídos'}
-          >{chats.some(c => !c.isGroup && c.unread > 0) ? '✓ Leídos' : '● Todos'}</button>
+            onClick={markAllRead}
+            title="Marcar todos como leídos"
+          >✓ Leer</button>
           <button
             className={`${styles.markAllUnreadBtn} ${hideGroups ? styles.unreadFilterActive : ''}`}
             onClick={() => setHideGroups(v => { const n = !v; localStorage.setItem('chat_hide_groups', n ? '1' : '0'); return n; })}
