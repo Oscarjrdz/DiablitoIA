@@ -931,6 +931,20 @@ export default function ChatPage() {
   };
 
   // ── Toggle human read/unread ──
+  const markAllUnread = useCallback(async () => {
+    const toMark = chats.filter(c => !c.needsHuman);
+    if (!toMark.length) return;
+    setChats(prev => prev.map(c => c.needsHuman ? c : { ...c, needsHuman: true }));
+    await Promise.all(toMark.map(c =>
+      fetch('/api/whatsapp/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: c.phone, read: false })
+      })
+    ));
+    showToast(`${toMark.length} chats marcados como no leídos ●`, 'success');
+  }, [chats, showToast]);
+
   const toggleHumanRead = useCallback(async (phone, currentlyNeedsHuman) => {
     try {
       await fetch('/api/whatsapp/mark-read', {
@@ -1211,7 +1225,7 @@ export default function ChatPage() {
   const filtered = useMemo(() => chats.filter(c => {
     const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
     const matchStore = !storeFilter || c.store === storeFilter;
-    const matchUnread = !unreadFilter || c.unread > 0 || c.needsHuman;
+    const matchUnread = !unreadFilter || c.unread > 0 || c.needsHuman || c.isGroup;
     return matchSearch && matchStore && matchUnread;
   }), [chats, search, storeFilter, unreadFilter]);
 
@@ -1365,6 +1379,11 @@ export default function ChatPage() {
           >
             {unreadFilter ? '🔴 No leídos' : '⚪ No leídos'}
           </button>
+          <button
+            className={styles.markAllUnreadBtn}
+            onClick={markAllUnread}
+            title="Marcar todos como no leídos"
+          >●●</button>
         </div>
 
         {/* ── Botón Agregar Chat ── */}

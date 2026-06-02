@@ -130,6 +130,19 @@
   font-weight: 600;
 }
 
+.markAllUnreadBtn {
+  background: #202c33;
+  color: #8696a0;
+  border: 1px solid #2a3942;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.markAllUnreadBtn:hover { border-color: #e53935; color: #e53935; }
+
 /* ── Sección Agregar Chat ── */
 .newChatSection {
   padding: 8px 12px 8px;
