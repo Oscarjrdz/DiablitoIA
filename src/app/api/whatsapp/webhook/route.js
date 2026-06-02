@@ -367,101 +367,7 @@ export async function POST(req) {
                        (payload.data.__raw?.key?.remoteJid && payload.data.__raw.key.remoteJid.includes('@g.us')) ||
                        (payload.data.key?.remoteJid && payload.data.key.remoteJid.includes('@g.us'));
 
-    const isImage = (payload.data.type === 'image' || !!payload.data.__raw?.message?.imageMessage) && !isGroupMsg;
-    // Loguear intento
-    if (isImage) {
-        await redis.lpush('debug_image_logs', JSON.stringify({ step: 'START', ts: Date.now(), mediaType: typeof payload.data.media, mediaVal: payload.data.media ? payload.data.media.substring(0,50) : null }));
-        await redis.ltrim('debug_image_logs', 0, 99);
-    }
-
-    if (isImage && payload.data.media) {
-       try {
-           const imgRes = await fetch(payload.data.media);
-           await redis.lpush('debug_image_logs', JSON.stringify({ step: 'FETCH_MEDIA', ok: imgRes.ok, status: imgRes.status }));
-           if (imgRes.ok) {
-               const mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
-               const arrayBuffer = await imgRes.arrayBuffer();
-               const base64Image = Buffer.from(arrayBuffer).toString('base64');
-               const configStr = await redis.get('wapp_config');
-               const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
-               const aiToken = cfg.aiToken;
-               if (aiToken) {
-                   await redis.lpush('debug_image_logs', JSON.stringify({ step: 'CALL_GEMINI', len: base64Image.length }));
-                   const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${aiToken}`, {
-                       method: 'POST',
-                       headers: { 'Content-Type': 'application/json' },
-                       body: JSON.stringify({
-                           contents: [{
-                               parts: [
-                                    { text: "Busca un código de 1 letra y 3 o 4 números (ej F666, A1234, X9876). Responde SOLO con el código exacto, o NO_FOLIO si no encuentras ninguno." },
-                                    { inlineData: { mimeType: mimeType, data: base64Image } }
-                                ]
-                           }],
-                           generationConfig: { maxOutputTokens: 256, temperature: 0, thinkingConfig: { thinkingBudget: 0 } }
-                       })
-                   });
-                   await redis.lpush('debug_image_logs', JSON.stringify({ step: 'GEMINI_RESPONSE', ok: geminiRes.ok, status: geminiRes.status }));
-                   if (geminiRes.ok) {
-                       const geminiData = await geminiRes.json();
-                       const reply = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim().toUpperCase();
-                       await redis.lpush('debug_image_logs', JSON.stringify({ step: 'GEMINI_TEXT', text: reply }));
-                       const folioMatch = reply.match(FOLIO_EXTRACT) || (FOLIO_REGEX.test(reply) ? [reply] : null);
-                       if (folioMatch) {
-                           let extractedFolio = (folioMatch[1] || folioMatch[0]).toUpperCase();
-                           await redis.set(`pending_folio_store_${cleanPhoneGlobal}`, extractedFolio);
-                           await redis.expire(`pending_folio_store_${cleanPhoneGlobal}`, 600);
-                           await sendWhatsApp(phoneId, buildStoreMenu(extractedFolio), cfg);
-                           return NextResponse.json({ success: true, note: 'image_folio_detected' });
-                       }
-                   } else {
-                       const errT = await geminiRes.text();
-                       await redis.lpush('debug_image_logs', JSON.stringify({ step: 'GEMINI_FAIL', text: errT }));
-                   }
-               }
-           }
-       } catch(err) { 
-           console.error("Error procesando imagen para folio:", err); 
-           await redis.lpush('debug_image_logs', JSON.stringify({ step: 'ERROR', error: err.message }));
-       }
-       // No es folio — guardar la imagen en historial para verla en la UI
-       try {
-           const imgMsgId = payload.data.id || payload.data.key?.id || `img_${Date.now()}`;
-           const proxyUrl = await cacheMedia(imgMsgId, payload.data.media, false);
-           const imagePart = {
-               text: textMsg || '',
-               ts: Date.now(),
-               hasAttachment: true,
-               attachmentType: 'image',
-               ...(proxyUrl ? { attachmentUrl: proxyUrl } : {})
-           };
-           const histKey = `chat_hist_${cleanPhoneGlobal}@c.us`;
-           await mergeAndSave(histKey, cleanPhoneGlobal, [{ role: 'user', parts: [imagePart] }]);
-           await redis.incr(`chat_unread_${cleanPhoneGlobal}`);
-           await redis.del(`human_read_${cleanPhoneGlobal}`);
-           await redis.set('sse_notify', JSON.stringify({ ts: Date.now(), phone: cleanPhoneGlobal }));
-       } catch(e) { console.error('[Image] Error guardando imagen en historial:', e); }
-       return NextResponse.json({ success: true });
-    }
-
-     // ── 🛡️ GUARDIA: Imagen sin media pero caption con folio → forzar menú de sucursal ──
-     // Si es imagen (con o sin media), y el caption/body contiene un folio,
-     // NO dejar que caiga al activador directo. Forzar el flujo de selección de sucursal.
-     if (isImage && textMsg) {
-         const captionFolioMatch = textMsg.match(FOLIO_EXTRACT) || (FOLIO_REGEX.test(textMsg) ? [textMsg] : null);
-         if (captionFolioMatch) {
-             const captionFolio = (captionFolioMatch[1] || captionFolioMatch[0]).toUpperCase();
-             const alreadyPending = await redis.get(`pending_folio_store_${cleanPhoneGlobal}`);
-             if (!alreadyPending) {
-                 // Solo si el flujo de imagen no lo guardó ya (evita duplicado)
-                 const configStr = await redis.get('wapp_config');
-                 const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
-                 await redis.set(`pending_folio_store_${cleanPhoneGlobal}`, captionFolio);
-                 await redis.expire(`pending_folio_store_${cleanPhoneGlobal}`, 600);
-                 await sendWhatsApp(phoneId, buildStoreMenu(captionFolio), cfg);
-             }
-             return NextResponse.json({ success: true, note: 'image_caption_folio_intercepted' });
-         }
-     }
+    // Imágenes de clientes individuales: solo cachear y mostrar en UI, sin folio detection
 
     // ── ⏳ INTERCEPCIÓN DE FOLIO PENDIENTE ──
     const pendingFolio = await redis.get(`pending_folio_store_${cleanPhoneGlobal}`);
@@ -1090,6 +996,49 @@ export async function POST(req) {
         await redis.incr(`chat_unread_${cleanGroupPhone}`);
         await redis.del(`human_read_${cleanGroupPhone}`);
         await redis.set('sse_notify', JSON.stringify({ ts: Date.now(), phone: cleanGroupPhone }));
+
+        // ── 🎟️ FOLIO EN GRUPOS: solo si la foto tiene caption de activación ──
+        const FOLIO_TRIGGER = /activ|folio|cup[oó]n|redimir|canjear|activalo|actívalo/i;
+        if (isImageActual && !fromMe && payload.data.media && bodyStr && FOLIO_TRIGGER.test(bodyStr)) {
+            try {
+                const cfgStr = await redis.get('wapp_config');
+                const cfgFolio = typeof cfgStr === 'string' ? JSON.parse(cfgStr) : (cfgStr || {});
+                const aiToken = cfgFolio.aiToken;
+                if (aiToken) {
+                    const imgRes = await fetch(payload.data.media);
+                    if (imgRes.ok) {
+                        const mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
+                        const base64Image = Buffer.from(await imgRes.arrayBuffer()).toString('base64');
+                        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${aiToken}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: [{ parts: [
+                                    { text: "Busca un código de 1 letra y 3 o 4 números (ej F666, A1234, X9876). Responde SOLO con el código exacto, o NO_FOLIO si no encuentras ninguno." },
+                                    { inlineData: { mimeType, data: base64Image } }
+                                ]}],
+                                generationConfig: { maxOutputTokens: 256, temperature: 0, thinkingConfig: { thinkingBudget: 0 } }
+                            })
+                        });
+                        if (geminiRes.ok) {
+                            const geminiData = await geminiRes.json();
+                            const reply = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim().toUpperCase();
+                            const fm = reply.match(FOLIO_EXTRACT) || (FOLIO_REGEX.test(reply) ? [reply] : null);
+                            if (fm) {
+                                const extractedFolio = (fm[1] || fm[0]).toUpperCase();
+                                // Responder al chat individual del miembro que mandó la foto
+                                const memberPhone = memberJid ? '52' + memberJid.split('@')[0].replace(/\D/g, '').slice(-10) : null;
+                                if (memberPhone) {
+                                    await redis.set(`pending_folio_store_${memberPhone}`, extractedFolio);
+                                    await redis.expire(`pending_folio_store_${memberPhone}`, 600);
+                                    await sendWhatsApp(`${memberPhone}@c.us`, buildStoreMenu(extractedFolio), cfgFolio);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch(e) { console.error('[Grupo Folio] Error:', e); }
+        }
 
         // Save group JID mapping so the groups API can discover all groups
         await redis.set(`group_jid_${cleanGroupPhone}`, phoneId);
