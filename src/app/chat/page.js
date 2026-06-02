@@ -338,6 +338,9 @@ export default function ChatPage() {
   const [clientCard, setClientCard] = useState(null);
   const [loadingCard, setLoadingCard] = useState(false);
   const [storeFilter, setStoreFilter] = useState('');
+  const [unreadFilter, setUnreadFilter] = useState(
+    () => typeof window !== 'undefined' && localStorage.getItem('chat_unread_filter') === '1'
+  );
   const [editAddress, setEditAddress] = useState('');
   const [editStore, setEditStore] = useState('');
   const [editName, setEditName] = useState('');
@@ -1208,8 +1211,9 @@ export default function ChatPage() {
   const filtered = useMemo(() => chats.filter(c => {
     const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
     const matchStore = !storeFilter || c.store === storeFilter;
-    return matchSearch && matchStore;
-  }), [chats, search, storeFilter]);
+    const matchUnread = !unreadFilter || c.unread > 0 || c.needsHuman;
+    return matchSearch && matchStore && matchUnread;
+  }), [chats, search, storeFilter, unreadFilter]);
 
   // ── Helper: check if a poll message matches a pending optimistic message ──
   const msgMatchesPending = useCallback((serverMsg, pending) => {
@@ -1350,6 +1354,17 @@ export default function ChatPage() {
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
+          <button
+            className={`${styles.unreadFilterBtn} ${unreadFilter ? styles.unreadFilterActive : ''}`}
+            onClick={() => setUnreadFilter(v => {
+              const next = !v;
+              localStorage.setItem('chat_unread_filter', next ? '1' : '0');
+              return next;
+            })}
+            title={unreadFilter ? 'Mostrando no leídos y fijados' : 'Mostrar solo no leídos y fijados'}
+          >
+            {unreadFilter ? '🔴 No leídos' : '⚪ No leídos'}
+          </button>
         </div>
 
         {/* ── Botón Agregar Chat ── */}

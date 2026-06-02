@@ -82,10 +82,13 @@
   flex-shrink: 0;
   background: #111b21;
   border-bottom: 1px solid #1f2c34;
+  display: flex;
+  gap: 6px;
 }
 
 .storeSelect {
-  width: 100%;
+  width: 50%;
+  flex: 1;
   background: #202c33;
   color: #e9edef;
   border: 1px solid #2a3942;
@@ -105,6 +108,27 @@
 }
 .storeSelect:focus { border-color: #00a884; }
 .storeSelect option { background: #202c33; color: #e9edef; }
+
+.unreadFilterBtn {
+  flex: 1;
+  background: #202c33;
+  color: #8696a0;
+  border: 1px solid #2a3942;
+  border-radius: 8px;
+  padding: 8px 6px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.unreadFilterBtn:hover { border-color: #00a884; color: #e9edef; }
+.unreadFilterActive {
+  background: #0d2d26;
+  border-color: #00a884;
+  color: #00a884;
+  font-weight: 600;
+}
 
 /* ── Sección Agregar Chat ── */
 .newChatSection {
