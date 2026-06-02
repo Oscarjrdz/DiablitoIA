@@ -369,8 +369,8 @@ export async function POST(req) {
 
     // Imágenes de clientes individuales: solo cachear y mostrar en UI, sin folio detection
 
-    // ── ⏳ INTERCEPCIÓN DE FOLIO PENDIENTE ──
-    const pendingFolio = await redis.get(`pending_folio_store_${cleanPhoneGlobal}`);
+    // ── ⏳ INTERCEPCIÓN DE FOLIO PENDIENTE (solo chats individuales) ──
+    const pendingFolio = isGroupMsg ? null : await redis.get(`pending_folio_store_${cleanPhoneGlobal}`);
     if (pendingFolio && textMsg) {
         const configStr = await redis.get('wapp_config');
         const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
