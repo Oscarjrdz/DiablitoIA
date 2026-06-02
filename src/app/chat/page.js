@@ -205,7 +205,6 @@ const ChatRow = React.memo(function ChatRow({ chat, isActive, picUrl, onOpen, on
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             {chat.botSilent && <span className={styles.botSilentBadge} title="Bot silenciado">🤖💤</span>}
-            {chat.needsHuman && <span className={styles.needsHumanBadge} title="Sin atención humana">●</span>}
           </div>
         </div>
       </div>
@@ -932,9 +931,12 @@ export default function ChatPage() {
 
   // ── Toggle human read/unread ──
   const markAllUnread = useCallback(async () => {
-    const toMark = chats.filter(c => !c.needsHuman);
+    const toMark = chats.filter(c => !c.isGroup);
     if (!toMark.length) return;
-    setChats(prev => prev.map(c => c.needsHuman ? c : { ...c, needsHuman: true }));
+    // Optimista: mostrar badge grande (unread) inmediatamente
+    setChats(prev => prev.map(c =>
+      c.isGroup ? c : { ...c, needsHuman: true, unread: c.unread > 0 ? c.unread : 1 }
+    ));
     await Promise.all(toMark.map(c =>
       fetch('/api/whatsapp/mark-read', {
         method: 'POST',
@@ -942,7 +944,7 @@ export default function ChatPage() {
         body: JSON.stringify({ phone: c.phone, read: false })
       })
     ));
-    showToast(`${toMark.length} chats marcados como no leídos ●`, 'success');
+    showToast(`${toMark.length} chats marcados como no leídos`, 'success');
   }, [chats, showToast]);
 
   const toggleHumanRead = useCallback(async (phone, currentlyNeedsHuman) => {
@@ -1225,7 +1227,7 @@ export default function ChatPage() {
   const filtered = useMemo(() => chats.filter(c => {
     const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
     const matchStore = !storeFilter || c.store === storeFilter;
-    const matchUnread = !unreadFilter || c.unread > 0 || c.needsHuman || c.isGroup;
+    const matchUnread = !unreadFilter || c.unread > 0 || c.isGroup;
     return matchSearch && matchStore && matchUnread;
   }), [chats, search, storeFilter, unreadFilter]);
 
