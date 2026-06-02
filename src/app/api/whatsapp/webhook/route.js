@@ -998,24 +998,17 @@ export async function POST(req) {
         await redis.set('sse_notify', JSON.stringify({ ts: Date.now(), phone: cleanGroupPhone }));
 
         // ── 🎟️ FOLIO EN GRUPOS ──
-        // 1) Selección de sucursal pendiente
+        // 1) Selección de sucursal pendiente → inyectar en textMsg y caer al flujo real de activación
         const pendingGrpFolio = await redis.get(`pending_folio_store_${cleanGroupPhone}`);
         if (pendingGrpFolio && !fromMe && bodyStr) {
             const selNum = bodyStr.replace(/\D/g, '');
             const selectedStore = STORE_MAP[bodyStr.trim()] || STORE_MAP[selNum];
             if (selectedStore) {
                 await redis.del(`pending_folio_store_${cleanGroupPhone}`);
-                const cfgStr2 = await redis.get('wapp_config');
-                const cfgG2 = typeof cfgStr2 === 'string' ? JSON.parse(cfgStr2) : (cfgStr2 || {});
-                // Activar el folio directamente
-                const folioOwnerPhone = await redis.get(`folio_owner_${pendingGrpFolio}`);
-                if (folioOwnerPhone) {
-                    await redis.set(`folio_status_${pendingGrpFolio}`, 'activado');
-                    await sendWhatsApp(phoneId, `✅ *Folio ${pendingGrpFolio}* activado en *${selectedStore}*. ¡Muestra tu folio en caja para canjearlo! 🎉`, cfgG2);
-                } else {
-                    await sendWhatsApp(phoneId, `❌ No encontré el folio ${pendingGrpFolio}.`, cfgG2);
-                }
-                return NextResponse.json({ success: true, note: 'group_folio_activated' });
+                // Inyectar folio+sucursal para que el flujo real lo active con Loyverse
+                textMsg = `${pendingGrpFolio} ${selectedStore}`;
+                isManagerImageFlow = true;
+                // No retornar — caer al bloque de VALIDACIÓN DE CUPÓN abajo
             }
         }
 
@@ -1090,7 +1083,8 @@ export async function POST(req) {
             }
         }
         
-        return NextResponse.json({ success: true, note: 'group_history_saved' });
+        if (!isManagerImageFlow) return NextResponse.json({ success: true, note: 'group_history_saved' });
+        // Si isManagerImageFlow=true, caer al flujo de activación de folio
     }
 
     // ── 🎟️ VALIDACIÓN DE CUPÓN (FOLIO) ──────────────────────────────────
