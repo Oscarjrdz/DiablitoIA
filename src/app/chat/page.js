@@ -340,6 +340,9 @@ export default function ChatPage() {
   const [unreadFilter, setUnreadFilter] = useState(
     () => typeof window !== 'undefined' && localStorage.getItem('chat_unread_filter') === '1'
   );
+  const [hideGroups, setHideGroups] = useState(
+    () => typeof window !== 'undefined' && localStorage.getItem('chat_hide_groups') === '1'
+  );
   const [editAddress, setEditAddress] = useState('');
   const [editStore, setEditStore] = useState('');
   const [editName, setEditName] = useState('');
@@ -1240,8 +1243,9 @@ export default function ChatPage() {
     const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
     const matchStore = !storeFilter || c.store === storeFilter;
     const matchUnread = !unreadFilter || c.unread > 0 || c.isGroup;
-    return matchSearch && matchStore && matchUnread;
-  }), [chats, search, storeFilter, unreadFilter]);
+    const matchGroup = !hideGroups || !c.isGroup;
+    return matchSearch && matchStore && matchUnread && matchGroup;
+  }), [chats, search, storeFilter, unreadFilter, hideGroups]);
 
   // ── Helper: check if a poll message matches a pending optimistic message ──
   const msgMatchesPending = useCallback((serverMsg, pending) => {
@@ -1398,6 +1402,11 @@ export default function ChatPage() {
             onClick={markAllUnread}
             title={chats.some(c => !c.isGroup && c.unread > 0) ? 'Marcar todos como leídos' : 'Marcar todos como no leídos'}
           >{chats.some(c => !c.isGroup && c.unread > 0) ? '✓ Leídos' : '● Todos'}</button>
+          <button
+            className={`${styles.markAllUnreadBtn} ${hideGroups ? styles.unreadFilterActive : ''}`}
+            onClick={() => setHideGroups(v => { const n = !v; localStorage.setItem('chat_hide_groups', n ? '1' : '0'); return n; })}
+            title={hideGroups ? 'Mostrar grupos' : 'Ocultar grupos'}
+          >{hideGroups ? '👥 Off' : '👥'}</button>
         </div>
 
         {/* ── Botón Agregar Chat ── */}
