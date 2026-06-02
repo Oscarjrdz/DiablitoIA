@@ -1200,7 +1200,7 @@ export async function POST(req) {
                 }
                 await redis.set(`folio_status_${folio}`, 'activado');
                 const itemName = await redis.get(`folio_item_name_${folio}`) || 'Burger Gratis';
-                await sendWhatsApp(phoneId, `✅ *¡Cupón activado!*\n\n🎟️ Folio: *${folio}*\n🏆 Premio: *${itemName}*\n🏪 Sucursal: *${storesContext.targetStore.name}*\n\n👉 Muestra este mensaje en caja para canjearlo.\n⏰ El cajero buscará tu folio *${folio}* en la terminal.`, cfg);
+                await sendWhatsApp(phoneId, `✅ *¡Cupón activado!*\n\n🎟️ Folio: *${folio}*\n🏆 Premio: *${itemName}*\n🏪 Sucursal: *${storesContext.targetStore.name}*\n\n👉 El item estara agregado por 5 minutos en el punto de venta.\n⏰ Busca tu folio *${folio}* en la terminal punto de venta.`, cfg);
             } else {
                 console.error('Loyverse item creation failed:', result.data);
                 await sendWhatsApp(phoneId, '❌ Hubo un error activando tu cupón. Intenta de nuevo en unos minutos.', cfg);
