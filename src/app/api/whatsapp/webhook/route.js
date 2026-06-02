@@ -997,15 +997,37 @@ export async function POST(req) {
         await redis.del(`human_read_${cleanGroupPhone}`);
         await redis.set('sse_notify', JSON.stringify({ ts: Date.now(), phone: cleanGroupPhone }));
 
-        // ── 🎟️ FOLIO EN GRUPOS: solo si la foto tiene caption de activación ──
+        // ── 🎟️ FOLIO EN GRUPOS ──
+        // 1) Selección de sucursal pendiente
+        const pendingGrpFolio = await redis.get(`pending_folio_store_${cleanGroupPhone}`);
+        if (pendingGrpFolio && !fromMe && bodyStr) {
+            const selNum = bodyStr.replace(/\D/g, '');
+            const selectedStore = STORE_MAP[bodyStr.trim()] || STORE_MAP[selNum];
+            if (selectedStore) {
+                await redis.del(`pending_folio_store_${cleanGroupPhone}`);
+                const cfgStr2 = await redis.get('wapp_config');
+                const cfgG2 = typeof cfgStr2 === 'string' ? JSON.parse(cfgStr2) : (cfgStr2 || {});
+                // Activar el folio directamente
+                const folioOwnerPhone = await redis.get(`folio_owner_${pendingGrpFolio}`);
+                if (folioOwnerPhone) {
+                    await redis.set(`folio_status_${pendingGrpFolio}`, 'activado');
+                    await sendWhatsApp(phoneId, `✅ *Folio ${pendingGrpFolio}* activado en *${selectedStore}*. ¡Muestra tu folio en caja para canjearlo! 🎉`, cfgG2);
+                } else {
+                    await sendWhatsApp(phoneId, `❌ No encontré el folio ${pendingGrpFolio}.`, cfgG2);
+                }
+                return NextResponse.json({ success: true, note: 'group_folio_activated' });
+            }
+        }
+
+        // 2) Foto con caption de activación → buscar folio con Gemini
         const FOLIO_TRIGGER = /activ|folio|cup[oó]n|redimir|canjear|activalo|actívalo/i;
-        if (isImageActual && !fromMe && payload.data.media && bodyStr && FOLIO_TRIGGER.test(bodyStr)) {
+        if (isImageActual && !fromMe && groupRawMediaUrl && bodyStr && FOLIO_TRIGGER.test(bodyStr)) {
             try {
                 const cfgStr = await redis.get('wapp_config');
                 const cfgFolio = typeof cfgStr === 'string' ? JSON.parse(cfgStr) : (cfgStr || {});
                 const aiToken = cfgFolio.aiToken;
                 if (aiToken) {
-                    const imgRes = await fetch(payload.data.media);
+                    const imgRes = await fetch(groupRawMediaUrl);
                     if (imgRes.ok) {
                         const mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
                         const base64Image = Buffer.from(await imgRes.arrayBuffer()).toString('base64');
@@ -1026,13 +1048,12 @@ export async function POST(req) {
                             const fm = reply.match(FOLIO_EXTRACT) || (FOLIO_REGEX.test(reply) ? [reply] : null);
                             if (fm) {
                                 const extractedFolio = (fm[1] || fm[0]).toUpperCase();
-                                // Responder al chat individual del miembro que mandó la foto
-                                const memberPhone = memberJid ? '52' + memberJid.split('@')[0].replace(/\D/g, '').slice(-10) : null;
-                                if (memberPhone) {
-                                    await redis.set(`pending_folio_store_${memberPhone}`, extractedFolio);
-                                    await redis.expire(`pending_folio_store_${memberPhone}`, 600);
-                                    await sendWhatsApp(`${memberPhone}@c.us`, buildStoreMenu(extractedFolio), cfgFolio);
-                                }
+                                await redis.set(`pending_folio_store_${cleanGroupPhone}`, extractedFolio);
+                                await redis.expire(`pending_folio_store_${cleanGroupPhone}`, 600);
+                                // Responder en el GRUPO para que seleccionen sucursal
+                                await sendWhatsApp(phoneId, buildStoreMenu(extractedFolio), cfgFolio);
+                            } else {
+                                await sendWhatsApp(phoneId, '📸 No encontré un folio válido en la imagen. Asegúrate de que el código (ej. *F666*) sea visible. 😊', cfgFolio);
                             }
                         }
                     }
