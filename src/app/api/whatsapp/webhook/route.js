@@ -411,7 +411,9 @@ export async function POST(req) {
         }
     }
 
-    if (!textMsg) return NextResponse.json({ success: true });
+    // Permitir pasar si hay media aunque no haya texto (imagen sin caption)
+    const hasIncomingMedia = !!(payload.media || payload.data?.type === 'image' || payload.data?.type === 'sticker' || payload.data?.__raw?.message?.imageMessage || payload.data?.__raw?.message?.stickerMessage);
+    if (!textMsg && !hasIncomingMedia) return NextResponse.json({ success: true });
     
     // Log the entire webhook payload for debugging
     await redis.set('last_webhook_payload', JSON.stringify(payload));
