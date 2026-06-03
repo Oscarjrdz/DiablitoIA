@@ -132,7 +132,16 @@ export const MessageBubble = React.memo(function MessageBubble({ m, chatName, ch
           <img src={m.attachment} alt="" decoding="async" style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }} />
         )}
         {!m.attachment && m.attachmentUrl && m.attachmentType === 'image' && (
-          <img src={m.attachmentUrl} alt="" loading="lazy" decoding="async" style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }} />
+          <img
+            src={m.attachmentUrl} alt="" loading="lazy" decoding="async"
+            style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }}
+            onError={e => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling && (e.currentTarget.nextSibling.style.display = 'flex'); }}
+          />
+        )}
+        {!m.attachment && m.attachmentUrl && m.attachmentType === 'image' && (
+          <div style={{ display: 'none', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.08)', fontSize: 12, color: '#8696a0' }}>
+            <span>🖼️</span><span>Imagen expirada</span>
+          </div>
         )}
         {m.attachmentType === 'sticker' && m.attachmentUrl && (
           <img src={m.attachmentUrl} alt="Sticker" loading="lazy" decoding="async" style={{ maxWidth: 160, borderRadius: 4, display: 'block', marginBottom: 2 }} />

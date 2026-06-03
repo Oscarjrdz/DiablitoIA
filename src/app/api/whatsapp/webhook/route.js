@@ -968,7 +968,9 @@ export async function POST(req) {
         const msgId = payload.data.id || payload.data.key?.id;
 
         // Cachear media para mostrar en la UI
-        const groupRawMediaUrl = payload.data.media
+        // payload.media es la URL del gateway (campo raíz, no data.media)
+        const groupRawMediaUrl = payload.media
+            || payload.data.media
             || payload.data.__raw?.message?.imageMessage?.url
             || payload.data.__raw?.message?.stickerMessage?.url
             || null;
@@ -1232,7 +1234,9 @@ export async function POST(req) {
     let historyKey = `chat_hist_${cleanPhone}@c.us`;
     const incomingPart = { text: bodyStr, ts: Date.now() };
     // Cachear imagen/sticker y guardar URL del proxy para mostrar en la UI
-    const incomingRawMediaUrl = payload.data.media
+    // payload.media es la URL del gateway (campo raíz, no data.media)
+    const incomingRawMediaUrl = payload.media
+      || payload.data.media
       || payload.data.__raw?.message?.imageMessage?.url
       || payload.data.__raw?.message?.stickerMessage?.url
       || null;
