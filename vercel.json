@@ -35,6 +35,10 @@
     {
       "path": "/api/whatsapp/cron/clientes",
       "schedule": "30 22,23,0,1,2,3,4,5 * * *"
+    },
+    {
+      "path": "/api/whatsapp/cron/reset-silencio",
+      "schedule": "0 6 * * *"
     }
   ]
 }
