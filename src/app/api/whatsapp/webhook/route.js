@@ -91,6 +91,8 @@ async function trackMsgId(msgId, cleanPhone) {
 }
 
 // ── Descarga y cachea media en Redis; devuelve la URL del proxy ──
+// Si el fetch falla (Vercel no puede alcanzar el gateway), devuelve null
+// y el caller usa la URL directa como fallback.
 async function cacheMedia(msgId, rawUrl, isSticker) {
     try {
         let b64, mimeType;
@@ -99,15 +101,25 @@ async function cacheMedia(msgId, rawUrl, isSticker) {
             mimeType = header.split(':')[1]?.split(';')[0] || 'image/jpeg';
             b64 = data;
         } else {
-            const res = await fetch(rawUrl);
-            if (!res.ok) return null;
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 8000);
+            let res;
+            try {
+                res = await fetch(rawUrl, { signal: controller.signal });
+            } finally {
+                clearTimeout(timeout);
+            }
+            if (!res.ok) {
+                console.error(`[Media] fetch no-ok ${res.status} para ${rawUrl}`);
+                return null;
+            }
             mimeType = res.headers.get('content-type') || (isSticker ? 'image/webp' : 'image/jpeg');
             b64 = Buffer.from(await res.arrayBuffer()).toString('base64');
         }
         await redis.setex(`media_${msgId}`, 7 * 24 * 3600, JSON.stringify({ mimeType, b64 }));
         return `/api/media?id=${msgId}`;
     } catch (e) {
-        console.error('[Media] Error cacheando media:', e);
+        console.error('[Media] Error cacheando media:', e.message);
         return null;
     }
 }
@@ -988,8 +1000,9 @@ export async function POST(req) {
             gParsed.push({ role: 'model', parts: [{ text: finalBody, ts: Date.now() }] });
         } else {
             const gPart = { text: `${senderName}: ${finalBody}`, ts: Date.now() };
-            if (groupMediaProxyUrl) {
-                gPart.attachmentUrl = groupMediaProxyUrl;
+            const resolvedGroupUrl = groupMediaProxyUrl || (groupRawMediaUrl && groupMediaType ? groupRawMediaUrl : null);
+            if (resolvedGroupUrl) {
+                gPart.attachmentUrl = resolvedGroupUrl;
                 gPart.attachmentType = groupMediaType;
                 gPart.hasAttachment = true;
             }
@@ -1243,11 +1256,11 @@ export async function POST(req) {
     if (incomingRawMediaUrl) {
       const incomingMsgId = payload.data.id || payload.data.key?.id || `ind_${Date.now()}`;
       const proxyUrl = await cacheMedia(incomingMsgId, incomingRawMediaUrl, isSticker);
-      if (proxyUrl) {
-        incomingPart.attachmentUrl = proxyUrl;
-        incomingPart.attachmentType = isSticker ? 'sticker' : 'image';
-        incomingPart.hasAttachment = true;
-      }
+      // Fallback: si el caché falla (Vercel no alcanzó el gateway), usar la URL directa.
+      // La URL del gateway es pública y tiene TTL propio. onError en el frontend maneja expiración.
+      incomingPart.attachmentUrl = proxyUrl || incomingRawMediaUrl;
+      incomingPart.attachmentType = isSticker ? 'sticker' : 'image';
+      incomingPart.hasAttachment = true;
     }
     const incomingEntry = { role: 'user', parts: [incomingPart] };
 
