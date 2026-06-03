@@ -150,6 +150,11 @@ export async function POST(req) {
     const payload = await req.json();
     // Debug point: Save last payload in Redis
     await redis.set('DEBUG_LAST_PAYLOAD', payload);
+    // Guardar payload separado si es imagen para diagnóstico
+    const _type = payload.data?.type || payload.data?.messageType || '';
+    if (_type === 'image' || _type === 'sticker' || payload.data?.__raw?.message?.imageMessage) {
+      await redis.set('DEBUG_LAST_IMAGE_PAYLOAD', payload);
+    }
 
 
     // ── Typing / Presence ──
