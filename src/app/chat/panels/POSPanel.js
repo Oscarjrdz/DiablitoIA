@@ -6,10 +6,8 @@ import { PosProductCard } from '../_atoms';
 import { variantName, ORDER_TYPE_LABELS } from '../_utils';
 import styles from '../page.module.css';
 
-// Persistido a nivel de módulo para no recargar POS data al cambiar entre chats
-let posDataLoaded = false;
-
 export default function POSPanel({ activeChat, clientCard, pinnedGroupsData, showToast }) {
+  const posDataLoadedRef = useRef(false);
   const [posItems, setPosItems] = useState([]);
   const [posStores, setPosStores] = useState([]);
   const [posPayTypes, setPosPayTypes] = useState([]);
@@ -33,8 +31,8 @@ export default function POSPanel({ activeChat, clientCard, pinnedGroupsData, sho
   const deferredPosSearch = useDeferredValue(posSearch);
 
   const fetchPOSData = useCallback(async () => {
-    if (posDataLoaded) return;
-    posDataLoaded = true;
+    if (posDataLoadedRef.current) return;
+    posDataLoadedRef.current = true;
     setPosLoading(true);
     try {
       const res = await fetch('/api/loyverse/pos');
