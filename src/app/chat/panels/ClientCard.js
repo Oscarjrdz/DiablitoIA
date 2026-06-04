@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useCallback } from 'react';
 import { Avatar } from '../_atoms';
+import { titleCase } from '../_utils';
 import styles from '../page.module.css';
 
 export default function ClientCard({
@@ -92,17 +93,18 @@ export default function ClientCard({
     <div className={styles.infoPanel}>
       <div className={styles.infoPanelHeader}>
         <span>Perfil del cliente</span>
+        {loadingCard && <span style={{ fontSize: 11, opacity: 0.45, fontWeight: 400 }}>actualizando...</span>}
       </div>
 
-      {loadingCard ? (
+      {!clientCard ? (
         <div className={styles.infoLoading}>Cargando...</div>
       ) : (
-        <div className={styles.infoFixed}>
+        <div className={styles.infoFixed} style={{ opacity: loadingCard ? 0.6 : 1, transition: 'opacity 0.2s' }}>
 
           {/* Avatar + nombre */}
           <div className={styles.infoAvatar}>
             <Avatar
-              name={clientCard?.client?.name || activeChat.name}
+              name={titleCase(clientCard?.client?.name || activeChat.name)}
               phone={activeChat.phone}
               size={56}
               picUrl={profilePics[activeChat.phone]}
@@ -125,7 +127,7 @@ export default function ClientCard({
               </div>
             ) : (
               <div className={styles.infoNameRow}>
-                <div className={styles.infoName}>{clientCard?.client?.name || activeChat.name}</div>
+                <div className={styles.infoName}>{titleCase(clientCard?.client?.name || activeChat.name)}</div>
                 {clientCard?.client && (
                   <button className={styles.infoEditBtn} onClick={() => {
                     setEditName(clientCard?.client?.name || '');
@@ -220,7 +222,7 @@ export default function ClientCard({
               </div>
             ) : (
               <div className={styles.infoAddress}>
-                {clientCard?.client?.address || <span className={styles.infoEmpty}>Sin dirección</span>}
+                {clientCard?.client?.address ? titleCase(clientCard.client.address) : <span className={styles.infoEmpty}>Sin dirección</span>}
               </div>
             )}
           </div>

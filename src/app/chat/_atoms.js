@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { Check, Paperclip } from 'lucide-react';
-import { hashColor, initials, relTime } from './_utils';
+import { hashColor, initials, relTime, titleCase } from './_utils';
 import styles from './page.module.css';
 
 // ── Avatar con iniciales y color consistente ──
@@ -60,13 +60,13 @@ export const ChatRow = React.memo(function ChatRow({ chat, isActive, picUrl, onO
     >
       <div className={styles.avatarWrap}>
         <div className={chat.deliveryMode ? styles.deliveryRing : undefined}>
-          <Avatar name={chat.name} phone={chat.phone} size={49} picUrl={picUrl} />
+          <Avatar name={titleCase(chat.name)} phone={chat.phone} size={49} picUrl={picUrl} />
         </div>
         {chat.unread > 0 && <span className={styles.avatarBadge}>{chat.unread > 99 ? '99+' : chat.unread}</span>}
       </div>
       <div className={styles.chatMeta}>
         <div className={styles.chatRow1}>
-          <span className={styles.chatName}>{chat.name}</span>
+          <span className={styles.chatName}>{titleCase(chat.name)}</span>
           <span className={chat.unread > 0 ? styles.chatTimeUnread : styles.chatTime}>
               {relTime(chat.lastTs)}
           </span>

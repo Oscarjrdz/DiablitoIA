@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Virtuoso } from 'react-virtuoso';
 import { Search, MoreVertical, Paperclip, Mic, Send, ArrowLeft, X, Plus, Pencil, ChevronRight, Trash2, ImagePlus } from 'lucide-react';
 import { Avatar, Ticks, TypingDots, MessageBubble } from '../_atoms';
-import { dayLabel, msgMatchesPending } from '../_utils';
+import { dayLabel, msgMatchesPending, titleCase } from '../_utils';
 import styles from '../page.module.css';
 
 export default function MessagePanel({
@@ -273,7 +273,7 @@ export default function MessagePanel({
         </button>
         <Avatar name={activeChat.name} phone={activeChat.phone} size={40} picUrl={profilePics[activeChat.phone]} />
         <div className={styles.headerInfo}>
-          <span className={styles.headerName}>{activeChat.name}</span>
+          <span className={styles.headerName}>{titleCase(activeChat.name)}</span>
           <span className={styles.headerSub}>
             {isTyping
               ? <span className={styles.typingLabel}>escribiendo<TypingDots /></span>

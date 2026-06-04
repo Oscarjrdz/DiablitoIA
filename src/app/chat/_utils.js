@@ -20,6 +20,12 @@ export function initials(name = '') {
   return (p[0][0] + p[p.length - 1][0]).toUpperCase();
 }
 
+// ── Normalización de texto para display ──
+export function titleCase(str = '') {
+  if (!str) return str;
+  return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
 // ── Tiempo relativo para la lista de chats ──
 export function relTime(ts) {
   if (!ts) return 'Reciente';
