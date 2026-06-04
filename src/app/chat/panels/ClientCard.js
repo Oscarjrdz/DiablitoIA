@@ -93,7 +93,6 @@ export default function ClientCard({
     <div className={styles.infoPanel}>
       <div className={styles.infoPanelHeader}>
         <span>Perfil del cliente</span>
-        {loadingCard && <span style={{ fontSize: 11, opacity: 0.45, fontWeight: 400 }}>actualizando...</span>}
       </div>
 
       {!clientCard ? (
