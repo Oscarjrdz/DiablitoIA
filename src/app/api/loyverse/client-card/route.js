@@ -102,6 +102,11 @@ export async function GET(req) {
     const cached = await redis.get(cacheKey);
     if (cached) {
       const parsed = typeof cached === 'string' ? JSON.parse(cached) : cached;
+      // Sincronizar nombre a Redis aunque sea cache — para que el chat list lo muestre
+      const cachedClientName = parsed?.client?.name;
+      if (cachedClientName && cachedClientName !== phone10) {
+        await redis.set(`client_name_${phone}`, cachedClientName);
+      }
       return NextResponse.json({ ...parsed, _cached: true });
     }
 
