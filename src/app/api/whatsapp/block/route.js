@@ -10,7 +10,7 @@ export async function POST(req) {
 
     let cleanPhone = phone.replace(/\D/g, '');
     if (!cleanPhone.startsWith('52')) cleanPhone = '52' + cleanPhone;
-    const number = `${cleanPhone}@c.us`;
+    const number = cleanPhone; // gateway rechaza @c.us en este endpoint
 
     const configStr = await redis.get('wapp_config');
     const cfg = typeof configStr === 'string' ? JSON.parse(configStr) : (configStr || {});
