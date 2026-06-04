@@ -368,11 +368,29 @@ export async function POST(req) {
       return NextResponse.json({ success: true, note: 'order_processed_and_saved' });
     }
 
-    let bodyStr = payload.data.body || payload.data.__raw?.message?.conversation || payload.data.__raw?.message?.extendedTextMessage?.text || '';
+    const rawMsg = payload.data.__raw?.message || {};
+    let bodyStr = payload.data.body
+      || rawMsg.conversation
+      || rawMsg.extendedTextMessage?.text
+      // Respuestas a botones de template (anuncios de Facebook/Instagram)
+      || rawMsg.buttonsResponseMessage?.selectedDisplayText
+      || rawMsg.templateButtonReplyMessage?.selectedDisplayText
+      || rawMsg.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson
+      // Lista de respuestas interactivas
+      || rawMsg.listResponseMessage?.title
+      // Respuesta de encuesta/poll
+      || rawMsg.pollUpdateMessage?.vote?.optionNames?.[0]
+      || '';
     
-    // Si mandan un Sticker pero no hay texto, lo tratamos como un saludo inicial (HOLA) para que el Bot despierte
-    const isSticker = payload.data.type === 'sticker' || payload.data.messageType === 'sticker' || !!payload.data.__raw?.message?.stickerMessage;
+    // Si mandan un Sticker pero no hay texto, lo tratamos como un saludo inicial
+    const isSticker = payload.data.type === 'sticker' || payload.data.messageType === 'sticker' || !!rawMsg.stickerMessage;
     if (isSticker && !bodyStr) {
+        bodyStr = 'HOLA';
+    }
+
+    // Respuestas a anuncios (botones/templates) — tratar como saludo si no hay texto
+    const isAdReply = !!(rawMsg.buttonsResponseMessage || rawMsg.templateButtonReplyMessage || rawMsg.listResponseMessage || rawMsg.interactiveResponseMessage);
+    if (isAdReply && !bodyStr) {
         bodyStr = 'HOLA';
     }
     
