@@ -1285,57 +1285,77 @@ export async function POST(req) {
         return NextResponse.json({ success: true, note: 'delivery_mode_silent' });
     }
 
-    // ── 🔍 IDENTIFICACIÓN: Buscar cliente en Loyverse por teléfono ──
+    // ── 🔍 IDENTIFICACIÓN: Loyverse primero (fuente de verdad), Redis como respaldo ──
     let clientName = null;
     let clientPoints = 0;
     let clientAddress = '';
     let isRegistered = false;
-    const cachedName = await redis.get(`client_name_${cleanPhone}`);
-    if (cachedName) {
-        clientName = cachedName;
-        isRegistered = true;
-        const cachedPoints = await redis.get(`client_points_${cleanPhone}`);
-        clientPoints = parseInt(cachedPoints || '0');
-        const cachedAddr = await redis.get(`client_address_${cleanPhone}`);
-        if (cachedAddr) clientAddress = cachedAddr;
-    } else {
-        // Buscar en Loyverse — mismo enfoque robusto que /client-card:
-        // intenta con 10 dígitos Y con código de país 52 para no perder clientes
-        try {
-            const loyToken = await redis.get('loyverse_token');
-            if (loyToken) {
-                const clientPhone10 = cleanPhone.slice(-10);
-                const authH = { Authorization: `Bearer ${loyToken}` };
-                let match = null;
+    let loyverseReachable = false;
 
-                // Intentar con ambos formatos: sin y con código de país
-                for (const q of [clientPhone10, '52' + clientPhone10]) {
-                    if (match) break;
-                    const searchRes = await fetch(
-                        `https://api.loyverse.com/v1.0/customers?phone_number=${encodeURIComponent(q)}&limit=10`,
-                        { headers: authH }
-                    );
-                    if (!searchRes.ok) continue;
-                    const searchData = await searchRes.json();
-                    match = (searchData.customers || []).find(c =>
-                        c.phone_number && c.phone_number.replace(/\D/g, '').slice(-10) === clientPhone10
-                    );
-                }
+    const clientPhone10 = cleanPhone.slice(-10);
 
-                if (match) {
-                    clientName = match.name;
-                    clientPoints = match.total_points || 0;
-                    isRegistered = true;
-                    let addr = match.address || '';
-                    if (match.city) addr += (addr ? ', ' : '') + match.city;
-                    clientAddress = addr.trim();
-                    await redis.set(`client_name_${cleanPhone}`, clientName);
-                    await redis.set(`client_points_${cleanPhone}`, String(clientPoints));
-                    await redis.set(`client_registered_${cleanPhone}`, '1');
-                    if (clientAddress) await redis.set(`client_address_${cleanPhone}`, clientAddress);
-                }
+    // 1️⃣ Buscar en Loyverse con TODOS los formatos posibles
+    try {
+        const loyToken = await redis.get('loyverse_token');
+        if (loyToken) {
+            const authH = { Authorization: `Bearer ${loyToken}` };
+            let match = null;
+
+            // Todos los formatos que Loyverse podría tener guardado
+            const formatsToTry = [
+                clientPhone10,           // 8110507543
+                '52' + clientPhone10,    // 528110507543
+                '+52' + clientPhone10,   // +528110507543
+            ];
+
+            for (const q of formatsToTry) {
+                if (match) break;
+                const res = await fetch(
+                    `https://api.loyverse.com/v1.0/customers?phone_number=${encodeURIComponent(q)}&limit=10`,
+                    { headers: authH }
+                );
+                if (!res.ok) continue;
+                loyverseReachable = true;
+                const data = await res.json();
+                match = (data.customers || []).find(c =>
+                    c.phone_number && c.phone_number.replace(/\D/g, '').slice(-10) === clientPhone10
+                );
             }
-        } catch(lookupErr) { console.error('[Bot] Loyverse lookup error:', lookupErr); }
+            if (!loyverseReachable) loyverseReachable = false; // al menos intentamos
+
+            if (match) {
+                clientName = match.name;
+                clientPoints = match.total_points || 0;
+                isRegistered = true;
+                let addr = match.address || '';
+                if (match.city) addr += (addr ? ', ' : '') + match.city;
+                clientAddress = addr.trim();
+                // Actualizar Redis con datos frescos de Loyverse
+                await redis.set(`client_name_${cleanPhone}`, clientName);
+                await redis.set(`client_points_${cleanPhone}`, String(clientPoints));
+                await redis.set(`client_registered_${cleanPhone}`, '1');
+                if (clientAddress) await redis.set(`client_address_${cleanPhone}`, clientAddress);
+            }
+            loyverseReachable = true;
+        }
+    } catch(lookupErr) {
+        console.error('[Bot] Loyverse no disponible, usando Redis como respaldo:', lookupErr.message);
+    }
+
+    // 2️⃣ Si Loyverse falló o no respondió → respaldo en Redis
+    if (!isRegistered) {
+        const cachedName = await redis.get(`client_name_${cleanPhone}`);
+        if (cachedName) {
+            clientName = cachedName;
+            isRegistered = true;
+            const cachedPoints = await redis.get(`client_points_${cleanPhone}`);
+            clientPoints = parseInt(cachedPoints || '0');
+            const cachedAddr = await redis.get(`client_address_${cleanPhone}`);
+            if (cachedAddr) clientAddress = cachedAddr;
+            if (!loyverseReachable) {
+                console.log(`[Bot] Loyverse caído — usando Redis para ${cleanPhone}: ${clientName}`);
+            }
+        }
     }
 
     // ── 🟢 CLIENTE REGISTRADO: Respuestas determinísticas con estados ──
