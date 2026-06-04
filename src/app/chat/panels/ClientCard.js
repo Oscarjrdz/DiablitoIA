@@ -112,21 +112,9 @@ export default function ClientCard({
                     c.phone === activeChat.phone ? { ...c, isBlocked: !isCurrentlyBlocked } : c
                   ));
                   setActiveChat(prev => ({ ...prev, isBlocked: !isCurrentlyBlocked }));
-                  if (data.gatewaySuccess) {
-                    showToast(isCurrentlyBlocked ? 'Desbloqueado en WhatsApp ✅' : 'Bloqueado en WhatsApp 🚫', 'success');
-                  } else if (data.gatewayOk) {
-                    showToast(isCurrentlyBlocked ? 'Desbloqueado ✅' : 'Bloqueado 🚫', 'success');
-                  } else {
-                    const dbg = data.debug ? ` | inst:${data.debug.instance} tok:${data.debug.tokenPreview} num:${data.debug.number}` : '';
-                    showToast(`Gateway error: ${data.gatewayResponse || 'sin respuesta'}${dbg}`, 'error');
-                    // Revertir el estado local si el gateway falló
-                    setChats(prev => prev.map(c =>
-                      c.phone === activeChat.phone ? { ...c, isBlocked: isCurrentlyBlocked } : c
-                    ));
-                    setActiveChat(prev => ({ ...prev, isBlocked: isCurrentlyBlocked }));
-                  }
+                  showToast(isCurrentlyBlocked ? 'Desbloqueado en WhatsApp ✅' : 'Bloqueado en WhatsApp 🚫', 'success');
                 } else {
-                  showToast('Error al bloquear', 'error');
+                  showToast(data.error || 'Error al bloquear', 'error');
                 }
               } catch { showToast('Error de conexión', 'error'); }
               setBlocking(false);
