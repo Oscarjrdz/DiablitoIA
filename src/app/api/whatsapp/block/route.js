@@ -59,7 +59,7 @@ export async function POST(req) {
       gatewaySuccess: gatewayData?.success === true,
       debug: {
         instance: cfg.wappInstance || null,
-        hasToken: !!cfg.wappToken,
+        tokenPreview: cfg.wappToken ? cfg.wappToken.slice(0, 6) + '...' : null,
         number,
         url: cfg.wappInstance ? `${GW}/${cfg.wappInstance}/contacts/block` : null
       }
