@@ -115,14 +115,16 @@ export async function GET(req) {
     const { primary, allIds } = mergeCustomers(allCustomers);
 
     // ── 2. Datos de Redis ──
-    const [cachedName, storedStore, promoStatus] = await Promise.all([
+    const [cachedName, storedStore, promoStatus, storedAddress] = await Promise.all([
       redis.get(`client_name_${phone}`),
       redis.get(`client_store_${phone}`),
-      redis.get(`promo_pos_${phone}`)
+      redis.get(`promo_pos_${phone}`),
+      redis.get(`client_address_${phone}`)
     ]);
 
     // ── 3. Dirección y tienda ──
-    const address = extractAddress(primary);
+    // Redis tiene prioridad sobre Loyverse (refleja el último guardado)
+    const address = storedAddress || extractAddress(primary);
     const tienda = extractTienda(primary, storedStore);
 
     // ── 4. Compras: paginar recibos recientes y filtrar por customer_id ──
@@ -192,6 +194,7 @@ export async function GET(req) {
         email: primary?.email || '',
         tienda,
         address,
+        _note: primary?.note || '',
         customerId: primary?.id || null,
         promoStatus,
         duplicateRecords,
@@ -279,6 +282,7 @@ export async function PATCH(req) {
       const phone10 = cleanPhone.slice(-10);
       if (_storeRedis !== undefined) await redis.set(`client_store_${cleanPhone}`, _storeRedis);
       if (name !== undefined) await redis.set(`client_name_${cleanPhone}`, name);
+      if (address !== undefined) await redis.set(`client_address_${cleanPhone}`, address);
       await redis.del(`client_card_v2_${phone10}`);
     }
 

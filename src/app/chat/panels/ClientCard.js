@@ -63,15 +63,21 @@ export default function ClientCard({
       });
       if (res.ok) {
         clearClientCache?.(clientCard.client.phone);
-        setClientCard(prev => ({
-          ...prev,
-          client: {
-            ...prev.client,
-            name: field === 'name' ? editName : prev.client.name,
-            address: field === 'address' ? editAddress : prev.client.address,
-            tienda: field === 'store' ? editStore : prev.client.tienda
-          }
-        }));
+        setClientCard(prev => {
+          const updatedNote = field === 'store'
+            ? (body.note || prev.client._note || '')
+            : prev.client._note;
+          return {
+            ...prev,
+            client: {
+              ...prev.client,
+              name: field === 'name' ? editName : prev.client.name,
+              address: field === 'address' ? editAddress : prev.client.address,
+              tienda: field === 'store' ? editStore : prev.client.tienda,
+              _note: updatedNote,
+            }
+          };
+        });
         if (field === 'name') setChats(prev => prev.map(c => c.phone === activeChat?.phone ? { ...c, name: editName } : c));
         showToast('Actualizado correctamente', 'success');
         setEditingField(null);
