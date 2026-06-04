@@ -3,11 +3,13 @@ import { redis } from '@/lib/redis';
 
 export async function GET() {
   try {
-    const [ackLogs, lastSend, lastPayload, lastImagePayload] = await Promise.all([
+    const [ackLogs, lastSend, lastPayload, lastImagePayload, unknownEvent, fromMeDropped] = await Promise.all([
       redis.lrange('debug_ack_log', 0, 29),
       redis.get('debug_last_send_response'),
       redis.get('DEBUG_LAST_PAYLOAD'),
-      redis.get('DEBUG_LAST_IMAGE_PAYLOAD')
+      redis.get('DEBUG_LAST_IMAGE_PAYLOAD'),
+      redis.get('DEBUG_UNKNOWN_EVENT'),
+      redis.get('DEBUG_FROMME_DROPPED')
     ]);
 
     const parsedAck = ackLogs.map(l => { try { return typeof l === 'string' ? JSON.parse(l) : l; } catch { return l; } });
@@ -18,7 +20,9 @@ export async function GET() {
       ackEvents: parsedAck,
       lastSendResponse: parsedSend,
       lastWebhookPayload: lastPayload,
-      lastImagePayload
+      lastImagePayload,
+      unknownEvent,
+      fromMeDropped
     });
   } catch (e) {
     return NextResponse.json({ success: false, error: e.message });

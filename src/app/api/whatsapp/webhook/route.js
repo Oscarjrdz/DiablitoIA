@@ -249,18 +249,26 @@ export async function POST(req) {
     }
 
     if (payload.event_type !== 'message_received' || (!payload.data?.from && !payload.data?.key)) {
+      // Capturar para diagnóstico de anuncios
+      if (payload.event_type && !['message_ack','messages.update','ack','message.ack','msg_ack','presence_update','chat_state','typing'].includes(payload.event_type)) {
+        await redis.set('DEBUG_UNKNOWN_EVENT', JSON.stringify({ event_type: payload.event_type, data: payload.data }));
+      }
       return NextResponse.json({ success: true });
     }
 
     const fromMe = payload.data.fromMe !== undefined ? payload.data.fromMe : payload.data.key?.fromMe;
-    
+
     // We will no longer block fromMe messages globally because we want to capture outgoing messages in groups
     // If it's not a group, and it's fromMe, we can block it.
     let isGroupMsgGeneral = false;
     let tempPhoneId = payload.data.from || payload.data.key?.remoteJid || payload.data.__raw?.key?.remoteJidAlt || payload.data.__raw?.key?.remoteJid;
     if (tempPhoneId && tempPhoneId.includes('@g.us')) isGroupMsgGeneral = true;
 
-    if (fromMe && !isGroupMsgGeneral) return NextResponse.json({ success: true });
+    // Capturar mensajes fromMe descartados para diagnóstico de anuncios
+    if (fromMe && !isGroupMsgGeneral) {
+      await redis.set('DEBUG_FROMME_DROPPED', JSON.stringify({ ts: Date.now(), from: payload.data.from, type: payload.data.type, body: payload.data.body, contextInfo: payload.data.contextInfo, rawMsgKeys: Object.keys(payload.data.__raw?.message || {}) }));
+      return NextResponse.json({ success: true });
+    }
 
     // ── 🛒 INTERCEPCIÓN DE PEDIDOS DEL CATÁLOGO (CARRITO) ──
     if (payload.data.type === 'order' || payload.data.__raw?.message?.orderMessage) {
