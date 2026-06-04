@@ -317,6 +317,7 @@ export default function ChatPage() {
         {activeChat && (
           <ClientCard
             activeChat={activeChat}
+            setActiveChat={setActiveChat}
             setChats={setChats}
             profilePics={profilePics}
             clientCard={clientCard}

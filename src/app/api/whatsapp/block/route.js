@@ -17,32 +17,47 @@ export async function POST(req) {
 
     // Bloquear/desbloquear en el gateway de WhatsApp
     let gatewayOk = false;
+    let gatewayResponse = null;
     if (cfg.wappInstance && cfg.wappToken) {
       try {
-        const res = await fetch(`${GW}/${cfg.wappInstance}/contacts/block`, {
+        const url = `${GW}/${cfg.wappInstance}/contacts/block`;
+        const body2 = { token: cfg.wappToken, number, action: blocked ? 'block' : 'unblock' };
+        console.log('[Block] Calling gateway:', url, JSON.stringify(body2));
+        const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            token: cfg.wappToken,
-            number,
-            action: blocked ? 'block' : 'unblock'
-          })
+          body: JSON.stringify(body2)
         });
+        const text = await res.text().catch(() => '');
+        gatewayResponse = text;
         gatewayOk = res.ok;
-        if (!res.ok) console.error('[Block] Gateway error:', await res.text().catch(() => ''));
+        console.log('[Block] Gateway status:', res.status, 'body:', text);
       } catch (e) {
         console.error('[Block] Gateway unreachable:', e.message);
+        gatewayResponse = e.message;
       }
+    } else {
+      gatewayResponse = `No config: instance=${cfg.wappInstance} token=${!!cfg.wappToken}`;
     }
 
-    // Actualizar estado en Redis
+    // Actualizar estado en Redis independientemente del gateway
     if (blocked) {
       await redis.set(`blocked_${cleanPhone}`, '1');
     } else {
       await redis.del(`blocked_${cleanPhone}`);
     }
 
-    return NextResponse.json({ success: true, blocked: !!blocked, gatewayOk });
+    // Parsear respuesta del gateway para dar más detalle
+    let gatewayData = null;
+    try { gatewayData = JSON.parse(gatewayResponse); } catch {}
+
+    return NextResponse.json({
+      success: true,
+      blocked: !!blocked,
+      gatewayOk,
+      gatewayResponse,
+      gatewaySuccess: gatewayData?.success === true
+    });
   } catch (e) {
     return NextResponse.json({ success: false, error: e.message }, { status: 500 });
   }

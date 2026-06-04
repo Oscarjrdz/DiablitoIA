@@ -6,6 +6,7 @@ import styles from '../page.module.css';
 
 export default function ClientCard({
   activeChat,
+  setActiveChat,
   setChats,
   profilePics,
   clientCard,
@@ -110,7 +111,19 @@ export default function ClientCard({
                   setChats(prev => prev.map(c =>
                     c.phone === activeChat.phone ? { ...c, isBlocked: !isCurrentlyBlocked } : c
                   ));
-                  showToast(isCurrentlyBlocked ? 'Cliente desbloqueado' : 'Cliente bloqueado 🚫', isCurrentlyBlocked ? 'success' : 'success');
+                  setActiveChat(prev => ({ ...prev, isBlocked: !isCurrentlyBlocked }));
+                  if (data.gatewaySuccess) {
+                    showToast(isCurrentlyBlocked ? 'Desbloqueado en WhatsApp ✅' : 'Bloqueado en WhatsApp 🚫', 'success');
+                  } else if (data.gatewayOk) {
+                    showToast(isCurrentlyBlocked ? 'Desbloqueado ✅' : 'Bloqueado 🚫', 'success');
+                  } else {
+                    showToast(`Gateway error: ${data.gatewayResponse || 'sin respuesta'}`, 'error');
+                    // Revertir el estado local si el gateway falló
+                    setChats(prev => prev.map(c =>
+                      c.phone === activeChat.phone ? { ...c, isBlocked: isCurrentlyBlocked } : c
+                    ));
+                    setActiveChat(prev => ({ ...prev, isBlocked: isCurrentlyBlocked }));
+                  }
                 } else {
                   showToast('Error al bloquear', 'error');
                 }
