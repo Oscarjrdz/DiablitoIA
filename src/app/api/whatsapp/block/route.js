@@ -56,7 +56,13 @@ export async function POST(req) {
       blocked: !!blocked,
       gatewayOk,
       gatewayResponse,
-      gatewaySuccess: gatewayData?.success === true
+      gatewaySuccess: gatewayData?.success === true,
+      debug: {
+        instance: cfg.wappInstance || null,
+        hasToken: !!cfg.wappToken,
+        number,
+        url: cfg.wappInstance ? `${GW}/${cfg.wappInstance}/contacts/block` : null
+      }
     });
   } catch (e) {
     return NextResponse.json({ success: false, error: e.message }, { status: 500 });

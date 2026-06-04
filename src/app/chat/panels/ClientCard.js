@@ -117,7 +117,8 @@ export default function ClientCard({
                   } else if (data.gatewayOk) {
                     showToast(isCurrentlyBlocked ? 'Desbloqueado ✅' : 'Bloqueado 🚫', 'success');
                   } else {
-                    showToast(`Gateway error: ${data.gatewayResponse || 'sin respuesta'}`, 'error');
+                    const dbg = data.debug ? ` | inst:${data.debug.instance} tok:${data.debug.hasToken} num:${data.debug.number}` : '';
+                    showToast(`Gateway error: ${data.gatewayResponse || 'sin respuesta'}${dbg}`, 'error');
                     // Revertir el estado local si el gateway falló
                     setChats(prev => prev.map(c =>
                       c.phone === activeChat.phone ? { ...c, isBlocked: isCurrentlyBlocked } : c
