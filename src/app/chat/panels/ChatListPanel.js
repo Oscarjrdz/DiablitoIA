@@ -169,7 +169,9 @@ export default function ChatListPanel({
 
         <div className={styles.leftHeader}>
           <Avatar name="El Diablito" size={40} />
-          <span className={styles.leftTitle}>Chats</span>
+          <span className={styles.leftTitle}>
+            Chats <span style={{ fontSize: 12, fontWeight: 500, opacity: 0.55, marginLeft: 4 }}>({chats.length})</span>
+          </span>
           <div className={styles.headerIconsLeft}>
             <button
               className={styles.groupsBtn}
