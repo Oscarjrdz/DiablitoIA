@@ -79,14 +79,13 @@ function extractAddress(customer) {
   return address.trim();
 }
 
-// Extrae tienda de la nota o del campo Redis
+// Extrae tienda — Loyverse (nota) es fuente de verdad, Redis solo como respaldo
 function extractTienda(customer, storedStore) {
-  if (storedStore) return storedStore;
   if (customer?.note) {
     const m = customer.note.match(/Tienda:\s*(.+?)(?:\n|$)/);
     if (m) return m[1].trim();
   }
-  return '';
+  return storedStore || '';
 }
 
 export async function GET(req) {
@@ -123,8 +122,8 @@ export async function GET(req) {
     ]);
 
     // ── 3. Dirección y tienda ──
-    // Redis tiene prioridad sobre Loyverse (refleja el último guardado)
-    const address = storedAddress || extractAddress(primary);
+    // Loyverse es fuente de verdad. Redis solo entra si Loyverse no tiene el dato.
+    const address = extractAddress(primary) || storedAddress || '';
     const tienda = extractTienda(primary, storedStore);
 
     // ── 4. Compras: paginar recibos recientes y filtrar por customer_id ──
@@ -181,7 +180,8 @@ export async function GET(req) {
       ? allCustomers.reduce((sum, c) => sum + (c.total_points ?? 0), 0)
       : null;
 
-    const name = cachedName || primary?.name || phone10;
+    // Loyverse es fuente de verdad para el nombre. Redis como respaldo.
+    const name = primary?.name || cachedName || phone10;
     const duplicateRecords = allCustomers.length > 1;
 
     const result = {
@@ -203,8 +203,8 @@ export async function GET(req) {
       receipts,
       coupons
     };
-    // Guardar en cache 5 min (no cachear si no se encontró cliente en Loyverse)
-    if (primary) await redis.setex(cacheKey, 300, JSON.stringify(result));
+    // Cache 60 seg — Loyverse es fuente de verdad, Redis solo evita hammering
+    if (primary) await redis.setex(cacheKey, 60, JSON.stringify(result));
     return NextResponse.json(result);
   } catch (e) {
     console.error('[client-card]', e);
