@@ -34,6 +34,9 @@ const getRedisClient = () => {
       ltrim: async (key, start, stop) => rawRedis.ltrim(key, start, stop),
       lrange: async (key, start, stop) => rawRedis.lrange(key, start, stop),
       keys: async (pattern) => rawRedis.keys(pattern),
+      sadd: async (key, ...members) => rawRedis.sadd(key, ...members),
+      srem: async (key, ...members) => rawRedis.srem(key, ...members),
+      smembers: async (key) => rawRedis.smembers(key),
       mget: async (...keys) => {
         if (!keys || keys.length === 0) return [];
         const vals = await rawRedis.mget(...keys);
@@ -64,6 +67,9 @@ const getRedisClient = () => {
     ltrim: async () => 'OK',
     lrange: async () => [],
     keys: async () => [],
+    sadd: async () => 0,
+    srem: async () => 0,
+    smembers: async () => [],
   };
 };
 

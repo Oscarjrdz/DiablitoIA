@@ -1,5 +1,6 @@
 'use client';
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Virtuoso } from 'react-virtuoso';
 import { Search, MoreVertical, Plus, X, Phone, User, Users, Pencil, Check } from 'lucide-react';
 import { ChatRow, Avatar } from '../_atoms';
 import styles from '../page.module.css';
@@ -340,23 +341,30 @@ export default function ChatListPanel({
           )}
         </div>
 
-        {/* Lista de chats */}
+        {/* Lista de chats virtualizada — solo renderiza los visibles */}
         <div className={styles.chatList}>
           {loadingChats && <p className={styles.tip}>Cargando chats...</p>}
           {!loadingChats && filtered.length === 0 && (
             <p className={styles.tip}>{storeFilter ? `Sin chats en ${storeFilter}` : 'Sin chats aún'}</p>
           )}
-          {filtered.map(chat => (
-            <ChatRow
-              key={chat.phone}
-              chat={chat}
-              isActive={activeChat?.phone === chat.phone}
-              picUrl={profilePics[chat.phone]}
-              onOpen={openChat}
-              onToggleRead={toggleHumanRead}
-              onDelete={setChatToDelete}
+          {filtered.length > 0 && (
+            <Virtuoso
+              style={{ height: '100%' }}
+              data={filtered}
+              overscan={5}
+              computeItemKey={(_, chat) => chat.phone}
+              itemContent={(_, chat) => (
+                <ChatRow
+                  chat={chat}
+                  isActive={activeChat?.phone === chat.phone}
+                  picUrl={profilePics[chat.phone]}
+                  onOpen={openChat}
+                  onToggleRead={toggleHumanRead}
+                  onDelete={setChatToDelete}
+                />
+              )}
             />
-          ))}
+          )}
         </div>
       </div>
 

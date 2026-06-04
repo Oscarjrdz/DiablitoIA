@@ -3,9 +3,20 @@ import { redis } from '@/lib/redis';
 
 export async function GET() {
   try {
-    const keysRaw = await redis.keys('chat_hist_*@c.us');
-    let fetchKeys = Array.from(new Set(keysRaw || []));
-    let phones = fetchKeys.map(k => k.replace('chat_hist_', '').replace('@c.us', ''));
+    // ── Set O(1) primero; fallback a redis.keys si el set está vacío ──
+    let phones = [];
+    const setMembers = await redis.smembers?.('chat_phones') ?? [];
+    if (setMembers && setMembers.length > 0) {
+      phones = setMembers;
+    } else {
+      const keysRaw = await redis.keys('chat_hist_*@c.us');
+      phones = (keysRaw || []).map(k => k.replace('chat_hist_', '').replace('@c.us', ''));
+      // Poblar el Set para próximas llamadas
+      if (phones.length > 0) {
+        for (const p of phones) await redis.sadd?.('chat_phones', p);
+      }
+    }
+    let fetchKeys = phones.map(p => `chat_hist_${p}@c.us`);
 
     // ── 📌 Inyectar TODOS los Grupos Pinned ──
     const pinnedRaw = await redis.get('pinned_groups');
@@ -61,7 +72,7 @@ export async function GET() {
     });
 
     const [histResults, metaResults] = await Promise.all([
-      Promise.all(fetchKeys.map(k => redis.get(k))),
+      fetchKeys.length > 0 ? redis.mget(...fetchKeys) : [],
       metaKeys.length > 0 ? redis.mget(...metaKeys) : []
     ]);
 
@@ -196,6 +207,7 @@ export async function DELETE(req) {
       await redis.del(key);
     }
     await redis.setex(`reset_lock_${cleanPhone}`, 15, '1');
+    await redis.srem('chat_phones', cleanPhone);
 
     return NextResponse.json({ success: true, deletedFromLoyverse });
   } catch (e) {

@@ -1270,6 +1270,8 @@ export async function POST(req) {
     // webhooks overwrite each other. The message is persisted in Redis
     // BEFORE any slow bot processing (Gemini, Loyverse, etc.).
     let parsed = await mergeAndSave(historyKey, cleanPhone, [incomingEntry]);
+    // Registrar en Set para evitar redis.keys() en /api/whatsapp/chats
+    await redis.sadd('chat_phones', cleanPhone);
     await redis.set('sse_notify', JSON.stringify({ ts: Date.now(), phone: cleanPhone }));
 
     await redis.incr(`chat_unread_${cleanPhone}`);
