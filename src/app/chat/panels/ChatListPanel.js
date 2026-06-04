@@ -48,9 +48,6 @@ export default function ChatListPanel({
   const [renamingGroupId, setRenamingGroupId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
 
-  // Cargar grupos al montar para que pinnedGroupsData esté disponible en POSPanel
-  useEffect(() => { fetchGroups(); }, [fetchGroups]);
-
   const stores = useMemo(
     () => [...new Set(chats.map(c => c.store).filter(Boolean))].sort(),
     [chats]
@@ -120,6 +117,9 @@ export default function ChatListPanel({
     } catch {}
     setLoadingGroups(false);
   }, [setPinnedGroupIds, setPinnedGroupsData]);
+
+  // Cargar grupos al montar para que pinnedGroupsData esté disponible en POSPanel
+  useEffect(() => { fetchGroups(); }, [fetchGroups]);
 
   const togglePinGroup = useCallback(async (group) => {
     const isPinned = pinnedGroupIds.includes(group.id);
