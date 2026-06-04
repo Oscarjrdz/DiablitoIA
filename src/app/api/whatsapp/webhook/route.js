@@ -1299,32 +1299,36 @@ export async function POST(req) {
         const cachedAddr = await redis.get(`client_address_${cleanPhone}`);
         if (cachedAddr) clientAddress = cachedAddr;
     } else {
-        // Buscar en Loyverse por teléfono exacto (rápido, sin paginación)
+        // Buscar en Loyverse — mismo enfoque robusto que /client-card:
+        // intenta con 10 dígitos Y con código de país 52 para no perder clientes
         try {
             const loyToken = await redis.get('loyverse_token');
             if (loyToken) {
                 const clientPhone10 = cleanPhone.slice(-10);
+                const authH = { Authorization: `Bearer ${loyToken}` };
                 let match = null;
-                const searchRes = await fetch(
-                    `https://api.loyverse.com/v1.0/customers?phone_number=${encodeURIComponent(clientPhone10)}&limit=10`,
-                    { headers: { Authorization: `Bearer ${loyToken}` } }
-                );
-                if (searchRes.ok) {
+
+                // Intentar con ambos formatos: sin y con código de país
+                for (const q of [clientPhone10, '52' + clientPhone10]) {
+                    if (match) break;
+                    const searchRes = await fetch(
+                        `https://api.loyverse.com/v1.0/customers?phone_number=${encodeURIComponent(q)}&limit=10`,
+                        { headers: authH }
+                    );
+                    if (!searchRes.ok) continue;
                     const searchData = await searchRes.json();
-                    match = (searchData.customers || []).find(c => {
-                        if (!c.phone_number) return false;
-                        return c.phone_number.replace(/\D/g, '').slice(-10) === clientPhone10;
-                    });
+                    match = (searchData.customers || []).find(c =>
+                        c.phone_number && c.phone_number.replace(/\D/g, '').slice(-10) === clientPhone10
+                    );
                 }
+
                 if (match) {
                     clientName = match.name;
                     clientPoints = match.total_points || 0;
                     isRegistered = true;
-                    // Extract address
                     let addr = match.address || '';
                     if (match.city) addr += (addr ? ', ' : '') + match.city;
                     clientAddress = addr.trim();
-                    // Cachear en Redis para no buscar cada vez
                     await redis.set(`client_name_${cleanPhone}`, clientName);
                     await redis.set(`client_points_${cleanPhone}`, String(clientPoints));
                     await redis.set(`client_registered_${cleanPhone}`, '1');
