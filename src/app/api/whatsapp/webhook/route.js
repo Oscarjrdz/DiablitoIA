@@ -160,9 +160,21 @@ export async function POST(req) {
   try {
     
     const payload = await req.json();
-    // Debug point: Save last payload in Redis
     await redis.set('DEBUG_LAST_PAYLOAD', payload);
-    // Guardar payload separado si es imagen para diagnóstico
+    // Guardar SOLO mensajes recibidos (no ACKs) para no perder el contexto
+    if (payload.event_type === 'message_received') {
+      await redis.set('DEBUG_LAST_MSG_RECEIVED', JSON.stringify({
+        ts: Date.now(),
+        from: payload.data?.from,
+        type: payload.data?.type,
+        body: payload.data?.body,
+        fromMe: payload.data?.fromMe,
+        rawFrom: payload.data?.__raw?.key?.remoteJid,
+        rawFromAlt: payload.data?.__raw?.key?.remoteJidAlt,
+        addressingMode: payload.data?.__raw?.key?.addressingMode,
+        rawMsgKeys: Object.keys(payload.data?.__raw?.message || {})
+      }));
+    }
     const _type = payload.data?.type || payload.data?.messageType || '';
     if (_type === 'image' || _type === 'sticker' || payload.data?.__raw?.message?.imageMessage) {
       await redis.set('DEBUG_LAST_IMAGE_PAYLOAD', payload);
@@ -397,9 +409,15 @@ export async function POST(req) {
     let isManagerImageFlow = false;
     const textMsgRaw = bodyStr.trim().toUpperCase();
     let phoneId = payload.data.from || payload.data.key?.remoteJid || payload.data.__raw?.key?.remoteJidAlt || payload.data.__raw?.key?.remoteJid;
-    
+
+    // Normalizar formato de JID
     if (phoneId && phoneId.includes('@s.whatsapp.net')) {
       phoneId = phoneId.replace('@s.whatsapp.net', '@c.us');
+    }
+    // @lid es el nuevo formato de direccionamiento de WhatsApp — usar el JID alternativo que tiene el número real
+    if (phoneId && phoneId.includes('@lid')) {
+      const alt = payload.data.__raw?.key?.remoteJidAlt || payload.data.__raw?.key?.participantAlt;
+      if (alt) phoneId = alt.includes('@s.whatsapp.net') ? alt.replace('@s.whatsapp.net', '@c.us') : alt;
     }
     
     let cleanPhoneGlobal = phoneId ? '52' + phoneId.replace(/\D/g, '').slice(-10) : '';

@@ -182,6 +182,10 @@ export async function GET(req) {
 
     // Loyverse es fuente de verdad para el nombre. Redis como respaldo.
     const name = primary?.name || cachedName || phone10;
+    // Sincronizar nombre a Redis para que el chat list lo muestre correctamente
+    if (primary?.name && primary.name !== cachedName) {
+      await redis.set(`client_name_${phone}`, primary.name);
+    }
     const duplicateRecords = allCustomers.length > 1;
 
     const result = {
