@@ -78,6 +78,7 @@ export const ChatRow = React.memo(function ChatRow({ chat, isActive, picUrl, onO
             {chat.lastText || <em style={{ opacity: 0.4 }}>Sin mensajes</em>}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+            {chat.isBlocked && <span style={{ fontSize: 12 }} title="Cliente bloqueado">🚫</span>}
             {chat.botSilent && <span className={styles.botSilentBadge} title="Bot silenciado">🤖💤</span>}
           </div>
         </div>

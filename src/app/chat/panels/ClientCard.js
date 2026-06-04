@@ -15,7 +15,8 @@ export default function ClientCard({
   showToast,
   clearClientCache,
 }) {
-  const [editingField, setEditingField] = useState(null); // 'name' | 'address' | 'store' | null
+  const [editingField, setEditingField] = useState(null);
+  const [blocking, setBlocking] = useState(false);
   const [editName, setEditName] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [editStore, setEditStore] = useState('');
@@ -93,6 +94,41 @@ export default function ClientCard({
     <div className={styles.infoPanel}>
       <div className={styles.infoPanelHeader}>
         <span>Perfil del cliente</span>
+        {activeChat && (
+          <button
+            onClick={async () => {
+              const isCurrentlyBlocked = activeChat.isBlocked;
+              setBlocking(true);
+              try {
+                const res = await fetch('/api/whatsapp/block', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ phone: activeChat.phone, blocked: !isCurrentlyBlocked })
+                });
+                const data = await res.json();
+                if (data.success) {
+                  setChats(prev => prev.map(c =>
+                    c.phone === activeChat.phone ? { ...c, isBlocked: !isCurrentlyBlocked } : c
+                  ));
+                  showToast(isCurrentlyBlocked ? 'Cliente desbloqueado' : 'Cliente bloqueado 🚫', isCurrentlyBlocked ? 'success' : 'success');
+                } else {
+                  showToast('Error al bloquear', 'error');
+                }
+              } catch { showToast('Error de conexión', 'error'); }
+              setBlocking(false);
+            }}
+            disabled={blocking}
+            style={{
+              background: activeChat.isBlocked ? 'rgba(255,59,48,0.15)' : 'none',
+              border: `1px solid ${activeChat.isBlocked ? '#ff3b30' : 'rgba(255,59,48,0.4)'}`,
+              color: '#ff3b30', borderRadius: 6, padding: '3px 10px',
+              cursor: blocking ? 'default' : 'pointer', fontSize: 12, fontWeight: 600,
+              opacity: blocking ? 0.5 : 1
+            }}
+          >
+            {blocking ? '...' : activeChat.isBlocked ? '🔓 Desbloquear' : '🚫 Bloquear'}
+          </button>
+        )}
       </div>
 
       {!clientCard ? (

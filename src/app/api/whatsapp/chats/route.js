@@ -67,7 +67,8 @@ export async function GET() {
         `client_store_${redisPhone}`,
         `human_read_${redisPhone}`,
         `delivery_mode_${redisPhone}`,
-        `delivery_bot_silence_${redisPhone}`
+        `delivery_bot_silence_${redisPhone}`,
+        `blocked_${redisPhone}`
       ];
     });
 
@@ -79,13 +80,14 @@ export async function GET() {
     const chats = phones.map((phone, i) => {
       try {
         const histData = histResults[i];
-        const base = i * 6;
+        const base = i * 7;
         const cachedName = metaResults[base] || null;
         const unreadRaw = metaResults[base + 1] || '0';
         const cachedStore = metaResults[base + 2] || '';
         const humanRead = metaResults[base + 3] || null;
         const deliveryMode = metaResults[base + 4] || null;
         const botSilence = metaResults[base + 5] || null;
+        const isBlocked = metaResults[base + 6] || null;
 
         const parsed = typeof histData === 'string' ? JSON.parse(histData) : (histData || []);
         const lastMsg = parsed.length > 0 ? parsed[parsed.length - 1] : null;
@@ -109,6 +111,7 @@ export async function GET() {
           needsHuman: !humanRead && parsed.length > 0,
           deliveryMode: !!deliveryMode,
           botSilent: !!botSilence,
+          isBlocked: !!isBlocked,
           isGroup
         };
       } catch {

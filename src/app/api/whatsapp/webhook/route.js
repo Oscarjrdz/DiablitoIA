@@ -1322,6 +1322,13 @@ export async function POST(req) {
     // Reset human-read flag so the chat shows as "needs attention" again
     await redis.del(`human_read_${cleanPhone}`);
 
+    // ── 🚫 CLIENTE BLOQUEADO: mensaje guardado, bot no responde ──
+    const isBlocked = await redis.get(`blocked_${cleanPhone}`);
+    if (isBlocked) {
+        console.log(`[Bot] Cliente bloqueado ${cleanPhone} — mensaje guardado, sin respuesta`);
+        return NextResponse.json({ success: true, note: 'client_blocked' });
+    }
+
     // ── 🛵 DELIVERY MODE: Si el silencio está activo, mensaje ya guardado, solo salir ──
     const deliveryActive = await redis.get(`delivery_bot_silence_${cleanPhone}`);
     if (deliveryActive) {
