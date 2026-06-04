@@ -1637,6 +1637,7 @@ select.infoEditInput option { background: #1a2730; color: #e9edef; }
   background: #202c33;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 16px;
   font-size: 14px;
   font-weight: 700;

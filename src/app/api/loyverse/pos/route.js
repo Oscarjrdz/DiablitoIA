@@ -55,7 +55,7 @@ export async function GET(req) {
       paymentTypes: payTypesData.payment_types || [],
       modifiers: modifiersData.modifiers || []
     };
-    await redis.setex('pos_cache_v2', 1800, JSON.stringify(result)); // 30 min
+    await redis.setex('pos_cache_v2', 43200, JSON.stringify(result)); // 12 horas
     return NextResponse.json(result);
   } catch (e) {
     return NextResponse.json({ success: false, error: e.message }, { status: 500 });

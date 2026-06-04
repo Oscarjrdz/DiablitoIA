@@ -30,12 +30,12 @@ export default function POSPanel({ activeChat, clientCard, pinnedGroupsData, sho
   const [, startCartTransition] = useTransition();
   const deferredPosSearch = useDeferredValue(posSearch);
 
-  const fetchPOSData = useCallback(async () => {
-    if (posDataLoadedRef.current) return;
+  const fetchPOSData = useCallback(async (bust = false) => {
+    if (!bust && posDataLoadedRef.current) return;
     posDataLoadedRef.current = true;
     setPosLoading(true);
     try {
-      const res = await fetch('/api/loyverse/pos');
+      const res = await fetch(bust ? '/api/loyverse/pos?bust=1' : '/api/loyverse/pos');
       const data = await res.json();
       if (data.success) {
         setPosItems(data.items || []);
@@ -205,7 +205,17 @@ export default function POSPanel({ activeChat, clientCard, pinnedGroupsData, sho
 
   return (
     <div className={styles.posPanel}>
-      <div className={styles.posPanelHeader}>🛒 Punto de Venta</div>
+      <div className={styles.posPanelHeader}>
+        <span>🛒 Punto de Venta</span>
+        <button
+          onClick={() => fetchPOSData(true)}
+          disabled={posLoading}
+          title="Actualizar catálogo desde Loyverse"
+          style={{ background: 'none', border: 'none', cursor: posLoading ? 'default' : 'pointer', fontSize: 14, opacity: posLoading ? 0.4 : 0.7, padding: '0 4px', lineHeight: 1 }}
+        >
+          {posLoading ? '⏳' : '🔄'}
+        </button>
+      </div>
 
       <div className={styles.posTopControls}>
         <select className={styles.posSelect} value={posOrderType} onChange={e => setPosOrderType(e.target.value)}>
