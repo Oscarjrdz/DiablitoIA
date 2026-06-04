@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, MoreVertical, Plus, X, Phone, User, Users, Pencil, Check } from 'lucide-react';
 import { ChatRow, Avatar } from '../_atoms';
 import styles from '../page.module.css';
@@ -47,6 +47,9 @@ export default function ChatListPanel({
   const [pinningGroup, setPinningGroup] = useState(null);
   const [renamingGroupId, setRenamingGroupId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
+
+  // Cargar grupos al montar para que pinnedGroupsData esté disponible en POSPanel
+  useEffect(() => { fetchGroups(); }, [fetchGroups]);
 
   const stores = useMemo(
     () => [...new Set(chats.map(c => c.store).filter(Boolean))].sort(),
