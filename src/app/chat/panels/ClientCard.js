@@ -12,6 +12,7 @@ export default function ClientCard({
   loadingCard,
   stores,
   showToast,
+  clearClientCache,
 }) {
   const [editingField, setEditingField] = useState(null); // 'name' | 'address' | 'store' | null
   const [editName, setEditName] = useState('');
@@ -45,8 +46,8 @@ export default function ClientCard({
         return;
       }
 
-      const body = { id: clientCard.client.customerId };
-      if (field === 'name') { body.name = editName; body._phone = clientCard.client.phone; }
+      const body = { id: clientCard.client.customerId, _phone: clientCard.client.phone };
+      if (field === 'name') body.name = editName;
       if (field === 'address') body.address = editAddress;
       if (field === 'store') {
         const currentNote = clientCard.client._note || '';
@@ -54,7 +55,6 @@ export default function ClientCard({
           ? currentNote.replace(/Tienda:\s*.+?(\n|$)/, `Tienda: ${editStore}$1`)
           : (currentNote ? `${currentNote}\nTienda: ${editStore}` : `Tienda: ${editStore}`);
         body._storeRedis = editStore;
-        body._phone = clientCard.client.phone;
       }
       const res = await fetch('/api/loyverse/client-card', {
         method: 'PATCH',
@@ -62,6 +62,7 @@ export default function ClientCard({
         body: JSON.stringify(body)
       });
       if (res.ok) {
+        clearClientCache?.(clientCard.client.phone);
         setClientCard(prev => ({
           ...prev,
           client: {
@@ -79,7 +80,7 @@ export default function ClientCard({
       }
     } catch { showToast('Error de conexión', 'error'); }
     setSavingField(false);
-  }, [clientCard, editAddress, editStore, editName, activeChat, setClientCard, setChats, showToast]);
+  }, [clientCard, editAddress, editStore, editName, activeChat, setClientCard, setChats, showToast, clearClientCache]);
 
   return (
     <div className={styles.infoPanel}>

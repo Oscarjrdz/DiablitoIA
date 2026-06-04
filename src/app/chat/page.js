@@ -127,6 +127,10 @@ export default function ChatPage() {
     }
   }, []);
 
+  const clearClientCache = useCallback((phone) => {
+    clientCacheRef.current.delete(phone);
+  }, []);
+
   // ── Fetch tarjeta de cliente ──
   const fetchClientCard = useCallback(async (phone) => {
     const cached = clientCacheRef.current.get(phone);
@@ -319,6 +323,7 @@ export default function ChatPage() {
             loadingCard={loadingCard}
             stores={stores}
             showToast={showToast}
+            clearClientCache={clearClientCache}
           />
         )}
 
