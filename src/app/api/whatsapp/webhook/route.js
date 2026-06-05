@@ -1624,6 +1624,7 @@ export async function POST(req) {
         const aiToken = cfg.aiToken;
 
         if (!botPrompt || !aiToken) {
+            console.error('[Bot] botPrompt o aiToken no configurado — registro imposible. botPrompt:', !!botPrompt, 'aiToken:', !!aiToken);
             await mergeAndSave(historyKey, cleanPhone, []);
             return NextResponse.json({ success: true });
         }
@@ -1731,7 +1732,8 @@ NUNCA omitas el tag.`;
             const reply = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
             // ── 📋 Detectar si la IA encontró nombre+dirección ──
-            const regMatch = reply.match(/\[REGISTRO_OK:([^|]+)\|([^|]+)\|([^\]]*)\]/);
+            // Ciudad es opcional: acepta [REGISTRO_OK:nombre|dirección|ciudad] y [REGISTRO_OK:nombre|dirección]
+            const regMatch = reply.match(/\[REGISTRO_OK:([^|]+)\|([^|\]]+)\|?([^\]]*)\]/);
 
             if (regMatch) {
                 // ── ✅ REGISTRO DETECTADO: Mensaje determinístico de confirmación ──
@@ -1766,19 +1768,14 @@ NUNCA omitas el tag.`;
                             } catch(srchErr) { console.error('[Bot] Error buscando cliente:', srchErr); }
 
                             const alreadyRegistered = await redis.get(`client_registered_${cleanPhone}`);
-                            if (alreadyRegistered && existingCustomerId) {
-                                const updatePayload = { id: existingCustomerId, name: clientData.name };
-                                if (clientData.address) updatePayload.address = clientData.address;
-                                if (clientData.city) updatePayload.city = clientData.city;
-                                try { await fetch('https://api.loyverse.com/v1.0/customers', { method: 'POST', headers: { Authorization: `Bearer ${loyverseToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(updatePayload) }); } catch(e) {}
-                                await redis.set(`client_name_${cleanPhone}`, clientData.name);
-                            } else if (existingCustomerId) {
+                            if (existingCustomerId) {
                                 const updatePayload = { id: existingCustomerId, name: clientData.name };
                                 if (clientData.address) updatePayload.address = clientData.address;
                                 if (clientData.city) updatePayload.city = clientData.city;
                                 try { await fetch('https://api.loyverse.com/v1.0/customers', { method: 'POST', headers: { Authorization: `Bearer ${loyverseToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(updatePayload) }); } catch(e) {}
                                 await redis.set(`client_registered_${cleanPhone}`, '1');
                                 await redis.set(`client_name_${cleanPhone}`, clientData.name);
+                                if (clientData.address) await redis.set(`client_address_${cleanPhone}`, clientData.address + (clientData.city ? ', ' + clientData.city : ''));
                             } else {
                                 const customerPayload = { name: clientData.name, phone_number: clientPhone10, address: clientData.address || '', city: clientData.city || '', note: 'Tienda: WhatsApp\nRegistrado via WhatsApp Bot' };
                                 const createRes = await fetch('https://api.loyverse.com/v1.0/customers', { method: 'POST', headers: { Authorization: `Bearer ${loyverseToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(customerPayload) });
