@@ -1674,10 +1674,10 @@ Responde SOLO con una palabra: MENU, PEDIR, DOMICILIO, PASAR, HORARIOS, GRACIAS,
 
     // ── 🔴 CLIENTE NO REGISTRADO: Primer contacto ──
     if (parsed.length === 1) {
-        await sendWhatsApp(phoneId, '¡Hola! 👋🍔 Bienvenido a *El Diablito Boneless & Burgers*', cfg);
-        await new Promise(r => setTimeout(r, 800));
-        await sendWhatsApp(phoneId, 'Veo que en nuestro sistema aún no estás registrado. Nos tomará 1 minuto ⏱️, solo compárteme tu *Nombre Completo* 🙋 y tu *Dirección* 📍, al completar tu registro recibes una 🍔 *BURGER GRATIS* 🎁', cfg);
-        const welcomeEntry = { role: 'model', parts: [{ text: 'Hola! Bienvenido al Diablito. Veo que en nuestro sistema aún no estás registrado. Nos tomará 1 minuto, solo compárteme tu Nombre Completo y tu Dirección, al completar tu registro recibes una BURGER GRATIS.', ts: Date.now() }] };
+        await sendWhatsApp(phoneId, '¡Hola! Bienvenido a *El Diablito* 😈', cfg);
+        await new Promise(r => setTimeout(r, 1000));
+        await sendWhatsApp(phoneId, 'Veo que en nuestro sistema aún no estás registrado 📋\n\nRegistrarte nos tomará 1 minuto ⏱️, solo compárteme tu *Nombre Completo* 🙋 y tu *Dirección* 📍, esto facilitará tomar tus pedidos.', cfg);
+        const welcomeEntry = { role: 'model', parts: [{ text: '¡Hola! Bienvenido a El Diablito 😈 | Veo que en nuestro sistema aún no estás registrado. Registrarte nos tomará 1 minuto, solo compárteme tu Nombre Completo y tu Dirección, esto facilitará tomar tus pedidos.', ts: Date.now() }] };
         await mergeAndSave(historyKey, cleanPhone, [welcomeEntry]);
         return NextResponse.json({ success: true });
     }
