@@ -1535,11 +1535,24 @@ export async function POST(req) {
             try {
                 const aiToken = cfg.aiToken;
                 if (aiToken) {
+                    const classifyPrompt = `Eres un clasificador de intenciones de clientes de una hamburguesería llamada El Diablito. El cliente escribió: "${bodyStr}"
+
+Clasifica la intención en UNA sola palabra:
+- MENU: quiere ver el menú, la carta, los precios, qué tienen, qué venden
+- PEDIR: quiere ordenar o pedir comida (menciona un platillo, dice "quiero pedir", "me gustaría ordenar", "qué me recomiendas", etc.) pero NO especificó si es a domicilio o para pasar
+- DOMICILIO: quiere que le lleven la comida a su casa (delivery, a domicilio, que se lo manden)
+- PASAR: va a pasar a recoger su pedido (pickup, pasar por su comida, recoger en tienda, ya va en camino)
+- HORARIOS: pregunta por horarios, sucursales, ubicaciones, a qué hora abren o cierran, dónde están
+- GRACIAS: está agradeciendo, ya no necesita nada, eso es todo
+- DESPEDIDA: se está despidiendo (bye, hasta luego, chao, nos vemos, cuídate)
+- NINGUNO: ninguna de las anteriores
+
+Responde SOLO con una palabra: MENU, PEDIR, DOMICILIO, PASAR, HORARIOS, GRACIAS, DESPEDIDA o NINGUNO.`;
                     const classifyRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${aiToken}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            contents: [{ role: 'user', parts: [{ text: `Eres un clasificador de mensajes de clientes de una hamburguesería. El cliente escribió: "${bodyStr}"\n\nClasifica la intención:\n- Si quiere PEDIR A DOMICILIO (que le lleven comida a su casa), responde: DOMICILIO\n- Si quiere PEDIR PARA PASAR A RECOGER (pickup, pasar por su comida, recoger en tienda), responde: PASAR\n- Si pregunta por HORARIOS, SUCURSALES, ubicaciones, a qué hora abren, dónde están, responde: HORARIOS\n- Si está AGRADECIENDO, diciendo gracias, de nada, no quiero nada, ya estoy bien, eso es todo, o cualquier variante de agradecimiento o que ya no necesita nada, responde: GRACIAS\n- Si se está DESPIDIENDO (bye, hasta luego, chao, nos vemos, cuídate, adiós), responde: DESPEDIDA\n- Si ninguna de las anteriores aplica, responde: NINGUNO\n\nResponde SOLO con una palabra: DOMICILIO, PASAR, HORARIOS, GRACIAS, DESPEDIDA o NINGUNO.` }] }],
+                            contents: [{ role: 'user', parts: [{ text: classifyPrompt }] }],
                             generationConfig: { maxOutputTokens: 10, temperature: 0.1 }
                         })
                     });
@@ -1551,12 +1564,29 @@ export async function POST(req) {
                         else if (answer.includes('HORARIO')) orderType = 'horarios';
                         else if (answer.includes('GRACIAS')) orderType = 'gracias';
                         else if (answer.includes('DESPEDIDA')) orderType = 'despedida';
+                        else if (answer.includes('MENU')) orderType = 'menu';
+                        else if (answer.includes('PEDIR')) orderType = 'pedir';
                     }
                 }
             } catch(e) { console.error('[Bot] Error clasificando intención:', e); }
             }
 
-            if (orderType === 'pedir') {
+            if (orderType === 'menu') {
+                // Enviar imagen del menú directamente
+                const menuImageUrl = 'https://global-sales-prediction.vercel.app/menu-mayo-2025.jpg';
+                const menuCaption = `🍔🌶️ ¡Aquí tienes nuestro menú *El Diablito*! 😈\n\n¿Se te antoja algo?\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
+                try {
+                    await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/messages/image`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: cfg.wappToken, to: phoneId, image: menuImageUrl, caption: menuCaption })
+                    });
+                } catch(e) { console.error('[Bot] Error enviando imagen menú (IA):', e); }
+                const menuEntry = { role: 'model', parts: [{ text: menuCaption, ts: Date.now(), attachmentType: 'image', hasAttachment: true, attachmentUrl: menuImageUrl }] };
+                await mergeAndSave(historyKey, cleanPhone, [menuEntry]);
+                console.log(`[Bot] Menú enviado para ${cleanPhone} - IA detectó intención MENU`);
+                return NextResponse.json({ success: true });
+            } else if (orderType === 'pedir') {
                 botReply = `¡Con gusto *${clientName}*! 😊🍔 ¿Cómo lo quieres?\n\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
                 console.log(`[Bot] Orden de comida detectada para ${cleanPhone} - preguntando domicilio/pasar`);
             } else if (orderType === 'delivery') {
