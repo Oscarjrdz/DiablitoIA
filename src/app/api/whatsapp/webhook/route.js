@@ -1443,7 +1443,7 @@ export async function POST(req) {
             }
         }
         // ── Opción 1: Ver Menú → preguntar confirmación ──
-        else if (textMsg === '1' || /\bmen[uú]\b/i.test(userText) || /\bver men/i.test(userText) || /\bcarta\b/i.test(userText)) {
+        else if (textMsg === '1' || /men[uú]/i.test(userText) || /ver el men/i.test(userText) || /\bcarta\b/i.test(userText) || /quiero ver/i.test(userText)) {
             botReply = `📋 ¿Quieres que te mande el *Menú*?\n\n👉 Responde *Sí* o *No*`;
             await redis.setex(`bot_state_${cleanPhone}`, 300, 'awaiting_menu_confirm');
         }
@@ -1507,12 +1507,20 @@ export async function POST(req) {
             // Keyword pre-classification — handles common phrasings without API call
             const lc = bodyStr.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
-            // Orden específica de comida: preguntar cómo la quiere (domicilio o pasar)
-            const foodOrderRe = /(quiero|quisiera|me pones?|dame|ponme|me da\b|pedir|ordenar|me puedes? dar)\s+(un|una|unos|unas|el|la|los|las\s+)?.*(hotdog|salchipapa|hamburguesa|burger|diablito|combo|shake|milkshake|refresco|agua|soda|papas)|\b(hotdog|salchipapa|hamburguesa|diablito|combo|milkshake)\b/i;
+            // Orden específica de comida o intención de pedir: preguntar cómo la quiere
+            const foodOrderRe = new RegExp(
+                // Intención general de pedir (sin item específico)
+                '(quiero|quisiera|me gustar[ií]a|desear[ií]a)\\s+(pedir|ordenar|comer|hacer (un )?pedido)|' +
+                // Intención con item específico
+                '(quiero|quisiera|me gustar[ií]a|dame|ponme|me pones?|me da\\b|me puedes? (dar|poner)|me traes?)\\s+(un|una|unos|unas|el|la|los|las\\s+)?.*(hotdog|salchipapas?|hamburgues|burger|papas|diablito|combo|shake|milkshake|refresco|agua|soda|orden)|' +
+                // Item mencionado directamente
+                '\\b(hotdog|salchipapas?|hamburgues|diablito|combo|milkshake)\\b',
+                'i'
+            );
             if (foodOrderRe.test(bodyStr)) orderType = 'pedir';
             else if (/\bdomicilio\b|a mi casa|que me lleven|que me manden|que lo lleven|que lo manden/.test(lc)) {
                 orderType = 'delivery';
-            } else if (/\bpasar\b|\bpaso\b|\brecoger(lo|la|me)?\b|\bpick.?up\b|para pasar|quiero pasar|paso por|pasare\b|voy por|ir por\b|voy a recoger|voy a buscar|lo recojo|la recojo|recojo yo|me lo llevo|lo llevo yo|para llevar|en camino\b|voy de camino|ya voy\b|voy llegando|llego en\b|ya mero\b|ya casi llego|voy a llegar|ya estoy cerca|me acerco\b|ya llego\b|en un rato llego|ahorita llego|paso ahorita|voy a pasar|quiero recoger/.test(lc)) {
+            } else if (/\bpasar\b|\bpaso\b|\brecoger(lo|la|me)?\b|\bpick.?up\b|para pasar|quiero pasar|paso por|pasare\b|me gustaria pasar|quisiera pasar|voy por|ir por\b|voy a recoger|voy a buscar|lo recojo|la recojo|recojo yo|me lo llevo|lo llevo yo|para llevar|en camino\b|voy de camino|ya voy\b|voy llegando|llego en\b|ya mero\b|ya casi llego|voy a llegar|ya estoy cerca|me acerco\b|ya llego\b|en un rato llego|ahorita llego|paso ahorita|voy a pasar|quiero recoger/.test(lc)) {
                 orderType = 'pickup';
             } else if (/\bhorario\b|\bsucursal\b|\bubicacion\b|\babren\b|\bcierran\b|\bdonde estan\b/.test(lc)) {
                 orderType = 'horarios';
