@@ -1665,7 +1665,7 @@ Si el cliente te pregunta cualquier otra cosa, te dice piropos, muestra enojo o 
 
 # REGLA DE REGISTRO CRÍTICA:
 Para registrarlo, necesitas que te diga su Nombre y su Dirección.
-LO MÍNIMO que necesitas de dirección es: calle, número y colonia. Si el cliente te da más datos (municipio, ciudad, código postal), extráelos también, pero NO insistas en pedirlos si ya te dio calle, número y colonia.
+LO MÍNIMO que necesitas de dirección es cualquier referencia de calle o lugar (calle, número, colonia, fraccionamiento, o incluso solo "Cirris 102" o "Bosques de Lincoln"). NO pidas más detalles si ya te dio algo que parezca una dirección. Guarda exactamente lo que te diga.
 
 SIEMPRE al final de tu respuesta agrega UNO de estos tags según lo que hayas detectado en toda la conversación:
 - Si tiene NOMBRE Y DIRECCIÓN: [REGISTRO_OK:nombre|dirección|ciudad]
@@ -1675,11 +1675,13 @@ SIEMPRE al final de tu respuesta agrega UNO de estos tags según lo que hayas de
 
 Ejemplos:
 - Cliente dijo "Me llamo Oscar Rodriguez" → tu respuesta + [SOLO_NOMBRE:Oscar Rodriguez]
+- Cliente dijo "Cirris 102" → tu respuesta + [SOLO_DIRECCION:Cirris 102]
 - Cliente dijo "Vivo en Cirros 102 Col Las Nubes" → tu respuesta + [SOLO_DIRECCION:Cirros 102 Col Las Nubes]
+- Cliente dijo "Oscar Rodriguez" y luego "Cirris 102" → tu respuesta + [REGISTRO_OK:Oscar Rodriguez|Cirris 102|]
 - Cliente dijo "Oscar Rodriguez, Cirros 102 Col Las Nubes" → tu respuesta + [REGISTRO_OK:Oscar Rodriguez|Cirros 102 Col Las Nubes|]
 - Cliente dijo algo random sin datos → tu respuesta + [NADA]
 
-IMPORTANTE: Revisa TODA la conversación previa. Si en un mensaje anterior dio su nombre y ahora da su dirección, ya tienes ambos datos: usa [REGISTRO_OK].
+IMPORTANTE: Revisa TODA la conversación previa. Si en un mensaje anterior dio su nombre y ahora da su dirección, ya tienes ambos datos: usa [REGISTRO_OK]. NO vuelvas a pedir datos que el cliente ya dio.
 
 # FORMATO OBLIGATORIO AL CONFIRMAR REGISTRO:
 Cuando confirmes el registro, responde cualquier cosa y agrega el tag [REGISTRO_OK:nombre|dirección|ciudad].
@@ -1835,10 +1837,10 @@ NUNCA omitas el tag.`;
                     // Tiene nombre, falta dirección
                     const detectedName = nameMatch[1].trim();
                     const needAddrVariants = [
-                        `¡Gracias *${detectedName}*! 😊 Solo me falta tu *Dirección* 📍 (calle, #, colonia) para completar tu registro y enviarte tu 🍔 *BURGER GRATIS* 🎁`,
-                        `¡Perfecto *${detectedName}*! 🙌 Ya tengo tu nombre. Ahora compárteme tu *Dirección* 📍 (calle, #, colonia) y listo, ¡recibes tu 🍔 *BURGER GRATIS*! 🎁`,
+                        `¡Gracias *${detectedName}*! 😊 Solo me falta tu *Dirección* 📍 (calle y número) para completar tu registro y enviarte tu 🍔 *BURGER GRATIS* 🎁`,
+                        `¡Perfecto *${detectedName}*! 🙌 Ya tengo tu nombre. Ahora compárteme tu *Dirección* 📍 (calle y número) y listo, ¡recibes tu 🍔 *BURGER GRATIS*! 🎁`,
                         `¡Excelente *${detectedName}*! 🔥 Ya casi terminamos. Solo escríbeme tu *Dirección* 📍 para darte de alta y mandarte tu 🍔 *BURGER GRATIS*. 🎁`,
-                        `👋 *${detectedName}*, ¡ya casi! Solo falta tu *Dirección* 📍 (calle, #, colonia) para registrarte. ¡Tu 🍔 *BURGER GRATIS* te espera! 🎁`,
+                        `👋 *${detectedName}*, ¡ya casi! Solo falta tu *Dirección* 📍 (calle y número) para registrarte. ¡Tu 🍔 *BURGER GRATIS* te espera! 🎁`,
                         `✨ *${detectedName}*, estamos a un paso. Mándame tu *Dirección* 📍 y te registro con tu 🍔 *BURGER GRATIS* incluida. 🎁`
                     ];
                     insistMsg = needAddrVariants[Math.floor(Math.random() * needAddrVariants.length)];
