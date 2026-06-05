@@ -1664,24 +1664,26 @@ Tu objetivo principal es invitarlo a registrarse cordialmente para que reciba el
 Si el cliente te pregunta cualquier otra cosa, te dice piropos, muestra enojo o saca cualquier otro tema, NO VAMOS A AVANZAR. Debes "driblar" ese mensaje, diciéndole algo como "Sí, te entiendo" o "Muchas gracias", pero SIEMPRE insistiendo al final que si no se registra (dando su nombre y dirección) no podemos avanzar con el pedido o proceso. NO respondas dudas de menú ni otras cosas hasta que se registre.
 
 # REGLA DE REGISTRO CRÍTICA:
-Para registrarlo, necesitas que te diga su Nombre y su Dirección.
-LO MÍNIMO que necesitas de dirección es cualquier referencia de calle o lugar (calle, número, colonia, fraccionamiento, o incluso solo "Cirris 102" o "Bosques de Lincoln"). NO pidas más detalles si ya te dio algo que parezca una dirección. Guarda exactamente lo que te diga.
+Para registrarlo, necesitas que te diga su Nombre y su Dirección COMPLETA (calle, número y colonia).
 
-SIEMPRE al final de tu respuesta agrega UNO de estos tags según lo que hayas detectado en toda la conversación:
-- Si tiene NOMBRE Y DIRECCIÓN: [REGISTRO_OK:nombre|dirección|ciudad]
+SIEMPRE al final de tu respuesta agrega UNO de estos tags según lo que hayas detectado en TODA la conversación:
+- Si tiene NOMBRE Y dirección COMPLETA (calle+número+colonia): [REGISTRO_OK:nombre|dirección completa|ciudad]
+- Si tiene NOMBRE Y dirección PARCIAL (solo calle+número, sin colonia): [FALTA_COLONIA:nombre|calle y número]
 - Si SOLO tiene NOMBRE (sin dirección): [SOLO_NOMBRE:nombre]
-- Si SOLO tiene DIRECCIÓN (sin nombre): [SOLO_DIRECCION:dirección]
-- Si NO tiene NADA: [NADA]
+- Si SOLO tiene DIRECCIÓN COMPLETA (sin nombre): [SOLO_DIRECCION:dirección]
+- Si SOLO tiene DIRECCIÓN PARCIAL (sin colonia, sin nombre): [NADA]
+- Si NO tiene NADA útil: [NADA]
 
 Ejemplos:
-- Cliente dijo "Me llamo Oscar Rodriguez" → tu respuesta + [SOLO_NOMBRE:Oscar Rodriguez]
-- Cliente dijo "Cirris 102" → tu respuesta + [SOLO_DIRECCION:Cirris 102]
-- Cliente dijo "Vivo en Cirros 102 Col Las Nubes" → tu respuesta + [SOLO_DIRECCION:Cirros 102 Col Las Nubes]
-- Cliente dijo "Oscar Rodriguez" y luego "Cirris 102" → tu respuesta + [REGISTRO_OK:Oscar Rodriguez|Cirris 102|]
-- Cliente dijo "Oscar Rodriguez, Cirros 102 Col Las Nubes" → tu respuesta + [REGISTRO_OK:Oscar Rodriguez|Cirros 102 Col Las Nubes|]
-- Cliente dijo algo random sin datos → tu respuesta + [NADA]
+- Cliente dijo "Me llamo Oscar Rodriguez" → [SOLO_NOMBRE:Oscar Rodriguez]
+- Cliente dijo "Cirris 102" (solo calle y número, sin colonia) → [NADA]
+- Cliente dijo "Cirros 102 Col Las Nubes" (tiene colonia) → [SOLO_DIRECCION:Cirros 102 Col Las Nubes]
+- Nombre ya capturado y cliente dijo "Cirris 102" (sin colonia) → [FALTA_COLONIA:Oscar Rodriguez|Cirris 102]
+- Nombre ya capturado y cliente dijo "Cirros 102 Col Las Nubes" → [REGISTRO_OK:Oscar Rodriguez|Cirros 102 Col Las Nubes|]
+- Cliente dijo "Oscar Rodriguez, Cirros 102 Col Las Nubes" → [REGISTRO_OK:Oscar Rodriguez|Cirros 102 Col Las Nubes|]
+- Cliente dijo algo random sin datos → [NADA]
 
-IMPORTANTE: Revisa TODA la conversación previa. Si en un mensaje anterior dio su nombre y ahora da su dirección, ya tienes ambos datos: usa [REGISTRO_OK]. NO vuelvas a pedir datos que el cliente ya dio.
+IMPORTANTE: Revisa TODA la conversación previa antes de decidir el tag. NO vuelvas a pedir datos que el cliente ya dio.
 
 # FORMATO OBLIGATORIO AL CONFIRMAR REGISTRO:
 Cuando confirmes el registro, responde cualquier cosa y agrega el tag [REGISTRO_OK:nombre|dirección|ciudad].
@@ -1831,9 +1833,20 @@ NUNCA omitas el tag.`;
                 // ── 🔍 Detectar datos parciales ──
                 const nameMatch = reply.match(/\[SOLO_NOMBRE:([^\]]+)\]/);
                 const addrMatch = reply.match(/\[SOLO_DIRECCION:([^\]]+)\]/);
+                const coloniaMatch = reply.match(/\[FALTA_COLONIA:([^|]+)\|([^\]]+)\]/);
                 let insistMsg = '';
 
-                if (nameMatch) {
+                if (coloniaMatch) {
+                    // Tiene nombre + calle+número pero falta colonia
+                    const detectedName = coloniaMatch[1].trim();
+                    const partialAddr = coloniaMatch[2].trim();
+                    const needColoniaVariants = [
+                        `¡Ya casi *${detectedName}*! 😊 Ya tengo tu calle (*${partialAddr}*), solo falta tu *Colonia* 🏘️ para completar el registro y mandarte tu 🍔 *BURGER GRATIS* 🎁`,
+                        `¡Perfecto *${detectedName}*! 🙌 Tengo tu calle *${partialAddr}*, ahora solo dime tu *Colonia* 🏘️ y listo. 🍔 *BURGER GRATIS* garantizada! 🎁`,
+                        `👋 *${detectedName}*, ya casi termina. Solo necesito tu *Colonia* 🏘️ (la de *${partialAddr}*) para registrarte y enviarte tu 🍔 *BURGER GRATIS*. 🎁`,
+                    ];
+                    insistMsg = needColoniaVariants[Math.floor(Math.random() * needColoniaVariants.length)];
+                } else if (nameMatch) {
                     // Tiene nombre, falta dirección
                     const detectedName = nameMatch[1].trim();
                     const needAddrVariants = [
