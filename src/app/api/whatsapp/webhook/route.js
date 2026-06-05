@@ -1845,6 +1845,11 @@ NUNCA omitas el tag.`;
                                 await redis.set(`client_registered_${cleanPhone}`, '1');
                                 await redis.set(`client_name_${cleanPhone}`, clientData.name);
                                 if (clientData.address) await redis.set(`client_address_${cleanPhone}`, clientData.address + (clientData.city ? ', ' + clientData.city : ''));
+                                // Guardar como contacto en WhatsApp
+                                try {
+                                    const fn = clientData.name.trim().split(' ')[0];
+                                    await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/contacts/save`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.wappToken}` }, body: JSON.stringify({ token: cfg.wappToken, number: cleanPhone, fullName: clientData.name.trim(), firstName: fn }) });
+                                } catch(e) { console.error('[Bot] Error guardando contacto WA (update):', e.message); }
                             } else {
                                 const customerPayload = { name: clientData.name, phone_number: clientPhone10, address: clientData.address || '', city: clientData.city || '', note: 'Tienda: WhatsApp\nRegistrado via WhatsApp Bot' };
                                 const createRes = await fetch('https://api.loyverse.com/v1.0/customers', { method: 'POST', headers: { Authorization: `Bearer ${loyverseToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(customerPayload) });
@@ -1853,6 +1858,11 @@ NUNCA omitas el tag.`;
                                     await redis.set(`client_store_${cleanPhone}`, 'WhatsApp');
                                     await redis.set(`client_name_${cleanPhone}`, clientData.name);
                                     if (clientData.address) await redis.set(`client_address_${cleanPhone}`, clientData.address + (clientData.city ? ', ' + clientData.city : ''));
+                                    // Guardar como contacto en WhatsApp
+                                    try {
+                                        const fn = clientData.name.trim().split(' ')[0];
+                                        await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/contacts/save`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.wappToken}` }, body: JSON.stringify({ token: cfg.wappToken, number: cleanPhone, fullName: clientData.name.trim(), firstName: fn }) });
+                                    } catch(e) { console.error('[Bot] Error guardando contacto WA (create):', e.message); }
 
                                     // ── 🎟️ CUPÓN DE BIENVENIDA ──
                                     try {
