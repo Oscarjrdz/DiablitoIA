@@ -422,6 +422,8 @@ export async function POST(req) {
     
     let cleanPhoneGlobal = phoneId ? '52' + phoneId.replace(/\D/g, '').slice(-10) : '';
     let textMsg = textMsgRaw;
+    // "2️⃣" → "2" (strip variation-selector U+FE0F and combining keycap U+20E3)
+    textMsg = textMsg.replace(/️|⃣/g, '');
 
     // ── 📸 MANEJO DE IMÁGENES PARA EXTRAER FOLIO (Omitir en grupos) ──
     const isGroupMsg = (phoneId && phoneId.includes('@g.us')) || 
@@ -1504,7 +1506,11 @@ export async function POST(req) {
 
             // Keyword pre-classification — handles common phrasings without API call
             const lc = bodyStr.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-            if (/\bdomicilio\b|a mi casa|que me lleven|que me manden|que lo lleven|que lo manden/.test(lc)) {
+
+            // Orden específica de comida: preguntar cómo la quiere (domicilio o pasar)
+            const foodOrderRe = /(quiero|quisiera|me pones?|dame|ponme|me da\b|pedir|ordenar|me puedes? dar)\s+(un|una|unos|unas|el|la|los|las\s+)?.*(hotdog|salchipapa|hamburguesa|burger|diablito|combo|shake|milkshake|refresco|agua|soda|papas)|\b(hotdog|salchipapa|hamburguesa|diablito|combo|milkshake)\b/i;
+            if (foodOrderRe.test(bodyStr)) orderType = 'pedir';
+            else if (/\bdomicilio\b|a mi casa|que me lleven|que me manden|que lo lleven|que lo manden/.test(lc)) {
                 orderType = 'delivery';
             } else if (/\bpasar\b|\bpaso\b|\brecoger(lo|la|me)?\b|\bpick.?up\b|para pasar|quiero pasar|paso por|pasare\b|voy por|ir por\b|voy a recoger|voy a buscar|lo recojo|la recojo|recojo yo|me lo llevo|lo llevo yo|para llevar|en camino\b|voy de camino|ya voy\b|voy llegando|llego en\b|ya mero\b|ya casi llego|voy a llegar|ya estoy cerca|me acerco\b|ya llego\b|en un rato llego|ahorita llego|paso ahorita|voy a pasar|quiero recoger/.test(lc)) {
                 orderType = 'pickup';
@@ -1542,7 +1548,10 @@ export async function POST(req) {
             } catch(e) { console.error('[Bot] Error clasificando intención:', e); }
             }
 
-            if (orderType === 'delivery') {
+            if (orderType === 'pedir') {
+                botReply = `¡Con gusto *${clientName}*! 😊🍔 ¿Cómo lo quieres?\n\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
+                console.log(`[Bot] Orden de comida detectada para ${cleanPhone} - preguntando domicilio/pasar`);
+            } else if (orderType === 'delivery') {
                 botReply = `🛵 Muy bien *${clientName}*, ¿entonces quieres pedir a domicilio verdad? 🍔🔥`;
                 await redis.set(`delivery_mode_${cleanPhone}`, '1');
                 await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1');
