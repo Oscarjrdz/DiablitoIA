@@ -1511,10 +1511,10 @@ export async function POST(req) {
             const foodOrderRe = new RegExp(
                 // Intención general de pedir (sin item específico)
                 '(quiero|quisiera|me gustar[ií]a|desear[ií]a)\\s+(pedir|ordenar|comer|hacer (un )?pedido)|' +
-                // Intención con item específico
-                '(quiero|quisiera|me gustar[ií]a|dame|ponme|me pones?|me da\\b|me puedes? (dar|poner)|me traes?)\\s+(un|una|unos|unas|el|la|los|las\\s+)?.*(hotdog|salchipapas?|hamburgues|burger|papas|diablito|combo|shake|milkshake|refresco|agua|soda|orden)|' +
-                // Item mencionado directamente
-                '\\b(hotdog|salchipapas?|hamburgues|diablito|combo|milkshake)\\b',
+                // Verbos de pedido + item (me das, dame, ponme, me pones, me regalas, etc.)
+                '(quiero|quisiera|me gustar[ií]a|dame|ponme|me pones?|me das?|me d[aá]|me puedes? (dar|poner)|me traes?|me regalas?|[eé]chame|s[ií]rveme|antoj[oó]j?a?me)\\s+(un|una|unos|unas|el|la|los|las)?\\s*.*(hotdog|salchipapas?|hamburgues|burger|pollo|papas|diablito|combo|shake|milkshake|refresco|agua|soda|orden)|' +
+                // Item mencionado directamente sin verbo
+                '\\b(hotdog|salchipapas?|hamburgues|burger|diablito|combo|milkshake)\\b',
                 'i'
             );
             if (foodOrderRe.test(bodyStr)) orderType = 'pedir';
