@@ -21,6 +21,7 @@ export async function POST(req) {
 
     const url = `${GW}/${cfg.wappInstance}/contacts/save`;
     const body = {
+      token: cfg.wappToken,
       number: cleanPhone,
       fullName: fullName.trim(),
       ...(firstName?.trim() ? { firstName: firstName.trim() } : {})
