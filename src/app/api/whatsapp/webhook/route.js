@@ -1501,6 +1501,23 @@ export async function POST(req) {
         // ── Default: IA clasifica intención ──
         else {
             let orderType = 'none'; // none, delivery, pickup, horarios, gracias, despedida
+
+            // Keyword pre-classification — handles common phrasings without API call
+            const lc = bodyStr.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+            if (/\bdomicilio\b|a mi casa|que me lleven|que me manden|que lo lleven|que lo manden/.test(lc)) {
+                orderType = 'delivery';
+            } else if (/\bpasar?\b|\brecoger(lo|la)?\b|\bpaso\b|\bpick.?up\b|voy a pasar|para pasar|quiero pasar|paso por/.test(lc)) {
+                orderType = 'pickup';
+            } else if (/\bhorario\b|\bsucursal\b|\bubicacion\b|\babren\b|\bcierran\b|\bdonde estan\b/.test(lc)) {
+                orderType = 'horarios';
+            } else if (/\bgracias\b|\bgracis\b|\bde nada\b|\bya estoy\b|\bno quiero\b|\beso es todo\b|\bno necesito\b/.test(lc)) {
+                orderType = 'gracias';
+            } else if (/\bbye\b|\badios\b|\bhasta luego\b|\bhasta pronto\b|\bnos vemos\b|\bcuiate\b|\bchao\b/.test(lc)) {
+                orderType = 'despedida';
+            }
+
+            // AI classifier only if keywords didn't match
+            if (orderType === 'none') {
             try {
                 const aiToken = cfg.aiToken;
                 if (aiToken) {
@@ -1508,7 +1525,7 @@ export async function POST(req) {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            contents: [{ role: 'user', parts: [{ text: `Eres un clasificador de mensajes de clientes de una hamburguesería. El cliente escribió: "${bodyStr}"\n\nClasifica la intención:\n- Si quiere PEDIR A DOMICILIO (que le lleven comida a su casa), responde: DOMICILIO\n- Si quiere PEDIR PARA PASAR A RECOGER (pickup, pasar por su comida), responde: PASAR\n- Si pregunta por HORARIOS, SUCURSALES, ubicaciones, a qué hora abren, dónde están, responde: HORARIOS\n- Si está AGRADECIENDO, diciendo gracias, de nada, no quiero nada, ya estoy bien, eso es todo, o cualquier variante de agradecimiento o que ya no necesita nada, responde: GRACIAS\n- Si se está DESPIDIENDO (bye, hasta luego, chao, nos vemos, cuídate, adiós), responde: DESPEDIDA\n- Si ninguna de las anteriores aplica, responde: NINGUNO\n\nResponde SOLO con una palabra: DOMICILIO, PASAR, HORARIOS, GRACIAS, DESPEDIDA o NINGUNO.` }] }],
+                            contents: [{ role: 'user', parts: [{ text: `Eres un clasificador de mensajes de clientes de una hamburguesería. El cliente escribió: "${bodyStr}"\n\nClasifica la intención:\n- Si quiere PEDIR A DOMICILIO (que le lleven comida a su casa), responde: DOMICILIO\n- Si quiere PEDIR PARA PASAR A RECOGER (pickup, pasar por su comida, recoger en tienda), responde: PASAR\n- Si pregunta por HORARIOS, SUCURSALES, ubicaciones, a qué hora abren, dónde están, responde: HORARIOS\n- Si está AGRADECIENDO, diciendo gracias, de nada, no quiero nada, ya estoy bien, eso es todo, o cualquier variante de agradecimiento o que ya no necesita nada, responde: GRACIAS\n- Si se está DESPIDIENDO (bye, hasta luego, chao, nos vemos, cuídate, adiós), responde: DESPEDIDA\n- Si ninguna de las anteriores aplica, responde: NINGUNO\n\nResponde SOLO con una palabra: DOMICILIO, PASAR, HORARIOS, GRACIAS, DESPEDIDA o NINGUNO.` }] }],
                             generationConfig: { maxOutputTokens: 10, temperature: 0.1 }
                         })
                     });
@@ -1523,6 +1540,7 @@ export async function POST(req) {
                     }
                 }
             } catch(e) { console.error('[Bot] Error clasificando intención:', e); }
+            }
 
             if (orderType === 'delivery') {
                 botReply = `🛵 Muy bien *${clientName}*, ¿entonces quieres pedir a domicilio verdad? 🍔🔥`;
