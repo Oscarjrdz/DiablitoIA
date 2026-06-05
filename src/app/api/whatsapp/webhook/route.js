@@ -1506,7 +1506,7 @@ export async function POST(req) {
             const lc = bodyStr.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
             if (/\bdomicilio\b|a mi casa|que me lleven|que me manden|que lo lleven|que lo manden/.test(lc)) {
                 orderType = 'delivery';
-            } else if (/\bpasar?\b|\brecoger(lo|la)?\b|\bpaso\b|\bpick.?up\b|voy a pasar|para pasar|quiero pasar|paso por/.test(lc)) {
+            } else if (/\bpasar\b|\bpaso\b|\brecoger(lo|la|me)?\b|\bpick.?up\b|para pasar|quiero pasar|paso por|pasare\b|voy por|ir por\b|voy a recoger|voy a buscar|lo recojo|la recojo|recojo yo|me lo llevo|lo llevo yo|para llevar|en camino\b|voy de camino|ya voy\b|voy llegando|llego en\b|ya mero\b|ya casi llego|voy a llegar|ya estoy cerca|me acerco\b|ya llego\b|en un rato llego|ahorita llego|paso ahorita|voy a pasar|quiero recoger/.test(lc)) {
                 orderType = 'pickup';
             } else if (/\bhorario\b|\bsucursal\b|\bubicacion\b|\babren\b|\bcierran\b|\bdonde estan\b/.test(lc)) {
                 orderType = 'horarios';
