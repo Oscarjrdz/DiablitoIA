@@ -131,46 +131,41 @@ export async function GET(req) {
     const address = extractAddress(primary) || storedAddress || '';
     const tienda = extractTienda(primary, storedStore);
 
-    // ── 4. Compras: paginar recibos recientes y filtrar por customer_id ──
-    // Loyverse no garantiza filtrado server-side por customer_id, así que
-    // traemos los últimos 250 recibos y filtramos en nuestra lógica.
+    // ── 4. Compras: filtrar por customer_id server-side en Loyverse ──
     let receipts = [];
     let storeMap = {};
 
-    const [sRes, recRes] = await Promise.all([
-      fetch(`${BASE}/stores`, { headers }),
-      fetch(`${BASE}/receipts?limit=250`, { headers })
-    ]);
+    // Fetch stores y recibos del cliente en paralelo
+    // Loyverse soporta ?customer_id= para filtrar server-side (más preciso que traer 250 globales)
+    const storesFetch = fetch(`${BASE}/stores`, { headers });
+    const receiptsFetches = allIds.length > 0
+      ? allIds.map(id => fetch(`${BASE}/receipts?customer_id=${encodeURIComponent(id)}&limit=50`, { headers }))
+      : [];
+
+    const [sRes, ...recResponses] = await Promise.all([storesFetch, ...receiptsFetches]);
 
     if (sRes.ok) {
       const sData = await sRes.json();
       for (const s of sData.stores || []) storeMap[s.id] = s.name;
     }
 
-    if (recRes.ok && allIds.length > 0) {
-      const recData = await recRes.json();
-      const allReceipts = (recData.receipts || []).filter(r => allIds.includes(r.customer_id));
-
-      // Si no encontramos nada en los últimos 250, paginar una página más
-      let extraReceipts = [];
-      if (allReceipts.length === 0 && recData.cursor) {
-        const recRes2 = await fetch(`${BASE}/receipts?limit=250&cursor=${encodeURIComponent(recData.cursor)}`, { headers });
-        if (recRes2.ok) {
-          const recData2 = await recRes2.json();
-          extraReceipts = (recData2.receipts || []).filter(r => allIds.includes(r.customer_id));
-        }
+    const allRawReceipts = [];
+    for (const recRes of recResponses) {
+      if (recRes.ok) {
+        const recData = await recRes.json();
+        allRawReceipts.push(...(recData.receipts || []));
       }
-
-      receipts = [...allReceipts, ...extraReceipts]
-        .map(r => ({
-          date: r.receipt_date || r.created_at || null,
-          store: storeMap[r.store_id] || 'Sucursal',
-          total: r.total_money ?? 0,
-          items: (r.line_items || []).length
-        }))
-        .sort((a, b) => new Date(b.date) - new Date(a.date))
-        .slice(0, 15);
     }
+
+    receipts = allRawReceipts
+      .map(r => ({
+        date: r.receipt_date || r.created_at || null,
+        store: storeMap[r.store_id] || 'Sucursal',
+        total: r.total_money ?? 0,
+        items: (r.line_items || []).length
+      }))
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 20);
 
     // ── 5. Cupones canjeados ──
     const allLogs = await redis.lrange('redeemed_coupons_log', 0, 500);
