@@ -50,6 +50,7 @@ export default function ChatPage() {
 
   // ── Foto de perfil — cola con máximo 3 concurrentes ──
   // drainPicQueue usa ref para no recrearse en cada render
+  const addOptimisticRef = useRef(null);
   const drainPicQueueRef = useRef(null);
   drainPicQueueRef.current = () => {
     while (picQueueRef.current.length > 0 && picLoadingRef.current < 3) {
@@ -305,6 +306,7 @@ export default function ChatPage() {
             setBotSilent={setBotSilent}
             msgPollRef={msgPollRef}
             showToast={showToast}
+            addOptimisticRef={addOptimisticRef}
           />
         ) : (
           <div className={styles.emptyPane}>
@@ -337,6 +339,7 @@ export default function ChatPage() {
             clientCard={clientCard}
             pinnedGroupsData={pinnedGroupsData}
             showToast={showToast}
+            addOptimisticMsg={msg => addOptimisticRef.current?.(msg)}
           />
         )}
 

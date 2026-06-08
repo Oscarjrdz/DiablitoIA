@@ -6,7 +6,7 @@ import { PosProductCard } from '../_atoms';
 import { variantName, ORDER_TYPE_LABELS } from '../_utils';
 import styles from '../page.module.css';
 
-export default function POSPanel({ activeChat, clientCard, pinnedGroupsData, showToast }) {
+export default function POSPanel({ activeChat, clientCard, pinnedGroupsData, showToast, addOptimisticMsg }) {
   const posDataLoadedRef = useRef(false);
   const [posItems, setPosItems] = useState([]);
   const [posStores, setPosStores] = useState([]);
@@ -151,15 +151,22 @@ export default function POSPanel({ activeChat, clientCard, pinnedGroupsData, sho
       `• ${c.name} x${c.qty} — $${(c.price * c.qty).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
     ).join('\n');
     const text = `🛒 *Resumen de tu pedido:*\n\n*Tipo:* ${orderLabel}\n\n${lines}\n\n*Total: $${posTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}*${storeName ? `\n\nSucursal: ${storeName}` : ''}`;
+    const _localId = `pos-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const now = Date.now();
+    const timeStr = new Date(now).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Monterrey' });
+    const optimistic = { _localId, text, fromMe: true, ts: now, time: timeStr, status: 'sent' };
+    addOptimisticMsg?.(optimistic);
     try {
-      await fetch('/api/whatsapp/send', {
+      const res = await fetch('/api/whatsapp/send', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: activeChat.phone, text })
       });
-      showToast('Resumen enviado al cliente ✅', 'success');
+      const data = await res.json().catch(() => ({}));
+      if (!data.success) showToast('Error al enviar resumen', 'error');
+      else showToast('Resumen enviado al cliente ✅', 'success');
     } catch { showToast('Error al enviar resumen', 'error'); }
     setPosSending(false);
-  }, [posCart, posStoreId, posStores, posTotal, activeChat, posSending, posOrderType, showToast]);
+  }, [posCart, posStoreId, posStores, posTotal, activeChat, posSending, posOrderType, showToast, addOptimisticMsg]);
 
   const posSendToGroups = useCallback(async () => {
     if (!posSelectedGroups.length || posSendingToGroups) return;

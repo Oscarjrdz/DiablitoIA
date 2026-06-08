@@ -17,10 +17,12 @@ export default function MessagePanel({
   setBotSilent,
   msgPollRef,
   showToast,
+  addOptimisticRef,
 }) {
   const [inputText, setInputText] = useState('');
   const [attachment, setAttachment] = useState(null);
   const [pendingMsgs, setPendingMsgs] = useState([]);
+  if (addOptimisticRef) addOptimisticRef.current = msg => setPendingMsgs(prev => [...prev, msg]);
   const [vsOpen, setVsOpen] = useState(false);
   const [vsMessages, setVsMessages] = useState([]);
   const [vsEditing, setVsEditing] = useState(null);
