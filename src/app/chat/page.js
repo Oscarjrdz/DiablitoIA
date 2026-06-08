@@ -49,22 +49,24 @@ export default function ChatPage() {
   }, []);
 
   // ── Foto de perfil — cola con máximo 3 concurrentes ──
-  const drainPicQueue = useCallback(() => {
+  // drainPicQueue usa ref para no recrearse en cada render
+  const drainPicQueueRef = useRef(null);
+  drainPicQueueRef.current = () => {
     while (picQueueRef.current.length > 0 && picLoadingRef.current < 3) {
       const phone = picQueueRef.current.shift();
       picLoadingRef.current++;
       fetch(`/api/whatsapp/profile-pic?phone=${encodeURIComponent(phone)}`)
         .then(r => r.json())
         .then(data => setProfilePics(prev => ({ ...prev, [phone]: data.url || null })))
-        .catch(() => {})
-        .finally(() => { picLoadingRef.current--; drainPicQueue(); });
+        .catch(() => setProfilePics(prev => ({ ...prev, [phone]: null })))
+        .finally(() => { picLoadingRef.current--; drainPicQueueRef.current?.(); });
     }
-  }, []);
+  };
+  const drainPicQueue = useCallback(() => drainPicQueueRef.current?.(), []);
 
   const queueProfilePic = useCallback((phone) => {
     if (picQueuedRef.current.has(phone)) return;
     picQueuedRef.current.add(phone);
-    setProfilePics(prev => ({ ...prev, [phone]: null }));
     picQueueRef.current.push(phone);
     drainPicQueue();
   }, [drainPicQueue]);

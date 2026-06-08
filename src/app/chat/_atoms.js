@@ -6,20 +6,21 @@ import styles from './page.module.css';
 
 // ── Avatar con iniciales y color consistente ──
 export const Avatar = React.memo(function Avatar({ name = '', phone = '', size = 49, picUrl = null }) {
-  const [imgOk, setImgOk] = useState(!!picUrl);
-  useEffect(() => setImgOk(!!picUrl), [picUrl]);
+  // Track failed URLs without triggering extra render on picUrl changes
+  const [failedUrl, setFailedUrl] = useState(null);
+  const showImg = !!picUrl && picUrl !== failedUrl;
   const key = name || phone;
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%',
-      background: imgOk ? 'transparent' : hashColor(key),
+      background: showImg ? 'transparent' : hashColor(key),
       flexShrink: 0, overflow: 'hidden',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       color: '#fff', fontWeight: 700, fontSize: Math.round(size * 0.37),
       letterSpacing: 0.5, userSelect: 'none', position: 'relative'
     }}>
-      {picUrl && imgOk
-        ? <img src={picUrl} alt="" onError={() => setImgOk(false)} loading="lazy" decoding="async"
+      {showImg
+        ? <img src={picUrl} alt="" onError={() => setFailedUrl(picUrl)} loading="lazy" decoding="async"
             style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
         : initials(name || phone.slice(-4))
       }

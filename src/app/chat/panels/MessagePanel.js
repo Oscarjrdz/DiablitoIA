@@ -86,13 +86,10 @@ export default function MessagePanel({
     });
   }, []);
 
-  // Al cambiar de chat: scroll al fondo
+  // Al cambiar de chat: scroll al fondo (double RAF es suficiente, sin timeouts extra)
   useEffect(() => {
     isAtBottomRef.current = true;
     scrollToBottom();
-    const t1 = setTimeout(scrollToBottom, 100);
-    const t2 = setTimeout(scrollToBottom, 400);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [activeChat?.phone, scrollToBottom]);
 
   // Mensajes nuevos: bajar si estamos cerca del fondo
@@ -174,8 +171,7 @@ export default function MessagePanel({
       body: JSON.stringify({ phone, read: true })
     }).catch(() => {});
     setPendingMsgs(prev => [...prev, optimistic]);
-    setTimeout(scrollToBottom, 50);
-    setTimeout(scrollToBottom, 300);
+    scrollToBottom();
     fetch('/api/whatsapp/send', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to: phone, text, attachment: optimistic.attachment, attachmentType: optimistic.attachmentType })
@@ -209,29 +205,32 @@ export default function MessagePanel({
 
   const vsSend = useCallback(async (msg) => {
     if (!activeChat || vsSending) return;
+    const phone = activeChat.phone;
+    const now = Date.now();
+    // Optimistic: actualizar UI antes de que responda el API
+    setVsOpen(false);
+    setChats(prev => prev.map(c => c.phone === phone
+      ? { ...c, lastText: msg.text, lastTs: now, fromMe: true, needsHuman: false, unread: 0 }
+      : c));
     setVsSending(msg.id);
+    // Enviar mensaje y marcar leído en paralelo
     try {
-      const res = await fetch('/api/whatsapp/send', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: activeChat.phone, text: msg.text,
-          attachment: msg.image || null,
-          attachmentType: msg.image ? 'image' : null
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setVsOpen(false);
+      const [res] = await Promise.all([
+        fetch('/api/whatsapp/send', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: phone, text: msg.text,
+            attachment: msg.image || null,
+            attachmentType: msg.image ? 'image' : null
+          })
+        }),
         fetch('/api/whatsapp/mark-read', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: activeChat.phone, read: true })
-        }).catch(() => {});
-        setChats(prev => prev.map(c => c.phone === activeChat.phone
-          ? { ...c, lastText: msg.text, lastTs: Date.now(), fromMe: true, needsHuman: false, unread: 0 }
-          : c));
-      } else {
-        showToast('Error al enviar', 'error');
-      }
+          body: JSON.stringify({ phone, read: true })
+        }).catch(() => {})
+      ]);
+      const data = await res.json();
+      if (!data.success) showToast('Error al enviar venta sugestiva', 'error');
     } catch { showToast('Error de conexión', 'error'); }
     setVsSending(null);
   }, [activeChat, vsSending, setChats, showToast]);
@@ -320,7 +319,7 @@ export default function MessagePanel({
         contentContainerStyle={{ paddingTop: 12 }}
         components={{ Footer: () => <div style={{ height: 20 }} /> }}
         computeItemKey={(index, item) =>
-          item._sep ? `sep-${index}` :
+          item._sep ? `sep-${item.label}` :
           item._typing ? 'typing' :
           item.msgId || (item.ts ? `${item.ts}_${item.fromMe ? 'o' : 'i'}` : `f${index}`)
         }
