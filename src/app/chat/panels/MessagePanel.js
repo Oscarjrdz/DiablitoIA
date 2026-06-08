@@ -207,13 +207,28 @@ export default function MessagePanel({
     if (!activeChat || vsSending) return;
     const phone = activeChat.phone;
     const now = Date.now();
-    // Optimistic: actualizar UI antes de que responda el API
+    // ── Optimistic: aparecer en el chat de inmediato ──
+    const timeStr = new Date(now).toLocaleTimeString('es-MX', {
+      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Monterrey'
+    });
+    const _localId = `vs_${now}_${Math.random().toString(36).slice(2, 7)}`;
+    const optimistic = {
+      _localId, text: msg.text,
+      attachment: msg.image || null,
+      attachmentType: msg.image ? 'image' : null,
+      attachmentUrl: msg.image || null,
+      hasAttachment: !!msg.image,
+      fromMe: true, ts: now, time: timeStr, status: 'sent'
+    };
     setVsOpen(false);
+    setPendingMsgs(prev => [...prev, optimistic]);
+    scrollToBottom();
     setChats(prev => prev.map(c => c.phone === phone
       ? { ...c, lastText: msg.text, lastTs: now, fromMe: true, needsHuman: false, unread: 0 }
       : c));
     setVsSending(msg.id);
-    // Enviar mensaje y marcar leído en paralelo
+
+    // Enviar y marcar leído en paralelo
     try {
       const [res] = await Promise.all([
         fetch('/api/whatsapp/send', {
@@ -230,10 +245,18 @@ export default function MessagePanel({
         }).catch(() => {})
       ]);
       const data = await res.json();
-      if (!data.success) showToast('Error al enviar venta sugestiva', 'error');
-    } catch { showToast('Error de conexión', 'error'); }
+      if (!data.success) {
+        setPendingMsgs(prev => prev.filter(p => p._localId !== _localId));
+        showToast('Error al enviar venta sugestiva', 'error');
+      } else if (data.msgId) {
+        setPendingMsgs(prev => prev.map(p => p._localId === _localId ? { ...p, msgId: data.msgId } : p));
+      }
+    } catch {
+      setPendingMsgs(prev => prev.filter(p => p._localId !== _localId));
+      showToast('Error de conexión', 'error');
+    }
     setVsSending(null);
-  }, [activeChat, vsSending, setChats, showToast]);
+  }, [activeChat, vsSending, setChats, showToast, scrollToBottom]);
 
   const vsSaveMsg = useCallback(async () => {
     if (!vsEditing?.name?.trim() || !vsEditing?.text?.trim()) return;
