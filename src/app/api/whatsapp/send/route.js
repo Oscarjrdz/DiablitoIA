@@ -1,12 +1,32 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
 
-// Si el attachment es base64, lo almacena en Redis y devuelve una URL pública
-async function toPublicUrl(base64, host) {
-  if (!base64 || !base64.startsWith('data:')) return base64;
-  const id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  await redis.set(`temp_img_${id}`, base64, { ex: 3600 });
-  return `https://${host}/api/whatsapp/temp-image?id=${id}`;
+// Convierte base64 o URL externa a URL pública en Redis (para que el gateway pueda accederla)
+async function toPublicUrl(src, host) {
+  if (!src) return src;
+  // Ya es data URL (base64)
+  if (src.startsWith('data:')) {
+    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    await redis.set(`temp_img_${id}`, src, { ex: 3600 });
+    return `https://${host}/api/whatsapp/temp-image?id=${id}`;
+  }
+  // URL externa (e.g. WhatsApp media URL que puede caducar) — la descargamos y re-hosteamos
+  if (src.startsWith('http')) {
+    try {
+      const r = await fetch(src);
+      if (!r.ok) return src;
+      const buf = await r.arrayBuffer();
+      const ct = r.headers.get('content-type') || 'image/jpeg';
+      const b64 = Buffer.from(buf).toString('base64');
+      const dataUrl = `data:${ct};base64,${b64}`;
+      const id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      await redis.set(`temp_img_${id}`, dataUrl, { ex: 3600 });
+      return `https://${host}/api/whatsapp/temp-image?id=${id}`;
+    } catch {
+      return src; // fallback a la URL original
+    }
+  }
+  return src;
 }
 
 export async function POST(req) {

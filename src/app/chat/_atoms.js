@@ -154,15 +154,19 @@ export const MessageBubble = React.memo(function MessageBubble({ m, chatName, ch
             <span>{m.attachmentType === 'audio' ? '🎙 Audio' : 'Archivo adjunto'}</span>
           </div>
         )}
-        {m.text && <span className={styles.msgText}>{m.text}</span>}
+        {onForward && !m._localId && (
+          <button className={styles.fwdBubbleBtn} onClick={e => { e.stopPropagation(); onForward(m); }} title="Reenviar">↗</button>
+        )}
+        {m.text && (
+          <span className={styles.msgText}>
+            {m.text}<span className={styles.msgTimeSpacer} />
+          </span>
+        )}
         <div className={styles.msgMeta}>
           {m.time && <span className={styles.msgTime}>{m.time}</span>}
           {m.fromMe && <Ticks status={m.status} />}
           {m.status === 'error' && (
             <span title="Error al enviar" style={{ color: '#ef4444', fontSize: 12, marginLeft: 2 }}>⚠️</span>
-          )}
-          {onForward && !m._localId && (
-            <button className={styles.fwdBubbleBtn} onClick={e => { e.stopPropagation(); onForward(m); }} title="Reenviar">↗</button>
           )}
         </div>
       </div>

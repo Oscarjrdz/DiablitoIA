@@ -570,7 +570,7 @@
   background: #005c4b;
   color: #e9edef;
   border-radius: 7.5px 0 7.5px 7.5px;
-  padding: 6px 9px 22px 9px;
+  padding: 6px 9px 8px 9px;
   font-size: 14.5px;
   line-height: 20px;
   max-width: 100%;
@@ -585,7 +585,7 @@
   background: #202c33;
   color: #e9edef;
   border-radius: 0 7.5px 7.5px 7.5px;
-  padding: 6px 9px 22px 9px;
+  padding: 6px 9px 8px 9px;
   font-size: 14.5px;
   line-height: 20px;
   max-width: 100%;
@@ -602,21 +602,22 @@
   word-break: break-word;
 }
 
-/* ── Forward button inside bubble (visible on hover) ── */
+/* ── Forward button (appears on bubble hover, top-right corner) ── */
 .fwdBubbleBtn {
+  position: absolute;
+  top: 3px;
+  right: 5px;
   opacity: 0;
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
-  background: none;
+  background: rgba(0,0,0,0.25);
   border: none;
-  color: rgba(255,255,255,0.55);
-  padding: 0 2px;
-  margin-left: 4px;
+  border-radius: 4px;
+  color: rgba(255,255,255,0.85);
+  padding: 1px 4px;
   transition: opacity 0.12s;
-  line-height: 1;
-  vertical-align: middle;
-  display: inline-flex;
-  align-items: center;
+  line-height: 1.4;
+  z-index: 1;
 }
 .bubbleIn:hover .fwdBubbleBtn,
 .bubbleOut:hover .fwdBubbleBtn { opacity: 1; }
@@ -705,6 +706,14 @@
   display: flex;
   align-items: center;
   gap: 3px;
+}
+
+/* Spacer invisible al final del texto — reserva espacio inline para el timestamp */
+.msgTimeSpacer {
+  display: inline-block;
+  width: 68px;
+  height: 1px;
+  vertical-align: baseline;
 }
 
 .msgTime {
