@@ -10,6 +10,7 @@ export default function MessagePanel({
   activeChat,
   setActiveChat,
   setChats,
+  chats,
   profilePics,
   messages,
   isTyping,
@@ -27,6 +28,9 @@ export default function MessagePanel({
   const [vsMessages, setVsMessages] = useState([]);
   const [vsEditing, setVsEditing] = useState(null);
   const [vsSending, setVsSending] = useState(null);
+  const [forwardMsg, setForwardMsg] = useState(null);
+  const [forwardSearch, setForwardSearch] = useState('');
+  const [forwarding, setForwarding] = useState(false);
 
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -284,6 +288,36 @@ export default function MessagePanel({
     } catch {}
   }, []);
 
+  const handleForward = useCallback(async (targetPhone) => {
+    if (!forwardMsg || forwarding) return;
+    setForwarding(true);
+    const text = forwardMsg.text || '';
+    const imgSrc = forwardMsg.attachment || forwardMsg.attachmentUrl || null;
+    const isImage = imgSrc && (forwardMsg.attachmentType === 'image' || forwardMsg.hasAttachment);
+    try {
+      const res = await fetch('/api/whatsapp/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: targetPhone,
+          text,
+          attachment: isImage ? imgSrc : null,
+          attachmentType: isImage ? 'image' : null
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.success) {
+        showToast('Mensaje reenviado ✅', 'success');
+        setForwardMsg(null);
+        setForwardSearch('');
+      } else {
+        showToast('Error al reenviar', 'error');
+      }
+    } catch {
+      showToast('Error al reenviar', 'error');
+    }
+    setForwarding(false);
+  }, [forwardMsg, forwarding, showToast]);
+
   return (
     <div className={styles.right}>
 
@@ -366,6 +400,7 @@ export default function MessagePanel({
               chatName={activeChat.name}
               chatPhone={activeChat.phone}
               picUrl={profilePics[activeChat.phone]}
+              onForward={setForwardMsg}
             />
           );
         }}
@@ -403,6 +438,54 @@ export default function MessagePanel({
           {(inputText.trim() || attachment) ? <Send size={20} /> : <Mic size={20} />}
         </button>
       </div>
+
+      {/* Modal Reenviar Mensaje */}
+      {forwardMsg && (
+        <div className={styles.fwdModal}>
+          <div className={styles.fwdHeader}>
+            <span>↗ Reenviar a...</span>
+            <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8696a0', padding: 4 }}
+              onClick={() => { setForwardMsg(null); setForwardSearch(''); }}>
+              <X size={16} />
+            </button>
+          </div>
+          <div className={styles.fwdPreview}>
+            {forwardMsg.attachmentType === 'image' || forwardMsg.hasAttachment ? '🖼️ Imagen' : ''}
+            {forwardMsg.text ? (forwardMsg.attachmentType === 'image' ? ' · ' : '') + forwardMsg.text : ''}
+          </div>
+          <input
+            className={styles.fwdSearch}
+            placeholder="Buscar chat..."
+            value={forwardSearch}
+            onChange={e => setForwardSearch(e.target.value)}
+            autoFocus
+          />
+          <div className={styles.fwdList}>
+            {(chats || [])
+              .filter(c => c.phone !== activeChat.phone)
+              .filter(c => {
+                const q = forwardSearch.toLowerCase();
+                return !q || (c.name || '').toLowerCase().includes(q) || c.phone.includes(q);
+              })
+              .map(c => (
+                <button
+                  key={c.phone}
+                  className={styles.fwdChatBtn}
+                  disabled={forwarding}
+                  onClick={() => handleForward(c.phone)}
+                >
+                  <Avatar name={c.name} phone={c.phone} size={36} picUrl={profilePics?.[c.phone]} />
+                  <div className={styles.fwdChatMeta}>
+                    <span className={styles.fwdChatName}>{c.name || c.phone}</span>
+                    <span className={styles.fwdChatPhone}>{c.phone.replace(/^52/, '').replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3')}</span>
+                  </div>
+                  {forwarding && <span style={{ marginLeft: 'auto', fontSize: 12, color: '#8696a0' }}>...</span>}
+                </button>
+              ))
+            }
+          </div>
+        </div>
+      )}
 
       {/* Modal Venta Sugestiva */}
       {vsOpen && (

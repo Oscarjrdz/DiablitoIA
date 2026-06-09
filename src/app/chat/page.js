@@ -299,6 +299,7 @@ export default function ChatPage() {
             activeChat={activeChat}
             setActiveChat={setActiveChat}
             setChats={setChats}
+            chats={chats}
             profilePics={profilePics}
             messages={messages}
             isTyping={isTyping}

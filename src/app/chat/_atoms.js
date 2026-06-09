@@ -125,7 +125,7 @@ export const ChatRow = React.memo(function ChatRow({ chat, isActive, picUrl, onO
 );
 
 // ── Burbuja de mensaje ──
-export const MessageBubble = React.memo(function MessageBubble({ m, chatName, chatPhone, picUrl }) {
+export const MessageBubble = React.memo(function MessageBubble({ m, chatName, chatPhone, picUrl, onForward }) {
   return (
     <div className={m.fromMe ? styles.rowOut : styles.rowIn}>
       {!m.fromMe && <Avatar name={chatName} phone={chatPhone} size={28} picUrl={picUrl} />}
@@ -160,6 +160,9 @@ export const MessageBubble = React.memo(function MessageBubble({ m, chatName, ch
           {m.fromMe && <Ticks status={m.status} />}
           {m.status === 'error' && (
             <span title="Error al enviar" style={{ color: '#ef4444', fontSize: 12, marginLeft: 2 }}>⚠️</span>
+          )}
+          {onForward && !m._localId && (
+            <button className={styles.fwdBubbleBtn} onClick={e => { e.stopPropagation(); onForward(m); }} title="Reenviar">↗</button>
           )}
         </div>
       </div>
