@@ -1,16 +1,23 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
 
-// Convierte base64 o URL externa a URL pública en Redis (para que el gateway pueda accederla)
+// Convierte cualquier src de imagen a URL absoluta pública accesible por el gateway
 async function toPublicUrl(src, host) {
   if (!src) return src;
-  // Ya es data URL (base64)
+
+  // URL relativa de nuestro proxy (/api/media?id=...) — solo hacerla absoluta
+  if (src.startsWith('/')) {
+    return `https://${host}${src}`;
+  }
+
+  // Data URL (base64) — guardar en Redis y devolver URL pública
   if (src.startsWith('data:')) {
     const id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     await redis.set(`temp_img_${id}`, src, { ex: 3600 });
     return `https://${host}/api/whatsapp/temp-image?id=${id}`;
   }
-  // URL externa (e.g. WhatsApp media URL que puede caducar) — la descargamos y re-hosteamos
+
+  // URL externa (mmg.whatsapp.net u otras) — descargar y re-hostear para garantizar acceso
   if (src.startsWith('http')) {
     try {
       const r = await fetch(src);
@@ -23,9 +30,10 @@ async function toPublicUrl(src, host) {
       await redis.set(`temp_img_${id}`, dataUrl, { ex: 3600 });
       return `https://${host}/api/whatsapp/temp-image?id=${id}`;
     } catch {
-      return src; // fallback a la URL original
+      return src;
     }
   }
+
   return src;
 }
 
