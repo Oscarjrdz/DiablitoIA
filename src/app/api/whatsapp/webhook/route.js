@@ -1293,13 +1293,19 @@ export async function POST(req) {
 
     // Siempre usar clave normalizada con país para evitar duplicados
     let historyKey = `chat_hist_${cleanPhone}@c.us`;
+    const isAudio = payload.data.type === 'audio' || payload.data.type === 'ptt'
+      || payload.data.messageType === 'audio' || payload.data.messageType === 'ptt'
+      || !!payload.data.__raw?.message?.audioMessage || !!payload.data.__raw?.message?.pttMessage;
+
     const incomingPart = { text: bodyStr, ts: Date.now() };
-    // Cachear imagen/sticker y guardar URL del proxy para mostrar en la UI
+    // Cachear imagen/sticker/audio y guardar URL del proxy para mostrar en la UI
     // payload.media es la URL del gateway (campo raíz, no data.media)
     const incomingRawMediaUrl = payload.media
       || payload.data.media
       || payload.data.__raw?.message?.imageMessage?.url
       || payload.data.__raw?.message?.stickerMessage?.url
+      || payload.data.__raw?.message?.audioMessage?.url
+      || payload.data.__raw?.message?.pttMessage?.url
       || null;
     if (incomingRawMediaUrl) {
       const incomingMsgId = payload.data.id || payload.data.key?.id || `ind_${Date.now()}`;
@@ -1307,7 +1313,7 @@ export async function POST(req) {
       // Fallback: si el caché falla (Vercel no alcanzó el gateway), usar la URL directa.
       // La URL del gateway es pública y tiene TTL propio. onError en el frontend maneja expiración.
       incomingPart.attachmentUrl = proxyUrl || incomingRawMediaUrl;
-      incomingPart.attachmentType = isSticker ? 'sticker' : 'image';
+      incomingPart.attachmentType = isSticker ? 'sticker' : (isAudio ? 'audio' : 'image');
       incomingPart.hasAttachment = true;
     }
     const incomingEntry = { role: 'user', parts: [incomingPart] };

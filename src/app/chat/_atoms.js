@@ -148,10 +148,23 @@ export const MessageBubble = React.memo(function MessageBubble({ m, chatName, ch
         {m.attachmentType === 'sticker' && m.attachmentUrl && (
           <img src={m.attachmentUrl} alt="Sticker" loading="lazy" decoding="async" style={{ maxWidth: 160, borderRadius: 4, display: 'block', marginBottom: 2 }} />
         )}
-        {m.hasAttachment && !m.attachmentUrl && !m.attachment && m.attachmentType !== 'sticker' && (
+        {m.attachmentUrl && m.attachmentType === 'audio' && (
+          <audio
+            controls
+            preload="metadata"
+            className={styles.audioPlayer}
+            src={m.attachmentUrl.startsWith('/') ? m.attachmentUrl : m.attachmentUrl}
+          />
+        )}
+        {m.hasAttachment && !m.attachmentUrl && !m.attachment && m.attachmentType === 'audio' && (
+          <div className={styles.fileAttach}>
+            <span>🎙 Audio</span>
+          </div>
+        )}
+        {m.hasAttachment && !m.attachmentUrl && !m.attachment && m.attachmentType !== 'sticker' && m.attachmentType !== 'audio' && (
           <div className={styles.fileAttach}>
             <Paperclip size={14} />
-            <span>{m.attachmentType === 'audio' ? '🎙 Audio' : 'Archivo adjunto'}</span>
+            <span>Archivo adjunto</span>
           </div>
         )}
         {onForward && !m._localId && (
