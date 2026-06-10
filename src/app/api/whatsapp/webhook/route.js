@@ -260,6 +260,28 @@ export async function POST(req) {
       return NextResponse.json({ success: true });
     }
 
+    // ── Llamadas entrantes — responder automáticamente ──
+    const CALL_EVENTS = ['call', 'call_received', 'incoming_call', 'call_offer', 'call.received', 'CALL'];
+    const isCallEvent = CALL_EVENTS.includes(payload.event_type)
+      || payload.data?.type === 'call'
+      || !!payload.data?.call
+      || payload.event_type?.toLowerCase?.().includes('call');
+    if (isCallEvent) {
+      // Guardar para diagnóstico — útil para confirmar el event_type exacto del gateway
+      await redis.set('DEBUG_LAST_CALL_EVENT', JSON.stringify({ event_type: payload.event_type, data: payload.data, ts: Date.now() }));
+      const callerJid = payload.data?.from || payload.data?.id
+        || payload.data?.call?.from || payload.data?.callFrom
+        || payload.data?.key?.remoteJid || '';
+      if (callerJid && !callerJid.includes('@g.us')) {
+        const callCfgStr = await redis.get('wapp_config');
+        const callCfg = typeof callCfgStr === 'string' ? JSON.parse(callCfgStr) : (callCfgStr || {});
+        if (callCfg.wappInstance && callCfg.wappToken) {
+          await sendWhatsApp(callerJid, '📵 ¡Hola! Por el momento no recibimos llamadas por esta línea 🙏\n\n💬 Pero con gusto te ayudamos por aquí en el chat, escríbenos lo que necesitas y te atendemos al instante ⚡\n\n¡Gracias por comunicarte con *El Diablito* 😈!', callCfg);
+        }
+      }
+      return NextResponse.json({ success: true });
+    }
+
     if (payload.event_type !== 'message_received' || (!payload.data?.from && !payload.data?.key)) {
       // Capturar para diagnóstico de anuncios
       if (payload.event_type && !['message_ack','messages.update','ack','message.ack','msg_ack','presence_update','chat_state','typing'].includes(payload.event_type)) {
