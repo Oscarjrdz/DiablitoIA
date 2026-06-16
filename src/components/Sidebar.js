@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Settings, TrendingUp, Store, Smartphone, Users, Bot, Megaphone, TicketCheck, Receipt, ShoppingBag, PanelLeftClose, PanelLeftOpen, Copy } from 'lucide-react';
+import { LayoutDashboard, Settings, TrendingUp, Smartphone, Users, Bot, Megaphone, TicketCheck, Receipt, ShoppingBag, PanelLeftClose, PanelLeftOpen, Copy } from 'lucide-react';
 
 const EXPANDED_WIDTH = 250;
 const COLLAPSED_WIDTH = 64;
@@ -48,8 +48,7 @@ export default function Sidebar() {
 
         {/* Logo + toggle */}
         <div className="ios-sidebar-logo">
-          {!collapsed && <Store size={26} color="var(--accent-color)" style={{ flexShrink: 0 }} />}
-          {!collapsed && <span>Diablito 😈</span>}
+          {!collapsed && <span>El Diablito 😈</span>}
           <button
             onClick={toggle}
             className="ios-sidebar-toggle"
