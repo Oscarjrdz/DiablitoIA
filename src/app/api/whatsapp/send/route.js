@@ -119,6 +119,7 @@ export async function POST(req) {
     await redis.set(`chat_hist_${redisPhone}`, JSON.stringify(parsed));
     await redis.sadd('chat_phones', redisPhone);
     await redis.set(`human_read_${redisPhone}`, '1');
+    await redis.set(`delivery_bot_silence_${redisPhone}`, 'manual');
     await redis.del(`delivery_mode_${redisPhone}`);
     const sentMsgId = parsed[parsed.length - 1]?.parts?.[0]?.msgId || null;
     return NextResponse.json({ success: true, msgId: sentMsgId, ts });
