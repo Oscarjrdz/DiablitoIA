@@ -12,6 +12,8 @@ export default function ChatListPanel({
   openChat,
   profilePics,
   isOffline,
+  shopOffline,
+  toggleShopMode,
   loadingChats,
   pinnedGroupIds,
   setPinnedGroupIds,
@@ -174,6 +176,14 @@ export default function ChatListPanel({
             Chats <span style={{ fontSize: 12, fontWeight: 500, opacity: 0.55, marginLeft: 4 }}>({chats.length})</span>
           </span>
           <div className={styles.headerIconsLeft}>
+            <button
+              className={`${styles.shopModeToggle} ${shopOffline ? styles.shopModeOffline : styles.shopModeOnline}`}
+              onClick={toggleShopMode}
+              title={shopOffline ? 'Sistema OFFLINE — clic para poner ONLINE' : 'Sistema ONLINE — clic para poner OFFLINE'}
+            >
+              <span className={styles.shopModeDot} />
+              {shopOffline ? 'OFFLINE' : 'ONLINE'}
+            </button>
             <button
               className={styles.groupsBtn}
               title="Gestionar Grupos"

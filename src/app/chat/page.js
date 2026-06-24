@@ -14,6 +14,7 @@ export default function ChatPage() {
   const [activeChat, setActiveChat] = useState(null);
   const [profilePics, setProfilePics] = useState({});
   const [isOffline, setIsOffline] = useState(false);
+  const [shopOffline, setShopOffline] = useState(false);
   const [loadingChats, setLoadingChats] = useState(true);
   const [clientCard, setClientCard] = useState(null);
   const [loadingCard, setLoadingCard] = useState(false);
@@ -165,6 +166,24 @@ export default function ChatPage() {
     }, sseConnectedRef.current ? 10000 : 2000);
   }, [fetchMessages, fetchClientCard, queueProfilePic]);
 
+  // ── Modo sistema (ONLINE/OFFLINE) — cargado desde Redis ──
+  useEffect(() => {
+    fetch('/api/whatsapp/system-mode').then(r => r.json()).then(d => {
+      if (d.mode === 'offline') setShopOffline(true);
+    }).catch(() => {});
+  }, []);
+
+  const toggleShopMode = useCallback(async () => {
+    const next = shopOffline ? 'online' : 'offline';
+    try {
+      await fetch('/api/whatsapp/system-mode', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: next })
+      });
+      setShopOffline(next === 'offline');
+    } catch {}
+  }, [shopOffline]);
+
   // ── Carga inicial + polling de lista ──
   useEffect(() => {
     fetchChats();
@@ -285,6 +304,8 @@ export default function ChatPage() {
           openChat={openChat}
           profilePics={profilePics}
           isOffline={isOffline}
+          shopOffline={shopOffline}
+          toggleShopMode={toggleShopMode}
           loadingChats={loadingChats}
           pinnedGroupIds={pinnedGroupIds}
           setPinnedGroupIds={setPinnedGroupIds}

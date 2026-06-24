@@ -1366,6 +1366,14 @@ export async function POST(req) {
         return NextResponse.json({ success: true, note: 'delivery_mode_silent' });
     }
 
+    // ── 🔴 SISTEMA OFFLINE: respuesta determinista, sin IA ──
+    const systemMode = await redis.get('system_mode');
+    if (systemMode === 'offline') {
+        const offlineMsg = '😈 Lo sentimos, de momento nuestras sucursales aún no están en operación.';
+        await sendWhatsApp(phoneId, offlineMsg, cfg);
+        return NextResponse.json({ success: true, note: 'system_offline' });
+    }
+
     // ── 🔍 IDENTIFICACIÓN: Loyverse primero (fuente de verdad), Redis como respaldo ──
     let clientName = null;
     let clientPoints = 0;
