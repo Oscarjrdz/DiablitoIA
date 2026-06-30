@@ -16,14 +16,12 @@ export default function MessagePanel({
   isTyping,
   botSilent,
   setBotSilent,
-  msgPollRef,
   showToast,
   addOptimisticRef,
 }) {
   const [inputText, setInputText] = useState('');
   const [attachment, setAttachment] = useState(null);
   const [pendingMsgs, setPendingMsgs] = useState([]);
-  if (addOptimisticRef) addOptimisticRef.current = msg => setPendingMsgs(prev => [...prev, msg]);
   const [vsOpen, setVsOpen] = useState(false);
   const [vsMessages, setVsMessages] = useState([]);
   const [vsEditing, setVsEditing] = useState(null);
@@ -39,8 +37,15 @@ export default function MessagePanel({
   const isAtBottomRef = useRef(true);
   const typingTimerRef = useRef(null);
 
+  useEffect(() => {
+    if (!addOptimisticRef) return;
+    addOptimisticRef.current = msg => setPendingMsgs(prev => [...prev, msg]);
+    return () => { addOptimisticRef.current = null; };
+  }, [addOptimisticRef]);
+
   // Reset al cambiar de chat
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPendingMsgs([]);
     setInputText('');
     setAttachment(null);
@@ -48,9 +53,10 @@ export default function MessagePanel({
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   }, [activeChat?.phone]);
 
-  // Limpiar pendientes cuando el poll confirma los mensajes
+  // Limpiar pendientes cuando el servidor confirma los mensajes
   useEffect(() => {
     if (!pendingMsgs.length) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPendingMsgs(prev => prev.filter(p => !messages.some(m => msgMatchesPending(m, p))));
   }, [messages]); // eslint-disable-line
 
@@ -207,7 +213,10 @@ export default function MessagePanel({
     } catch {}
   }, []);
 
-  useEffect(() => { fetchVsMessages(); }, [fetchVsMessages]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchVsMessages();
+  }, [fetchVsMessages]);
 
   const vsSend = useCallback(async (msg) => {
     if (!activeChat || vsSending) return;
@@ -325,7 +334,6 @@ export default function MessagePanel({
       <div className={styles.rightHeader}>
         <button className={styles.backBtn} onClick={() => {
           setActiveChat(null);
-          clearInterval(msgPollRef.current);
         }}>
           <ArrowLeft size={22} />
         </button>

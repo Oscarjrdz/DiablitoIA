@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
+import { publishChatEvent } from '@/lib/realtime';
 
 // POST — Create a new empty chat in Redis
 export async function POST(req) {
@@ -26,6 +27,8 @@ export async function POST(req) {
 
     // Mark as read (human-created)
     await redis.set(`human_read_${cleanPhone}`, '1');
+    await redis.sadd('chat_phones', cleanPhone);
+    await publishChatEvent({ phone: cleanPhone, reason: 'create-chat' });
 
     return NextResponse.json({ success: true, phone: cleanPhone });
   } catch (e) {

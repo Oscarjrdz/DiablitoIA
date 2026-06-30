@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
+import { publishChatEvent } from '@/lib/realtime';
 
 export async function POST(req) {
   try {
@@ -16,6 +17,7 @@ export async function POST(req) {
       // Reactivar bot
       await redis.del(`delivery_bot_silence_${cleanPhone}`);
     }
+    await publishChatEvent({ phone, redisPhone: cleanPhone, reason: 'bot-silence' });
 
     return NextResponse.json({ success: true, botSilent: !!silent });
   } catch (e) {

@@ -45,12 +45,35 @@ const getRedisClient = () => {
           try { return JSON.parse(val); } catch (e) { return val; }
         });
       },
+      publish: async (channel, value) => {
+        const val = typeof value === 'object' ? JSON.stringify(value) : value;
+        return rawRedis.publish(channel, val);
+      },
+      subscribe: async (channel, onMessage) => {
+        const sub = rawRedis.duplicate();
+        sub.on('message', (ch, message) => {
+          if (ch !== channel) return;
+          try { onMessage(JSON.parse(message)); } catch { onMessage(message); }
+        });
+        await sub.subscribe(channel);
+        return async () => {
+          try { await sub.unsubscribe(channel); } catch {}
+          try { sub.disconnect(); } catch {}
+        };
+      },
     };
   }
 
   // If user connected Upstash KV
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    return kv;
+    const kvPublish = typeof kv.publish === 'function' ? kv.publish.bind(kv) : null;
+    return Object.assign(kv, {
+      publish: async (channel, value) => {
+        if (kvPublish) return kvPublish(channel, value);
+        return 0;
+      },
+      subscribe: async () => async () => {},
+    });
   }
 
   // Dummy fallback
@@ -70,6 +93,8 @@ const getRedisClient = () => {
     sadd: async () => 0,
     srem: async () => 0,
     smembers: async () => [],
+    publish: async () => 0,
+    subscribe: async () => async () => {},
   };
 };
 

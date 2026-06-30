@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
+import { publishChatEvent } from '@/lib/realtime';
 
 // Convierte cualquier src de imagen a URL absoluta pública accesible por el gateway
 async function toPublicUrl(src, host) {
@@ -77,7 +78,7 @@ export async function POST(req) {
 
     if (attachment && attachmentType === 'image') {
       const imageUrl = await toPublicUrl(attachment, host);
-      histEntry.attachmentUrl = imageUrl; // guardar URL para que el poll la muestre
+      histEntry.attachmentUrl = imageUrl; // guardar URL para que la UI la muestre
       endpoint = '/messages/image';
       body = { token: wConfig.wappToken, to: wappTo, image: imageUrl, caption: text };
     } else if (attachment && attachmentType === 'audio') {
@@ -121,6 +122,7 @@ export async function POST(req) {
     await redis.set(`human_read_${redisPhone}`, '1');
     await redis.set(`delivery_bot_silence_${redisPhone}`, 'manual');
     await redis.del(`delivery_mode_${redisPhone}`);
+    await publishChatEvent({ phone: wappTo, redisPhone, reason: 'manual-send' });
     const sentMsgId = parsed[parsed.length - 1]?.parts?.[0]?.msgId || null;
     return NextResponse.json({ success: true, msgId: sentMsgId, ts });
   } catch (e) {

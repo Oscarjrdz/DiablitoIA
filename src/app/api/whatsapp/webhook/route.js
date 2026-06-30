@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
 import { generateFolio, buildPromoText } from '@/lib/folio';
+import { publishChatEvent } from '@/lib/realtime';
 
 // Allow up to 60s for commands that paginate Loyverse (CLIENTES, VENTAS, etc.)
 export const maxDuration = 60;
@@ -153,6 +154,7 @@ async function mergeAndSave(historyKey, cleanPhone, newEntries) {
   await redis.set(historyKey, json);
   await redis.set(`chat_hist_${cleanPhone}@c.us`, json);
   await redis.set(`chat_hist_${cleanPhone}`, json);
+  await publishChatEvent({ phone: cleanPhone, reason: 'history' });
   return fresh;
 }
 
@@ -195,6 +197,7 @@ export async function POST(req) {
         } else {
           await redis.del(`typing_${tPhone}`);
         }
+        await publishChatEvent({ phone: tPhone, reason: 'typing' });
       }
       return NextResponse.json({ success: true });
     }
@@ -246,6 +249,7 @@ export async function POST(req) {
                 }
                 await redis.set(hKey, JSON.stringify(hist));
                 await redis.set(`chat_hist_${chatPhone}`, JSON.stringify(hist));
+                await publishChatEvent({ phone: chatPhone, reason: 'ack' });
               }
             } catch {}
           }
@@ -398,6 +402,7 @@ export async function POST(req) {
 
           await redis.set(historyKey, JSON.stringify(history));
           await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(history));
+          await publishChatEvent({ phone: cleanPhone, reason: 'order' });
       }
       return NextResponse.json({ success: true, note: 'order_processed_and_saved' });
     }
@@ -1085,7 +1090,7 @@ export async function POST(req) {
         await redis.set(`chat_hist_${cleanGroupPhone}`, JSON.stringify(gParsed));
         await redis.incr(`chat_unread_${cleanGroupPhone}`);
         await redis.del(`human_read_${cleanGroupPhone}`);
-        await redis.set('sse_notify', JSON.stringify({ ts: Date.now(), phone: cleanGroupPhone }));
+        await publishChatEvent({ phone: phoneId, redisPhone: cleanGroupPhone, reason: 'group-message' });
 
         // ── 🎟️ FOLIO EN GRUPOS ──
         // 1) Selección de sucursal pendiente → inyectar en textMsg y caer al flujo real de activación
@@ -1346,8 +1351,6 @@ export async function POST(req) {
     let parsed = await mergeAndSave(historyKey, cleanPhone, [incomingEntry]);
     // Registrar en Set para evitar redis.keys() en /api/whatsapp/chats
     await redis.sadd('chat_phones', cleanPhone);
-    await redis.set('sse_notify', JSON.stringify({ ts: Date.now(), phone: cleanPhone }));
-
     await redis.incr(`chat_unread_${cleanPhone}`);
     // Reset human-read flag so the chat shows as "needs attention" again
     await redis.del(`human_read_${cleanPhone}`);
@@ -1710,7 +1713,6 @@ Responde SOLO con una palabra: MENU, PEDIR, DOMICILIO, PASAR, HORARIOS, GRACIAS,
             const botEntry = { text: botReply, ts: Date.now(), status: 'sent' };
             if (botMsgId) { botEntry.msgId = botMsgId; await trackMsgId(botMsgId, cleanPhone); }
             await mergeAndSave(historyKey, cleanPhone, [{ role: 'model', parts: [botEntry] }]);
-            await redis.set('sse_notify', JSON.stringify({ ts: Date.now(), phone: cleanPhone }));
         }
         return NextResponse.json({ success: true });
     }

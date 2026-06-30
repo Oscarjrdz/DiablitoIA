@@ -1,5 +1,13 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Diablito IA
+
+Dashboard operativo para ventas, promociones, clientes y chat web tipo WhatsApp. El chat no usa Meta API: se integra con un gateway Wapp/Baileys y sincroniza la UI en tiempo real mediante SSE y Redis Pub/Sub.
+
+### Documentacion tecnica
+
+- [Chat web en tiempo real con SSE](docs/chat-realtime-sse.md)
+
 ## Getting Started
 
 First, run the development server:
@@ -15,6 +23,14 @@ bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+## Verification
+
+```bash
+npm run build
+```
+
+Nota: `npm run lint` puede fallar por deuda existente fuera del flujo SSE del chat (`src/app/promociones/page.js`, `src/components/Sidebar.js` y `temp.js`).
 
 You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
 

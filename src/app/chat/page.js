@@ -28,8 +28,6 @@ export default function ChatPage() {
 
   // ── Refs ──
   const activeChatRef = useRef(null);
-  const listPollRef = useRef(null);
-  const msgPollRef = useRef(null);
   const sseRef = useRef(null);
   const sseConnectedRef = useRef(false);
   const tabVisibleRef = useRef(true);
@@ -43,6 +41,7 @@ export default function ChatPage() {
   const lastMsgCountRef = useRef(0);
   const lastTsRef = useRef(0);
   const alarmRef = useRef(null);
+  const chatRefreshTimerRef = useRef(null);
 
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type });
@@ -50,10 +49,8 @@ export default function ChatPage() {
   }, []);
 
   // ── Foto de perfil — cola con máximo 3 concurrentes ──
-  // drainPicQueue usa ref para no recrearse en cada render
   const addOptimisticRef = useRef(null);
-  const drainPicQueueRef = useRef(null);
-  drainPicQueueRef.current = () => {
+  const drainPicQueue = useCallback(function drain() {
     while (picQueueRef.current.length > 0 && picLoadingRef.current < 3) {
       const phone = picQueueRef.current.shift();
       picLoadingRef.current++;
@@ -61,10 +58,9 @@ export default function ChatPage() {
         .then(r => r.json())
         .then(data => setProfilePics(prev => ({ ...prev, [phone]: data.url || null })))
         .catch(() => setProfilePics(prev => ({ ...prev, [phone]: null })))
-        .finally(() => { picLoadingRef.current--; drainPicQueueRef.current?.(); });
+        .finally(() => { picLoadingRef.current--; drain(); });
     }
-  };
-  const drainPicQueue = useCallback(() => drainPicQueueRef.current?.(), []);
+  }, []);
 
   const queueProfilePic = useCallback((phone) => {
     if (picQueuedRef.current.has(phone)) return;
@@ -104,7 +100,7 @@ export default function ChatPage() {
       if (failCountRef.current >= 3) setIsOffline(true);
     }
     setLoadingChats(false);
-  }, [queueProfilePic]); // eslint-disable-line
+  }, [queueProfilePic]);
 
   // ── Fetch mensajes (delta-aware) ──
   const fetchMessages = useCallback(async (phone) => {
@@ -135,6 +131,18 @@ export default function ChatPage() {
     clientCacheRef.current.delete(phone);
   }, []);
 
+  const scheduleFetchChats = useCallback(() => {
+    clearTimeout(chatRefreshTimerRef.current);
+    chatRefreshTimerRef.current = setTimeout(fetchChats, 80);
+  }, [fetchChats]);
+
+  const fetchSystemMode = useCallback(async () => {
+    try {
+      const d = await fetch('/api/whatsapp/system-mode').then(r => r.json());
+      setShopOffline(d.mode === 'offline');
+    } catch {}
+  }, []);
+
   // ── Fetch tarjeta de cliente ──
   const fetchClientCard = useCallback(async (phone) => {
     const cached = clientCacheRef.current.get(phone);
@@ -157,21 +165,15 @@ export default function ChatPage() {
     setIsTyping(false);
     lastMsgCountRef.current = 0;
     lastTsRef.current = 0;
-    clearInterval(msgPollRef.current);
     fetchMessages(chat.phone);
     fetchClientCard(chat.phone);
     queueProfilePic(chat.phone);
-    msgPollRef.current = setInterval(() => {
-      if (activeChatRef.current?.phone === chat.phone) fetchMessages(chat.phone);
-    }, sseConnectedRef.current ? 10000 : 2000);
   }, [fetchMessages, fetchClientCard, queueProfilePic]);
 
   // ── Modo sistema (ONLINE/OFFLINE) — cargado desde Redis ──
   useEffect(() => {
-    fetch('/api/whatsapp/system-mode').then(r => r.json()).then(d => {
-      if (d.mode === 'offline') setShopOffline(true);
-    }).catch(() => {});
-  }, []);
+    fetchSystemMode();
+  }, [fetchSystemMode]);
 
   const toggleShopMode = useCallback(async () => {
     const next = shopOffline ? 'online' : 'offline';
@@ -184,79 +186,63 @@ export default function ChatPage() {
     } catch {}
   }, [shopOffline]);
 
-  // ── Carga inicial + polling de lista ──
+  // ── Carga inicial ──
   useEffect(() => {
     fetchChats();
-    listPollRef.current = setInterval(fetchChats, 3000);
-    return () => clearInterval(listPollRef.current);
   }, [fetchChats]);
-
-  // ── Cleanup del poll de mensajes al desmontar ──
-  useEffect(() => () => clearInterval(msgPollRef.current), []);
 
   // ── SSE: notificaciones en tiempo real ──
   useEffect(() => {
-    const connect = () => {
-      const es = new EventSource('/api/whatsapp/sse');
-      sseRef.current = es;
+    const es = new EventSource('/api/whatsapp/sse');
+    sseRef.current = es;
 
-      es.onmessage = (e) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (data.type === 'connected') {
-            sseConnectedRef.current = true;
-            clearInterval(listPollRef.current);
-            listPollRef.current = setInterval(fetchChats, 10000);
-            if (msgPollRef.current) {
-              clearInterval(msgPollRef.current);
-              msgPollRef.current = setInterval(() => {
-                if (activeChatRef.current?.phone) fetchMessages(activeChatRef.current.phone);
-              }, 10000);
-            }
-          } else if (data.type === 'update') {
-            if (activeChatRef.current?.phone === data.phone) fetchMessages(data.phone);
-            fetchChats();
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === 'connected') {
+          sseConnectedRef.current = true;
+          setIsOffline(false);
+          scheduleFetchChats();
+          if (activeChatRef.current?.phone) fetchMessages(activeChatRef.current.phone);
+          return;
+        }
+        if (data.type === 'chat:update') {
+          if (data.reason === 'system-mode') {
+            setShopOffline(data.mode === 'offline');
           }
-        } catch {}
-      };
-
-      es.onerror = () => {
-        sseConnectedRef.current = false;
-        es.close();
-        clearInterval(listPollRef.current);
-        listPollRef.current = setInterval(fetchChats, 3000);
-        setTimeout(connect, 5000);
-      };
+          const activePhone = activeChatRef.current?.phone;
+          const eventPhones = [data.phone, data.redisPhone].filter(Boolean);
+          if (activePhone && eventPhones.includes(activePhone)) fetchMessages(activePhone);
+          scheduleFetchChats();
+        }
+      } catch {}
     };
 
-    connect();
-    return () => { sseRef.current?.close(); sseConnectedRef.current = false; };
-  }, [fetchChats, fetchMessages]);
+    es.onerror = () => {
+      sseConnectedRef.current = false;
+      setIsOffline(true);
+    };
 
-  // ── Pausar/reanudar polls según visibilidad del tab ──
+    return () => {
+      clearTimeout(chatRefreshTimerRef.current);
+      sseRef.current?.close();
+      sseConnectedRef.current = false;
+    };
+  }, [fetchMessages, scheduleFetchChats]);
+
+  // ── Al volver al tab, sincronizar una vez por si el navegador pausó el stream ──
   useEffect(() => {
     const onVisibilityChange = () => {
       tabVisibleRef.current = document.visibilityState === 'visible';
       if (tabVisibleRef.current) {
         fetchChats();
+        fetchSystemMode();
         if (activeChatRef.current?.phone) fetchMessages(activeChatRef.current.phone);
-        const li = sseConnectedRef.current ? 10000 : 3000;
-        const mi = sseConnectedRef.current ? 10000 : 2000;
-        // ← BUG FIX: limpiar el intervalo anterior antes de crear uno nuevo
-        clearInterval(listPollRef.current);
-        listPollRef.current = setInterval(fetchChats, li);
-        clearInterval(msgPollRef.current);
-        msgPollRef.current = setInterval(() => {
-          if (activeChatRef.current?.phone) fetchMessages(activeChatRef.current.phone);
-        }, mi);
-      } else {
-        clearInterval(listPollRef.current);
-        clearInterval(msgPollRef.current);
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-  }, [fetchChats, fetchMessages]);
+  }, [fetchChats, fetchMessages, fetchSystemMode]);
 
   // ── Alarma Nuclear de pedidos activos ──
   const activeAlarms = useMemo(
@@ -326,7 +312,6 @@ export default function ChatPage() {
             isTyping={isTyping}
             botSilent={botSilent}
             setBotSilent={setBotSilent}
-            msgPollRef={msgPollRef}
             showToast={showToast}
             addOptimisticRef={addOptimisticRef}
           />

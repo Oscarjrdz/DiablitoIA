@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
+import { publishChatEvent } from '@/lib/realtime';
 
 const GW = 'https://gatewaywapp-production.up.railway.app';
 
@@ -50,6 +51,7 @@ export async function POST(req) {
     } else {
       await redis.del(`blocked_${cleanPhone}`);
     }
+    await publishChatEvent({ phone, redisPhone: cleanPhone, reason: 'block-state' });
 
     return NextResponse.json({ success: true, blocked: !!blocked });
   } catch (e) {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
+import { publishChatEvent } from '@/lib/realtime';
 
 // GET — List all WhatsApp groups
 export async function GET() {
@@ -220,6 +221,7 @@ export async function POST(req) {
       await redis.set(histKey, JSON.stringify([]));
     }
     await redis.set(`client_name_${cleanPhone}`, `📌 ${groupName || 'Grupo'}`);
+    await publishChatEvent({ phone: groupId, redisPhone: cleanPhone, reason: 'group-pin' });
 
     return NextResponse.json({ success: true });
   } catch (e) {
@@ -251,6 +253,7 @@ export async function PATCH(req) {
       cleanPhone = groupId;
     }
     await redis.set(`client_name_${cleanPhone}`, `📌 ${newName.trim()}`);
+    await publishChatEvent({ phone: groupId, redisPhone: cleanPhone, reason: 'group-rename' });
 
     return NextResponse.json({ success: true });
   } catch (e) {
@@ -270,6 +273,7 @@ export async function DELETE(req) {
 
     const updated = pinned.filter(g => g.id !== groupId);
     await redis.set('pinned_groups', JSON.stringify(updated));
+    await publishChatEvent({ reason: 'group-unpin' });
 
     return NextResponse.json({ success: true });
   } catch (e) {

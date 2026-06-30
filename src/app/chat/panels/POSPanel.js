@@ -48,7 +48,10 @@ export default function POSPanel({ activeChat, clientCard, pinnedGroupsData, sho
     setPosLoading(false);
   }, []);
 
-  useEffect(() => { fetchPOSData(); }, [fetchPOSData]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchPOSData();
+  }, [fetchPOSData]);
 
   const posFiltered = useMemo(
     () => !deferredPosSearch
