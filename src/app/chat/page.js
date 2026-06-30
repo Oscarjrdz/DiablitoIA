@@ -203,9 +203,14 @@ export default function ChatPage() {
     const es = new EventSource('/api/whatsapp/sse');
     sseRef.current = es;
 
+    // Normaliza a los últimos 10 dígitos para comparación robusta entre formatos
+    const normPhone = p => (p || '').replace('@c.us', '').replace(/\D/g, '').slice(-10);
+    const MSG_STATUS_ORDER = { sent: 1, delivered: 2, read: 3 };
+
     es.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
+
         if (data.type === 'connected') {
           sseConnectedRef.current = true;
           setIsOffline(false);
@@ -213,15 +218,60 @@ export default function ChatPage() {
           if (activeChatRef.current?.phone) fetchMessages(activeChatRef.current.phone);
           return;
         }
-        if (data.type === 'chat:update') {
-          if (data.reason === 'system-mode') {
-            setShopOffline(data.mode === 'offline');
-          }
-          const activePhone = activeChatRef.current?.phone;
-          const eventPhones = [data.phone, data.redisPhone].filter(Boolean);
-          if (activePhone && eventPhones.includes(activePhone)) fetchMessages(activePhone);
-          scheduleFetchChats();
+
+        if (data.type !== 'chat:update') return;
+
+        const activePhone = activeChatRef.current?.phone;
+        const phones = [data.phone, data.redisPhone].filter(Boolean);
+        const isActiveChat = activePhone && phones.some(p => normPhone(p) === normPhone(activePhone));
+
+        // system-mode: directo al estado, sin fetch
+        if (data.reason === 'system-mode') {
+          setShopOffline(data.mode === 'offline');
+          return;
         }
+
+        // typing: actualizar isTyping directo — sin fetchMessages ni fetchChats
+        if (data.reason === 'typing') {
+          if (isActiveChat) setIsTyping(!!data.typing);
+          return;
+        }
+
+        // bot-silence: actualizar botSilent directo — sin fetchMessages ni fetchChats
+        if (data.reason === 'bot-silence') {
+          if (isActiveChat) setBotSilent(!!data.silent);
+          return;
+        }
+
+        // read-state: actualizar chat específico — sin refetch completo de lista
+        if (data.reason === 'read-state') {
+          const p = normPhone(data.redisPhone || data.phone);
+          if (p) setChats(prev => prev.map(c => normPhone(c.phone) === p ? { ...c, needsHuman: false, unread: 0 } : c));
+          return;
+        }
+
+        // ack (palomitas): actualizar status del mensaje directo — sin fetchMessages ni fetchChats
+        if (data.reason === 'ack') {
+          if (isActiveChat && data.msgId && data.status) {
+            setMessages(prev => {
+              let changed = false;
+              const next = prev.map(m => {
+                if (m.msgId === data.msgId && (MSG_STATUS_ORDER[data.status] || 0) > (MSG_STATUS_ORDER[m.status] || 0)) {
+                  changed = true;
+                  return { ...m, status: data.status };
+                }
+                return m;
+              });
+              return changed ? next : prev;
+            });
+          }
+          return;
+        }
+
+        // Resto (history, order, manual-send, block-state, create-chat, group-*):
+        // necesitan actualizar mensajes y/o lista de chats
+        if (isActiveChat) fetchMessages(activePhone);
+        scheduleFetchChats();
       } catch {}
     };
 
@@ -235,7 +285,7 @@ export default function ChatPage() {
       sseRef.current?.close();
       sseConnectedRef.current = false;
     };
-  }, [fetchMessages, scheduleFetchChats]);
+  }, [fetchMessages, scheduleFetchChats, setBotSilent]);
 
   // ── Al volver al tab, sincronizar una vez por si el navegador pausó el stream ──
   useEffect(() => {
@@ -279,6 +329,8 @@ export default function ChatPage() {
       document.removeEventListener('keydown', handleGesture);
     };
   }, [activeAlarms]);
+
+  const addOptimisticMsg = useCallback((msg) => addOptimisticRef.current?.(msg), []);
 
   // stores para ClientCard (selector de sucursal)
   const stores = useMemo(
@@ -353,7 +405,7 @@ export default function ChatPage() {
             clientCard={clientCard}
             pinnedGroupsData={pinnedGroupsData}
             showToast={showToast}
-            addOptimisticMsg={msg => addOptimisticRef.current?.(msg)}
+            addOptimisticMsg={addOptimisticMsg}
           />
         )}
 

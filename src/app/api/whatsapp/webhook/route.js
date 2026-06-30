@@ -197,7 +197,7 @@ export async function POST(req) {
         } else {
           await redis.del(`typing_${tPhone}`);
         }
-        await publishChatEvent({ phone: tPhone, reason: 'typing' });
+        await publishChatEvent({ phone: tPhone, redisPhone: tPhone, typing: isTyping, reason: 'typing' });
       }
       return NextResponse.json({ success: true });
     }
@@ -249,7 +249,7 @@ export async function POST(req) {
                 }
                 await redis.set(hKey, JSON.stringify(hist));
                 await redis.set(`chat_hist_${chatPhone}`, JSON.stringify(hist));
-                await publishChatEvent({ phone: chatPhone, reason: 'ack' });
+                await publishChatEvent({ phone: chatPhone, redisPhone: chatPhone, msgId, status: newStatus, reason: 'ack' });
               }
             } catch {}
           }

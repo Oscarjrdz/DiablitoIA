@@ -57,17 +57,20 @@ export async function GET(req) {
     // ── Server-side dedup safety net ──
     // Remove duplicate fromMe messages with identical text within 5s window.
     // Keep the one with a msgId (or the first one if neither has one).
+    const STATUS_ORDER = { sent: 1, delivered: 2, read: 3 };
     const deduped = [];
     for (let i = 0; i < messages.length; i++) {
       const m = messages[i];
       if (m.fromMe && deduped.length > 0) {
         const prev = deduped[deduped.length - 1];
         if (prev.fromMe && prev.text === m.text && m.ts && prev.ts && Math.abs(m.ts - prev.ts) < 5000) {
-          // Duplicate detected — keep the one with msgId
-          if (m.msgId && !prev.msgId) {
-            deduped[deduped.length - 1] = m;
+          // Duplicate: merge keeping best msgId and highest status
+          const bestMsgId = m.msgId || prev.msgId;
+          const bestStatus = (STATUS_ORDER[m.status] || 0) > (STATUS_ORDER[prev.status] || 0) ? m.status : prev.status;
+          if (bestMsgId !== prev.msgId || bestStatus !== prev.status) {
+            deduped[deduped.length - 1] = { ...prev, msgId: bestMsgId, status: bestStatus };
           }
-          continue; // skip duplicate
+          continue;
         }
       }
       deduped.push(m);

@@ -17,7 +17,7 @@ export async function POST(req) {
       // Reactivar bot
       await redis.del(`delivery_bot_silence_${cleanPhone}`);
     }
-    await publishChatEvent({ phone, redisPhone: cleanPhone, reason: 'bot-silence' });
+    await publishChatEvent({ phone, redisPhone: cleanPhone, silent: !!silent, reason: 'bot-silence' });
 
     return NextResponse.json({ success: true, botSilent: !!silent });
   } catch (e) {
