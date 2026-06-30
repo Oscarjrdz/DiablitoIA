@@ -6,7 +6,7 @@ import { PosProductCard } from '../_atoms';
 import { variantName, ORDER_TYPE_LABELS } from '../_utils';
 import styles from '../page.module.css';
 
-export default function POSPanel({ activeChat, clientCard, pinnedGroupsData, showToast, addOptimisticMsg }) {
+function POSPanel({ activeChat, clientCard, pinnedGroupsData, showToast, addOptimisticMsg }) {
   const posDataLoadedRef = useRef(false);
   const [posItems, setPosItems] = useState([]);
   const [posStores, setPosStores] = useState([]);
@@ -457,3 +457,5 @@ export default function POSPanel({ activeChat, clientCard, pinnedGroupsData, sho
     </div>
   );
 }
+
+export default React.memo(POSPanel);

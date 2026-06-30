@@ -5,7 +5,7 @@ import { Search, MoreVertical, Plus, X, Phone, User, Users, Pencil, Check } from
 import { ChatRow, Avatar } from '../_atoms';
 import styles from '../page.module.css';
 
-export default function ChatListPanel({
+function ChatListPanel({
   chats,
   setChats,
   activeChat,
@@ -504,3 +504,5 @@ export default function ChatListPanel({
     </>
   );
 }
+
+export default React.memo(ChatListPanel);

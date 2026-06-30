@@ -1,10 +1,10 @@
 'use client';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Avatar } from '../_atoms';
 import { titleCase } from '../_utils';
 import styles from '../page.module.css';
 
-export default function ClientCard({
+function ClientCard({
   activeChat,
   setActiveChat,
   setChats,
@@ -23,6 +23,14 @@ export default function ClientCard({
   const [editAddress, setEditAddress] = useState('');
   const [editStore, setEditStore] = useState('');
   const [savingField, setSavingField] = useState(false);
+
+  // Limpiar estado de edición al cambiar de chat
+  useEffect(() => {
+    setEditingField(null);
+    setEditName('');
+    setEditAddress('');
+    setEditStore('');
+  }, [activeChat?.phone]);
 
   const saveClientField = useCallback(async (field) => {
     setSavingField(true);
@@ -360,3 +368,5 @@ export default function ClientCard({
     </div>
   );
 }
+
+export default React.memo(ClientCard);

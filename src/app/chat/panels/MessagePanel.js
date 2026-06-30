@@ -6,7 +6,7 @@ import { Avatar, Ticks, TypingDots, MessageBubble } from '../_atoms';
 import { dayLabel, msgMatchesPending, titleCase } from '../_utils';
 import styles from '../page.module.css';
 
-export default function MessagePanel({
+function MessagePanel({
   activeChat,
   setActiveChat,
   setChats,
@@ -49,6 +49,10 @@ export default function MessagePanel({
     setPendingMsgs([]);
     setInputText('');
     setAttachment(null);
+    setVsOpen(false);
+    setVsEditing(null);
+    setForwardMsg(null);
+    setForwardSearch('');
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   }, [activeChat?.phone]);
@@ -585,3 +589,5 @@ export default function MessagePanel({
     </div>
   );
 }
+
+export default React.memo(MessagePanel);
