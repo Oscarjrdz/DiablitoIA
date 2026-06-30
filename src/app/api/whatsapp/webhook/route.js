@@ -1359,11 +1359,15 @@ export async function POST(req) {
         return NextResponse.json({ success: true, note: 'client_blocked' });
     }
 
-    // ── 🛵 DELIVERY MODE: Si el silencio está activo, mensaje ya guardado, solo salir ──
+    // ── 🛵 DELIVERY MODE: Si el silencio está activo y el cliente ya está registrado, salir ──
+    // Para clientes sin nombre (no registrados) el bot de captura debe seguir activo
     const deliveryActive = await redis.get(`delivery_bot_silence_${cleanPhone}`);
     if (deliveryActive) {
-        console.log(`[Bot] Delivery mode activo para ${cleanPhone} - mensaje guardado, bot silenciado`);
-        return NextResponse.json({ success: true, note: 'delivery_mode_silent' });
+        const hasName = await redis.get(`client_name_${cleanPhone}`);
+        if (hasName) {
+            console.log(`[Bot] Delivery mode activo para ${cleanPhone} - mensaje guardado, bot silenciado`);
+            return NextResponse.json({ success: true, note: 'delivery_mode_silent' });
+        }
     }
 
     // ── 🔴 SISTEMA OFFLINE: respuesta determinista, sin IA ──
