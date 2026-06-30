@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
 import { generateFolio, buildPromoText } from '@/lib/folio';
 import { publishChatEvent } from '@/lib/realtime';
+import { saveChatMeta } from '@/lib/chatMeta';
 
 // Allow up to 60s for commands that paginate Loyverse (CLIENTES, VENTAS, etc.)
 export const maxDuration = 60;
@@ -91,6 +92,59 @@ async function trackMsgId(msgId, cleanPhone) {
   await redis.setex(`chat_msg_${msgId}`, 604800, cleanPhone);
 }
 
+function normalizeChatPhone(value) {
+  if (!value) return null;
+  const raw = String(value);
+  if (raw.includes('@g.us')) return '52' + raw.replace(/\D/g, '').slice(-10);
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return null;
+  return digits.startsWith('52') ? digits : '52' + digits.slice(-10);
+}
+
+function normalizeAckStatus(rawStatus) {
+  const statusId = typeof rawStatus === 'string' ? rawStatus.toLowerCase() : rawStatus;
+  if ([0, 1, 2, 'server_ack', 'pending', 'sent'].includes(statusId)) return 'sent';
+  if ([3, 'delivery_ack', 'delivered'].includes(statusId)) return 'delivered';
+  if ([4, 5, 'read', 'read_ack', 'played'].includes(statusId)) return 'read';
+  return null;
+}
+
+async function updateMessageAckStatus(msgId, newStatus, candidatePhones) {
+  if (!msgId || !newStatus) return null;
+  const STATUS_ORDER = { sent: 1, delivered: 2, read: 3 };
+  const phones = [...new Set(candidatePhones.filter(Boolean))];
+
+  for (const chatPhone of phones) {
+    const hKey = `chat_hist_${chatPhone}@c.us`;
+    try {
+      const hData = await redis.get(hKey) || await redis.get(`chat_hist_${chatPhone}`);
+      if (!hData) continue;
+      const hist = typeof hData === 'string' ? JSON.parse(hData) : hData;
+      let updated = false;
+      for (let i = hist.length - 1; i >= 0; i--) {
+        const p = hist[i].parts?.[0];
+        if (p?.msgId === msgId) {
+          if ((STATUS_ORDER[newStatus] || 0) > (STATUS_ORDER[p.status] || 0)) {
+            p.status = newStatus;
+            updated = true;
+          }
+          break;
+        }
+      }
+      if (!updated) continue;
+      const json = JSON.stringify(hist);
+      await redis.set(hKey, json);
+      await redis.set(`chat_hist_${chatPhone}`, json);
+      await redis.setex(`chat_msg_${msgId}`, 604800, chatPhone);
+      const chatMeta = await saveChatMeta(chatPhone, hist);
+      await publishChatEvent({ phone: chatPhone, redisPhone: chatPhone, msgId, status: newStatus, chat: chatMeta, reason: 'ack' });
+      return chatPhone;
+    } catch {}
+  }
+
+  return null;
+}
+
 // ── Descarga y cachea media en Redis; devuelve la URL del proxy ──
 // Si el fetch falla (Vercel no puede alcanzar el gateway), devuelve null
 // y el caller usa la URL directa como fallback.
@@ -154,7 +208,8 @@ async function mergeAndSave(historyKey, cleanPhone, newEntries) {
   await redis.set(historyKey, json);
   await redis.set(`chat_hist_${cleanPhone}@c.us`, json);
   await redis.set(`chat_hist_${cleanPhone}`, json);
-  await publishChatEvent({ phone: cleanPhone, reason: 'history' });
+  const chatMeta = await saveChatMeta(cleanPhone, fresh);
+  await publishChatEvent({ phone: cleanPhone, redisPhone: cleanPhone, chat: chatMeta, reason: 'history' });
   return fresh;
 }
 
@@ -214,49 +269,39 @@ export async function POST(req) {
 
       for (const item of dataArr) {
         // ── Extraer msgId (múltiples formatos de gateway) ──
-        const rawId = item?.key?.id || item?.id?._serialized || item?.id || item?.msgId || null;
+        const rawId = item?.key?.id
+          || item?.__raw?.key?.id
+          || item?.id?._serialized
+          || item?.id
+          || item?.msgId
+          || null;
         const msgId = typeof rawId === 'object' ? (rawId?._serialized || null) : rawId;
 
         // ── Extraer statusId (múltiples formatos, normalizar a minúsculas) ──
-        const rawStatus = item?.update?.status ?? item?.ack ?? item?.status ?? null;
-        const statusId = typeof rawStatus === 'string' ? rawStatus.toLowerCase() : rawStatus;
+        const rawStatus = item?.update?.status
+          ?? item?.__raw?.update?.status
+          ?? item?.ack
+          ?? item?.status
+          ?? null;
 
-        if (!msgId || statusId === null) continue;
+        if (!msgId || rawStatus === null) continue;
 
-        const STATUS_ORDER = { sent: 1, delivered: 2, read: 3 };
-        let newStatus = null;
-        if ([0, 1, 2, 'server_ack', 'pending', 'sent'].includes(statusId)) newStatus = 'sent';
-        if ([3, 'delivery_ack', 'delivered'].includes(statusId)) newStatus = 'delivered';
-        if ([4, 5, 'read', 'read_ack', 'played'].includes(statusId)) newStatus = 'read';
+        const newStatus = normalizeAckStatus(rawStatus);
 
         // ── Actualizar historial ──
         if (newStatus) {
-          const chatPhone = await redis.get(`chat_msg_${msgId}`);
-          if (chatPhone) {
-            const hKey = `chat_hist_${chatPhone}@c.us`;
-            try {
-              const hData = await redis.get(hKey);
-              if (hData) {
-                const hist = typeof hData === 'string' ? JSON.parse(hData) : hData;
-                for (let i = hist.length - 1; i >= 0; i--) {
-                  const p = hist[i].parts?.[0];
-                  if (p?.msgId === msgId) {
-                    if ((STATUS_ORDER[newStatus] || 0) > (STATUS_ORDER[p.status] || 0)) {
-                      p.status = newStatus;
-                    }
-                    break;
-                  }
-                }
-                await redis.set(hKey, JSON.stringify(hist));
-                await redis.set(`chat_hist_${chatPhone}`, JSON.stringify(hist));
-                await publishChatEvent({ phone: chatPhone, redisPhone: chatPhone, msgId, status: newStatus, reason: 'ack' });
-              }
-            } catch {}
+          const mappedPhone = await redis.get(`chat_msg_${msgId}`);
+          const toPhone = normalizeChatPhone(item?.to || item?.jid || item?.remoteJid || item?.key?.remoteJid);
+          const rawPhone = normalizeChatPhone(item?.__raw?.key?.remoteJid);
+          const updatedPhone = await updateMessageAckStatus(msgId, newStatus, [toPhone, mappedPhone, rawPhone]);
+          if (!updatedPhone) {
+            await redis.lpush('debug_ack_unmatched', JSON.stringify({ ts: Date.now(), msgId, newStatus, toPhone, mappedPhone, rawPhone, item }));
+            await redis.ltrim('debug_ack_unmatched', 0, 49);
           }
         }
 
         // Semáforo de promo
-        if ([3, 4, 5, 'READ', 'PLAYED'].includes(statusId)) {
+        if (newStatus === 'read') {
           const phone = await redis.get(`promo_msg_${msgId}`);
           if (phone) await redis.set(`promo_pos_${phone}`, 'verde');
         }
@@ -402,7 +447,8 @@ export async function POST(req) {
 
           await redis.set(historyKey, JSON.stringify(history));
           await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(history));
-          await publishChatEvent({ phone: cleanPhone, reason: 'order' });
+          const orderMeta = await saveChatMeta(cleanPhone, history);
+          await publishChatEvent({ phone: cleanPhone, redisPhone: cleanPhone, chat: orderMeta, reason: 'order' });
       }
       return NextResponse.json({ success: true, note: 'order_processed_and_saved' });
     }
@@ -1088,9 +1134,10 @@ export async function POST(req) {
         
         await redis.set(groupHistKey, JSON.stringify(gParsed));
         await redis.set(`chat_hist_${cleanGroupPhone}`, JSON.stringify(gParsed));
+        const groupMeta = await saveChatMeta(cleanGroupPhone, gParsed);
         await redis.incr(`chat_unread_${cleanGroupPhone}`);
         await redis.del(`human_read_${cleanGroupPhone}`);
-        await publishChatEvent({ phone: phoneId, redisPhone: cleanGroupPhone, reason: 'group-message' });
+        await publishChatEvent({ phone: phoneId, redisPhone: cleanGroupPhone, chat: groupMeta, reason: 'group-message' });
 
         // ── 🎟️ FOLIO EN GRUPOS ──
         // 1) Selección de sucursal pendiente → inyectar en textMsg y caer al flujo real de activación

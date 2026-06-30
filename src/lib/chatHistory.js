@@ -1,4 +1,5 @@
 import { redis } from './redis';
+import { saveChatMeta } from './chatMeta';
 
 /**
  * Saves a bot/system message to the Redis chat history under both standard keys.
@@ -40,6 +41,7 @@ export async function saveBotMessage(phone, text, name = null, imageUrl = null, 
     // Persist under both keys for maximum safety and quick lookup by frontend
     await redis.set(histKey, JSON.stringify(parsed));
     await redis.set(`chat_hist_${cleanPhone}`, JSON.stringify(parsed));
+    await saveChatMeta(cleanPhone, parsed);
 
     // Keep name cached for consistency in chat list
     if (name) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
 import { publishChatEvent } from '@/lib/realtime';
+import { saveChatMeta } from '@/lib/chatMeta';
 
 // GET — List all WhatsApp groups
 export async function GET() {
@@ -221,7 +222,8 @@ export async function POST(req) {
       await redis.set(histKey, JSON.stringify([]));
     }
     await redis.set(`client_name_${cleanPhone}`, `📌 ${groupName || 'Grupo'}`);
-    await publishChatEvent({ phone: groupId, redisPhone: cleanPhone, reason: 'group-pin' });
+    const chatMeta = await saveChatMeta(cleanPhone, histExists ? (typeof histExists === 'string' ? JSON.parse(histExists) : histExists) : []);
+    await publishChatEvent({ phone: groupId, redisPhone: cleanPhone, chat: chatMeta, reason: 'group-pin' });
 
     return NextResponse.json({ success: true });
   } catch (e) {

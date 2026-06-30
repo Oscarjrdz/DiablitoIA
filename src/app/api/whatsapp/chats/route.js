@@ -1,8 +1,55 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
+import { normalizeChatPhone, saveChatMeta } from '@/lib/chatMeta';
 
-export async function GET() {
+const CHAT_PAGE_SIZE = 10;
+const CHAT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+async function purgeExpiredChats(chats) {
+  const cutoff = Date.now() - CHAT_RETENTION_MS;
+  const expired = chats.filter(c =>
+    !c.isGroup &&
+    c._redisPhone &&
+    c.lastTs > 0 &&
+    c.lastTs < cutoff &&
+    (c.msgCount || 0) > 0
+  );
+
+  if (!expired.length) return 0;
+
+  await Promise.all(expired.map(async ({ _redisPhone }) => {
+    const phone10 = _redisPhone.slice(-10);
+    const keys = [
+      `chat_hist_${_redisPhone}@c.us`,
+      `chat_hist_${_redisPhone}`,
+      `chat_meta_${_redisPhone}`,
+      `chat_unread_${_redisPhone}`,
+      `typing_${_redisPhone}`,
+      `human_read_${_redisPhone}`,
+      `delivery_mode_${_redisPhone}`,
+      `delivery_bot_silence_${_redisPhone}`,
+      `blocked_${_redisPhone}`,
+      `profile_pic_${_redisPhone}`,
+    ];
+    try {
+      const phoneKeys = await redis.keys(`profile_pic_*${phone10}*`);
+      if (phoneKeys?.length) keys.push(...phoneKeys);
+    } catch {}
+    await Promise.all([...new Set(keys)].map(key => redis.del(key)));
+    await redis.srem?.('chat_phones', _redisPhone);
+  }));
+
+  return expired.length;
+}
+
+export async function GET(req) {
   try {
+    const { searchParams } = new URL(req.url);
+    const limitParam = parseInt(searchParams.get('limit') || `${CHAT_PAGE_SIZE}`, 10);
+    const offsetParam = parseInt(searchParams.get('offset') || '0', 10);
+    const limit = Math.min(Math.max(Number.isFinite(limitParam) ? limitParam : CHAT_PAGE_SIZE, 1), 50);
+    const offset = Math.max(Number.isFinite(offsetParam) ? offsetParam : 0, 0);
+
     // ── Set O(1) primero; fallback a redis.keys si el set está vacío ──
     let phones = [];
     const setMembers = await redis.smembers?.('chat_phones') ?? [];
@@ -16,8 +63,6 @@ export async function GET() {
         for (const p of phones) await redis.sadd?.('chat_phones', p);
       }
     }
-    let fetchKeys = phones.map(p => `chat_hist_${p}@c.us`);
-
     // ── 📌 Inyectar TODOS los Grupos Pinned ──
     const pinnedRaw = await redis.get('pinned_groups');
     const pinnedGroups = pinnedRaw ? (typeof pinnedRaw === 'string' ? JSON.parse(pinnedRaw) : pinnedRaw) : [];
@@ -34,33 +79,32 @@ export async function GET() {
       allPinnedMap[legacyGrupoId] = 'Grupo Ventas';
     }
 
-    // Inject each pinned group into the phones/fetchKeys arrays
+    // Inject each pinned group into the phones arrays
     for (const [gId, gName] of Object.entries(allPinnedMap)) {
-      let gCleanPhone;
-      if (gId.includes('@g.us')) {
-        gCleanPhone = '52' + gId.replace(/\D/g, '').slice(-10);
-      } else if (gId.startsWith('group_')) {
-        gCleanPhone = gId.replace('group_', '');
-      } else {
-        gCleanPhone = gId;
-      }
+      let gCleanPhone = normalizeChatPhone(gId.startsWith('group_') ? gId.replace('group_', '') : gId);
       const gPhoneIndex = phones.indexOf(gCleanPhone);
       if (gPhoneIndex !== -1) {
         // Replace the "phone" with the group ID so frontend can respond
         phones[gPhoneIndex] = gId;
       } else {
         phones.push(gId);
-        fetchKeys.push(`chat_hist_${gCleanPhone}@c.us`);
       }
     }
 
-    if (!fetchKeys || fetchKeys.length === 0) return NextResponse.json({ success: true, chats: [] });
+    if (!phones || phones.length === 0) {
+      return NextResponse.json({ success: true, chats: [], total: 0, limit, offset, nextOffset: null, hasMore: false, deletedOld: 0 });
+    }
+
+    const entries = phones.map(phone => {
+      let redisPhone;
+      if (phone.includes('@g.us')) redisPhone = normalizeChatPhone(phone);
+      else if (phone.startsWith('group_')) redisPhone = normalizeChatPhone(phone.replace('group_', ''));
+      else redisPhone = normalizeChatPhone(phone);
+      return { phone, redisPhone };
+    });
 
     // Batch: build all metadata keys and fetch in one mget
-    const metaKeys = phones.flatMap(p => {
-      let redisPhone = p;
-      if (p.includes('@g.us')) redisPhone = '52' + p.replace(/\D/g, '').slice(-10);
-      else if (p.startsWith('group_')) redisPhone = p.replace('group_', '');
+    const stateKeys = entries.flatMap(({ redisPhone }) => {
       return [
         `client_name_${redisPhone}`,
         `chat_unread_${redisPhone}`,
@@ -71,26 +115,39 @@ export async function GET() {
         `blocked_${redisPhone}`
       ];
     });
+    const chatMetaKeys = entries.map(({ redisPhone }) => `chat_meta_${redisPhone}`);
 
-    const [histResults, metaResults] = await Promise.all([
-      fetchKeys.length > 0 ? redis.mget(...fetchKeys) : [],
-      metaKeys.length > 0 ? redis.mget(...metaKeys) : []
+    const [chatMetaResults, stateResults] = await Promise.all([
+      chatMetaKeys.length > 0 ? redis.mget(...chatMetaKeys) : [],
+      stateKeys.length > 0 ? redis.mget(...stateKeys) : []
     ]);
 
-    const chats = phones.map((phone, i) => {
-      try {
-        const histData = histResults[i];
-        const base = i * 7;
-        const cachedName = metaResults[base] || null;
-        const unreadRaw = metaResults[base + 1] || '0';
-        const cachedStore = metaResults[base + 2] || '';
-        const humanRead = metaResults[base + 3] || null;
-        const deliveryMode = metaResults[base + 4] || null;
-        const botSilence = metaResults[base + 5] || null;
-        const isBlocked = metaResults[base + 6] || null;
+    const chatMetas = chatMetaResults.map(m => m ? (typeof m === 'string' ? JSON.parse(m) : m) : null);
+    const missingMeta = entries
+      .map((entry, i) => ({ ...entry, i }))
+      .filter(({ i }) => !chatMetas[i]);
 
+    if (missingMeta.length > 0) {
+      const missingHistKeys = missingMeta.map(({ redisPhone }) => `chat_hist_${redisPhone}@c.us`);
+      const missingHist = await redis.mget(...missingHistKeys);
+      await Promise.all(missingMeta.map(async ({ redisPhone, i }, idx) => {
+        const histData = missingHist[idx] || await redis.get(`chat_hist_${redisPhone}`);
         const parsed = typeof histData === 'string' ? JSON.parse(histData) : (histData || []);
-        const lastMsg = parsed.length > 0 ? parsed[parsed.length - 1] : null;
+        chatMetas[i] = await saveChatMeta(redisPhone, parsed);
+      }));
+    }
+
+    const chats = entries.map(({ phone, redisPhone }, i) => {
+      try {
+        const base = i * 7;
+        const cachedName = stateResults[base] || null;
+        const unreadRaw = stateResults[base + 1] || '0';
+        const cachedStore = stateResults[base + 2] || '';
+        const humanRead = stateResults[base + 3] || null;
+        const deliveryMode = stateResults[base + 4] || null;
+        const botSilence = stateResults[base + 5] || null;
+        const isBlocked = stateResults[base + 6] || null;
+        const chatMeta = chatMetas[i];
 
         let name = String(cachedName ?? phone.slice(-10));
         let isGroup = false;
@@ -100,33 +157,56 @@ export async function GET() {
         }
 
         return {
+          _redisPhone: redisPhone,
           phone,
           name,
-          lastText: (lastMsg?.parts?.[0]?.text || '').substring(0, 80),
-          lastTs: lastMsg?.parts?.[0]?.ts || 0,
-          fromMe: lastMsg?.role === 'model',
+          lastText: chatMeta?.lastText || '',
+          lastTs: chatMeta?.lastTs || 0,
+          lastStatus: chatMeta?.lastStatus || (chatMeta?.fromMe ? 'sent' : null),
+          fromMe: !!chatMeta?.fromMe,
           unread: parseInt(unreadRaw || '0'),
-          msgCount: parsed.length,
+          msgCount: chatMeta?.msgCount || 0,
           store: cachedStore || '',
-          needsHuman: !humanRead && parsed.length > 0,
+          needsHuman: !humanRead && (chatMeta?.msgCount || 0) > 0,
           deliveryMode: !!deliveryMode,
           botSilent: !!botSilence,
           isBlocked: !!isBlocked,
           isGroup
         };
       } catch {
-        return { phone, name: allPinnedMap[phone] ? `📌 ${allPinnedMap[phone]}` : phone.slice(-10), lastText: '', lastTs: 0, fromMe: false, unread: 0, msgCount: 0, store: '', needsHuman: false, deliveryMode: false, botSilent: false, isGroup: !!allPinnedMap[phone] };
+        return { _redisPhone: entries[i]?.redisPhone, phone, name: allPinnedMap[phone] ? `📌 ${allPinnedMap[phone]}` : phone.slice(-10), lastText: '', lastTs: 0, lastStatus: null, fromMe: false, unread: 0, msgCount: 0, store: '', needsHuman: false, deliveryMode: false, botSilent: false, isGroup: !!allPinnedMap[phone] };
       }
     });
 
-    chats.sort((a, b) => {
+    const deletedOld = await purgeExpiredChats(chats);
+    const liveChats = chats.filter(c => !(
+      !c.isGroup &&
+      c._redisPhone &&
+      c.lastTs > 0 &&
+      c.lastTs < Date.now() - CHAT_RETENTION_MS &&
+      (c.msgCount || 0) > 0
+    ));
+
+    liveChats.sort((a, b) => {
       if (a.isGroup && !b.isGroup) return -1;
       if (!a.isGroup && b.isGroup) return 1;
       return (b.lastTs || 0) - (a.lastTs || 0);
     });
-    return NextResponse.json({ success: true, chats });
+    const total = liveChats.length;
+    const page = liveChats.slice(offset, offset + limit).map(({ _redisPhone, ...chat }) => chat);
+    const nextOffset = offset + page.length;
+    return NextResponse.json({
+      success: true,
+      chats: page,
+      total,
+      limit,
+      offset,
+      nextOffset: nextOffset < total ? nextOffset : null,
+      hasMore: nextOffset < total,
+      deletedOld,
+    });
   } catch (e) {
-    return NextResponse.json({ success: false, error: e.message, chats: [] });
+    return NextResponse.json({ success: false, error: e.message, chats: [], total: 0, limit: CHAT_PAGE_SIZE, offset: 0, nextOffset: null, hasMore: false, deletedOld: 0 });
   }
 }
 
@@ -186,6 +266,7 @@ export async function DELETE(req) {
     const manualKeys = [
       `chat_hist_${rawPhone}@c.us`, `chat_hist_${rawPhone}`,
       `chat_hist_${cleanPhone}@c.us`, `chat_hist_${cleanPhone}`,
+      `chat_meta_${rawPhone}`, `chat_meta_${cleanPhone}`,
       `chat_unread_${cleanPhone}`, `typing_${cleanPhone}`,
       `client_name_${cleanPhone}`, `client_points_${cleanPhone}`,
       `client_store_${cleanPhone}`, `client_registered_${cleanPhone}`,

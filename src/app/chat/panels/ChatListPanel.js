@@ -20,6 +20,11 @@ function ChatListPanel({
   pinnedGroupsData,
   setPinnedGroupsData,
   fetchChats,
+  queueProfilePic,
+  loadMoreChats,
+  loadingMoreChats,
+  hasMoreChats,
+  chatTotal,
   showToast,
 }) {
   const [search, setSearch] = useState('');
@@ -164,6 +169,13 @@ function ChatListPanel({
     setRenameValue('');
   }, [fetchChats, setPinnedGroupsData, showToast]);
 
+  const loadVisibleProfilePics = useCallback(({ startIndex, endIndex }) => {
+    if (!queueProfilePic) return;
+    filtered.slice(startIndex, endIndex + 1).forEach(chat => {
+      if (profilePics[chat.phone] === undefined) queueProfilePic(chat.phone);
+    });
+  }, [filtered, profilePics, queueProfilePic]);
+
   return (
     <>
       <div className={`${styles.left} ${activeChat ? styles.leftHidden : ''}`}>
@@ -173,7 +185,7 @@ function ChatListPanel({
         <div className={styles.leftHeader}>
           <Avatar name="El Diablito" size={40} />
           <span className={styles.leftTitle}>
-            Chats <span style={{ fontSize: 12, fontWeight: 500, opacity: 0.55, marginLeft: 4 }}>({chats.length})</span>
+            Chats <span style={{ fontSize: 12, fontWeight: 500, opacity: 0.55, marginLeft: 4 }}>({chats.length}{chatTotal > chats.length ? `/${chatTotal}` : ''})</span>
           </span>
           <div className={styles.headerIconsLeft}>
             <button
@@ -363,6 +375,18 @@ function ChatListPanel({
               data={filtered}
               overscan={5}
               computeItemKey={(_, chat) => chat.phone}
+              rangeChanged={loadVisibleProfilePics}
+              endReached={() => {
+                if (hasMoreChats && !loadingMoreChats) loadMoreChats?.();
+              }}
+              components={{
+                Footer: () => (
+                  <div style={{ minHeight: 34, display: 'grid', placeItems: 'center' }}>
+                    {loadingMoreChats && <span className={styles.tip}>Cargando más chats...</span>}
+                    {!loadingMoreChats && !hasMoreChats && chats.length > 10 && <span className={styles.tip}>Fin de la lista</span>}
+                  </div>
+                )
+              }}
               itemContent={(_, chat) => (
                 <ChatRow
                   chat={chat}

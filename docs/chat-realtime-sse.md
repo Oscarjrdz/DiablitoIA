@@ -33,17 +33,54 @@ flowchart LR
 
 El archivo principal es `src/app/chat/page.js`.
 
-- Al cargar la pagina se hace una sincronizacion inicial con `/api/whatsapp/chats`.
+- Al cargar la pagina se hace una sincronizacion inicial con `/api/whatsapp/chats?limit=10&offset=0`.
 - Al abrir un chat se carga `/api/whatsapp/history?phone=...`.
 - Despues de eso, no hay intervalos de polling para lista ni mensajes.
 - La UI abre `EventSource('/api/whatsapp/sse')`.
 - Cada evento `chat:update` dispara:
-  - refresco de lista de chats, con debounce corto de 80 ms;
-  - refresco del historial solo si el evento corresponde al chat activo;
-  - actualizacion local del modo online/offline cuando el evento trae `reason: "system-mode"`.
+  - parche local de la fila cuando el evento trae metadatos de chat;
+  - actualizacion local de ACKs/palomitas, typing, leido/no leido y modo online/offline;
+  - refresco de primera pagina solo cuando el evento no trae datos suficientes para parchear;
+  - refresco del historial solo si el evento corresponde al chat activo.
 - Al volver a una pestana visible se hace una sincronizacion unica para cubrir pausas del navegador.
 
 El unico `setInterval` relacionado con SSE es un heartbeat de servidor cada 20 segundos para mantener viva la conexion; no consulta datos.
+
+## Lista de chats
+
+`/api/whatsapp/chats` entrega paginas de 10 conversaciones por defecto:
+
+```txt
+/api/whatsapp/chats?limit=10&offset=0
+/api/whatsapp/chats?limit=10&offset=10
+```
+
+La respuesta incluye `total`, `nextOffset` y `hasMore`. El panel usa `react-virtuoso` y pide la siguiente pagina al llegar al final del scroll, asi la primera carga no arrastra cientos de historiales ni fotos.
+
+El endpoint lee primero `chat_meta_*`, `chat_unread_*`, sucursal, estado humano, modo delivery y bloqueo en batch. Solo consulta el historial completo cuando falta metadata legacy; al migrar, guarda `chat_meta_*` para que las siguientes lecturas sean ligeras.
+
+## Retencion
+
+En cada lectura de `/api/whatsapp/chats` se eliminan conversaciones no fijadas con mas de 30 dias sin actividad:
+
+- historial `chat_hist_*`;
+- metadata `chat_meta_*`;
+- contadores/estado de chat;
+- foto de perfil cacheada;
+- membresia en `chat_phones`.
+
+No se borran grupos fijados ni datos de cliente Loyverse por esta limpieza automatica.
+
+## Imagenes
+
+Las imagenes seleccionadas en el compositor y en Venta Sugestiva se comprimen en el navegador antes de enviarse:
+
+- dimension maxima: 1280 px en el lado mas largo;
+- salida JPEG con calidad 0.72;
+- si la version comprimida no pesa menos, se conserva el archivo original;
+- los GIFs se conservan sin convertir para no perder animacion.
+
+Las fotos de perfil ya no se cargan para todos los chats de golpe: se encolan solamente para las filas visibles del listado virtualizado, con un maximo de 3 descargas concurrentes.
 
 ## Canal de eventos
 

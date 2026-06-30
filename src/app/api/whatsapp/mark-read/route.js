@@ -18,7 +18,7 @@ export async function POST(req) {
       await redis.del(`human_read_${cleanPhone}`);
       await redis.set(`chat_unread_${cleanPhone}`, '1');
     }
-    await publishChatEvent({ phone, redisPhone: cleanPhone, reason: 'read-state' });
+    await publishChatEvent({ phone, redisPhone: cleanPhone, read: !!read, reason: 'read-state' });
 
     return NextResponse.json({ success: true, needsHuman: !read });
   } catch (e) {

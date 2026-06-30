@@ -25,9 +25,13 @@ export default function ChatPage() {
   const [botSilent, setBotSilent] = useState(false);
   const [toast, setToast] = useState(null);
   const [dismissedAlerts, setDismissedAlerts] = useState({});
+  const [loadingMoreChats, setLoadingMoreChats] = useState(false);
+  const [hasMoreChats, setHasMoreChats] = useState(true);
+  const [chatTotal, setChatTotal] = useState(0);
 
   // ── Refs ──
   const activeChatRef = useRef(null);
+  const chatsRef = useRef([]);
   const sseRef = useRef(null);
   const sseConnectedRef = useRef(false);
   const tabVisibleRef = useRef(true);
@@ -43,11 +47,22 @@ export default function ChatPage() {
   const lastStatusSigRef = useRef('');
   const alarmRef = useRef(null);
   const chatRefreshTimerRef = useRef(null);
+  const nextChatOffsetRef = useRef(0);
+  const loadingMoreChatsRef = useRef(false);
+  const hasMoreChatsRef = useRef(true);
 
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3200);
   }, []);
+
+  useEffect(() => {
+    chatsRef.current = chats;
+  }, [chats]);
+
+  useEffect(() => {
+    hasMoreChatsRef.current = hasMoreChats;
+  }, [hasMoreChats]);
 
   // ── Foto de perfil — cola con máximo 3 concurrentes ──
   const addOptimisticRef = useRef(null);
@@ -71,37 +86,58 @@ export default function ChatPage() {
   }, [drainPicQueue]);
 
   // ── Fetch lista de chats ──
-  const fetchChats = useCallback(async () => {
+  const fetchChats = useCallback(async ({ reset = true } = {}) => {
+    if (!reset && loadingMoreChatsRef.current) return;
+    if (!reset && !hasMoreChatsRef.current) return;
+    const offset = reset ? 0 : nextChatOffsetRef.current;
+    if (!reset) {
+      loadingMoreChatsRef.current = true;
+      setLoadingMoreChats(true);
+    }
     try {
-      const res = await fetch('/api/whatsapp/chats');
+      const res = await fetch(`/api/whatsapp/chats?limit=10&offset=${offset}`);
       const data = await res.json();
       if (data.success) {
         setChats(prev => {
           const prevMap = new Map(prev.map(c => [c.phone, c]));
-          const next = (data.chats || []).map(c => {
+          const incoming = (data.chats || []).map(c => {
             const local = prevMap.get(c.phone);
             if (local && local.unread === 0 && c.unread > 0 && !c.needsHuman) return { ...c, unread: 0 };
             return local &&
               local.unread === c.unread &&
               local.needsHuman === c.needsHuman &&
               local.lastTs === c.lastTs &&
-              local.lastText === c.lastText
+              local.lastText === c.lastText &&
+              local.lastStatus === c.lastStatus
               ? local
               : c;
           });
+          const next = reset
+            ? incoming
+            : [...prev.filter(c => !incoming.some(n => n.phone === c.phone)), ...incoming];
           if (next.length === prev.length && next.every((c, i) => c === prev[i])) return prev;
           return next;
         });
+        nextChatOffsetRef.current = data.nextOffset ?? offset + (data.chats?.length || 0);
+        setHasMoreChats(!!data.hasMore);
+        setChatTotal(data.total || 0);
         failCountRef.current = 0;
         setIsOffline(false);
-        (data.chats || []).slice(0, 20).forEach(c => queueProfilePic(c.phone));
       }
     } catch {
       failCountRef.current++;
       if (failCountRef.current >= 3) setIsOffline(true);
     }
     setLoadingChats(false);
-  }, [queueProfilePic]);
+    if (!reset) {
+      loadingMoreChatsRef.current = false;
+      setLoadingMoreChats(false);
+    }
+  }, []);
+
+  const loadMoreChats = useCallback(() => {
+    fetchChats({ reset: false });
+  }, [fetchChats]);
 
   // ── Fetch mensajes (delta-aware) ──
   const fetchMessages = useCallback(async (phone) => {
@@ -139,7 +175,7 @@ export default function ChatPage() {
 
   const scheduleFetchChats = useCallback(() => {
     clearTimeout(chatRefreshTimerRef.current);
-    chatRefreshTimerRef.current = setTimeout(fetchChats, 80);
+    chatRefreshTimerRef.current = setTimeout(() => fetchChats({ reset: true }), 80);
   }, [fetchChats]);
 
   const fetchSystemMode = useCallback(async () => {
@@ -147,6 +183,45 @@ export default function ChatPage() {
       const d = await fetch('/api/whatsapp/system-mode').then(r => r.json());
       setShopOffline(d.mode === 'offline');
     } catch {}
+  }, []);
+
+  const patchChatFromEvent = useCallback((data) => {
+    if (!data?.chat) return false;
+    const eventPhone = data.phone || data.redisPhone || data.chat.redisPhone;
+    const eventNorm = eventPhone ? eventPhone.replace('@c.us', '').replace(/\D/g, '').slice(-10) : '';
+    if (!eventNorm) return false;
+
+    const hadMatch = chatsRef.current.some(c => c.phone.replace('@c.us', '').replace(/\D/g, '').slice(-10) === eventNorm);
+    if (!hadMatch) return false;
+
+    setChats(prev => {
+      let found = false;
+      const next = prev.map(c => {
+        if (c.phone.replace('@c.us', '').replace(/\D/g, '').slice(-10) !== eventNorm) return c;
+        found = true;
+        return {
+          ...c,
+          lastText: data.chat.lastText ?? c.lastText,
+          lastTs: data.chat.lastTs ?? c.lastTs,
+          lastStatus: data.chat.lastStatus ?? c.lastStatus,
+          fromMe: data.chat.fromMe ?? c.fromMe,
+          msgCount: data.chat.msgCount ?? c.msgCount,
+          ...(data.reason === 'manual-send' ? { unread: 0, needsHuman: false, botSilent: true } : {}),
+          ...((data.reason === 'history' || data.reason === 'group-message') && data.chat.fromMe === false
+            ? { unread: Math.max((c.unread || 0) + 1, 1), needsHuman: true }
+            : {}),
+        };
+      });
+      if (found) {
+        return [...next].sort((a, b) => {
+          if (a.isGroup && !b.isGroup) return -1;
+          if (!a.isGroup && b.isGroup) return 1;
+          return (b.lastTs || 0) - (a.lastTs || 0);
+        });
+      }
+      return prev;
+    });
+    return true;
   }, []);
 
   // ── Fetch tarjeta de cliente ──
@@ -246,12 +321,27 @@ export default function ChatPage() {
         // read-state: actualizar chat específico — sin refetch completo de lista
         if (data.reason === 'read-state') {
           const p = normPhone(data.redisPhone || data.phone);
-          if (p) setChats(prev => prev.map(c => normPhone(c.phone) === p ? { ...c, needsHuman: false, unread: 0 } : c));
+          if (p) {
+            setChats(prev => prev.map(c =>
+              normPhone(c.phone) === p
+                ? { ...c, needsHuman: !data.read, unread: data.read ? 0 : Math.max(c.unread || 0, 1) }
+                : c
+            ));
+          }
           return;
         }
 
         // ack (palomitas): actualizar status del mensaje directo — sin fetchMessages ni fetchChats
         if (data.reason === 'ack') {
+          patchChatFromEvent(data);
+          if (data.status) {
+            const p = normPhone(data.redisPhone || data.phone);
+            setChats(prev => prev.map(c =>
+              normPhone(c.phone) === p && c.fromMe
+                ? { ...c, lastStatus: data.status }
+                : c
+            ));
+          }
           if (isActiveChat && data.msgId && data.status) {
             setMessages(prev => {
               let changed = false;
@@ -262,6 +352,7 @@ export default function ChatPage() {
                 }
                 return m;
               });
+              if (changed && activePhone) msgCacheRef.current.set(activePhone, next);
               return changed ? next : prev;
             });
           }
@@ -271,7 +362,7 @@ export default function ChatPage() {
         // Resto (history, order, manual-send, block-state, create-chat, group-*):
         // necesitan actualizar mensajes y/o lista de chats
         if (isActiveChat) fetchMessages(activePhone);
-        scheduleFetchChats();
+        if (!patchChatFromEvent(data)) scheduleFetchChats();
       } catch {}
     };
 
@@ -285,7 +376,7 @@ export default function ChatPage() {
       sseRef.current?.close();
       sseConnectedRef.current = false;
     };
-  }, [fetchMessages, scheduleFetchChats, setBotSilent]);
+  }, [fetchMessages, patchChatFromEvent, scheduleFetchChats, setBotSilent]);
 
   // ── Al volver al tab, sincronizar una vez por si el navegador pausó el stream ──
   useEffect(() => {
@@ -357,6 +448,11 @@ export default function ChatPage() {
           pinnedGroupsData={pinnedGroupsData}
           setPinnedGroupsData={setPinnedGroupsData}
           fetchChats={fetchChats}
+          queueProfilePic={queueProfilePic}
+          loadMoreChats={loadMoreChats}
+          loadingMoreChats={loadingMoreChats}
+          hasMoreChats={hasMoreChats}
+          chatTotal={chatTotal}
           showToast={showToast}
         />
 

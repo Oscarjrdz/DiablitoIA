@@ -74,7 +74,7 @@ export const ChatRow = React.memo(function ChatRow({ chat, isActive, picUrl, onO
         </div>
         <div className={styles.chatRow2}>
           <span className={styles.chatPreview}>
-            {chat.fromMe && <Ticks status="delivered" />}
+            {chat.fromMe && <Ticks status={chat.lastStatus || 'sent'} />}
             {chat.fromMe && ' '}
             {chat.lastText || <em style={{ opacity: 0.4 }}>Sin mensajes</em>}
           </span>

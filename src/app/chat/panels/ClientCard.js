@@ -26,6 +26,7 @@ function ClientCard({
 
   // Limpiar estado de edición al cambiar de chat
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditingField(null);
     setEditName('');
     setEditAddress('');

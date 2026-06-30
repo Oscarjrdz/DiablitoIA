@@ -6,6 +6,64 @@ import { Avatar, Ticks, TypingDots, MessageBubble } from '../_atoms';
 import { dayLabel, msgMatchesPending, titleCase } from '../_utils';
 import styles from '../page.module.css';
 
+const MAX_IMAGE_DIMENSION = 1280;
+const IMAGE_JPEG_QUALITY = 0.72;
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = ev => resolve(ev.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = err => {
+      URL.revokeObjectURL(url);
+      reject(err);
+    };
+    img.src = url;
+  });
+}
+
+async function compressImageFile(file) {
+  if (!file.type.startsWith('image/') || file.type === 'image/gif') {
+    return { base64: await readFileAsDataUrl(file), name: file.name, size: file.size };
+  }
+
+  const img = await loadImageFromFile(file);
+  const ratio = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(img.width, img.height));
+  const width = Math.max(1, Math.round(img.width * ratio));
+  const height = Math.max(1, Math.round(img.height * ratio));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d', { alpha: false });
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(img, 0, 0, width, height);
+
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', IMAGE_JPEG_QUALITY));
+  if (!blob || blob.size >= file.size) {
+    return { base64: await readFileAsDataUrl(file), name: file.name, size: file.size };
+  }
+
+  return {
+    base64: await readFileAsDataUrl(blob),
+    name: file.name.replace(/\.[^.]+$/, '') + '.jpg',
+    size: blob.size,
+    originalSize: file.size,
+  };
+}
+
 function MessagePanel({
   activeChat,
   setActiveChat,
@@ -45,7 +103,6 @@ function MessagePanel({
 
   // Reset al cambiar de chat
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPendingMsgs([]);
     setInputText('');
     setAttachment(null);
@@ -60,7 +117,6 @@ function MessagePanel({
   // Limpiar pendientes cuando el servidor confirma los mensajes
   useEffect(() => {
     if (!pendingMsgs.length) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPendingMsgs(prev => prev.filter(p => !messages.some(m => msgMatchesPending(m, p))));
   }, [messages]); // eslint-disable-line
 
@@ -140,16 +196,21 @@ function MessagePanel({
     typingTimerRef.current = setTimeout(() => sendTypingStatus(activeChat.phone, false), 3000);
   };
 
-  const handleFileSelect = (e) => {
+  const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const type = file.type.startsWith('image/') ? 'image'
-        : file.type.startsWith('audio/') ? 'audio' : 'document';
-      setAttachment({ base64: ev.target.result, type, name: file.name });
-    };
-    reader.readAsDataURL(file);
+    const type = file.type.startsWith('image/') ? 'image'
+      : file.type.startsWith('audio/') ? 'audio' : 'document';
+    try {
+      if (type === 'image') {
+        const img = await compressImageFile(file);
+        setAttachment({ base64: img.base64, type, name: img.name, size: img.size, originalSize: img.originalSize });
+        return;
+      }
+      setAttachment({ base64: await readFileAsDataUrl(file), type, name: file.name, size: file.size });
+    } catch {
+      setAttachment({ base64: await readFileAsDataUrl(file), type, name: file.name, size: file.size });
+    }
   };
 
   const clearAttachment = () => {
@@ -218,7 +279,6 @@ function MessagePanel({
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchVsMessages();
   }, [fetchVsMessages]);
 
@@ -538,12 +598,18 @@ function MessagePanel({
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <label className={styles.vsImgLabel}>
                   <ImagePlus size={13} /> Imagen
-                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={async e => {
                     const f = e.target.files?.[0];
                     if (!f) return;
-                    const r = new FileReader();
-                    r.onload = ev => setVsEditing(p => ({ ...p, image: ev.target.result }));
-                    r.readAsDataURL(f);
+                    try {
+                      const img = await compressImageFile(f);
+                      setVsEditing(p => ({ ...p, image: img.base64 }));
+                    } catch {
+                      const base64 = await readFileAsDataUrl(f);
+                      setVsEditing(p => ({ ...p, image: base64 }));
+                    } finally {
+                      e.target.value = '';
+                    }
                   }} />
                 </label>
                 <button className={styles.vsSaveBtn} onClick={vsSaveMsg}>Guardar</button>
