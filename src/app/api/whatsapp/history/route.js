@@ -74,7 +74,11 @@ export async function GET(req) {
     }
 
     const lastTs = deduped.length > 0 ? deduped[deduped.length - 1].ts : 0;
-    return NextResponse.json({ success: true, messages: deduped, msgCount: deduped.length, lastTs, isTyping: !!typingRaw, botSilent: !!botSilenceRaw });
+    const statusSig = deduped
+      .filter(m => m.fromMe)
+      .map(m => `${m.msgId || m.ts || ''}:${m.status || ''}`)
+      .join('|');
+    return NextResponse.json({ success: true, messages: deduped, msgCount: deduped.length, lastTs, statusSig, isTyping: !!typingRaw, botSilent: !!botSilenceRaw });
   } catch (e) {
     return NextResponse.json({ success: false, messages: [], isTyping: false });
   }

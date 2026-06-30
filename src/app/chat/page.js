@@ -40,6 +40,7 @@ export default function ChatPage() {
   const msgFetchControllerRef = useRef(null);
   const lastMsgCountRef = useRef(0);
   const lastTsRef = useRef(0);
+  const lastStatusSigRef = useRef('');
   const alarmRef = useRef(null);
   const chatRefreshTimerRef = useRef(null);
 
@@ -113,11 +114,16 @@ export default function ChatPage() {
       const data = await res.json();
       if (data.success) {
         if (activeChatRef.current?.phone !== phone) return;
-        if (data.msgCount !== lastMsgCountRef.current || data.lastTs !== lastTsRef.current) {
+        if (
+          data.msgCount !== lastMsgCountRef.current ||
+          data.lastTs !== lastTsRef.current ||
+          data.statusSig !== lastStatusSigRef.current
+        ) {
           msgCacheRef.current.set(phone, data.messages || []);
           setMessages(data.messages || []);
           lastMsgCountRef.current = data.msgCount || 0;
           lastTsRef.current = data.lastTs || 0;
+          lastStatusSigRef.current = data.statusSig || '';
         }
         setIsTyping(!!data.isTyping);
         setBotSilent(!!data.botSilent);
@@ -165,6 +171,7 @@ export default function ChatPage() {
     setIsTyping(false);
     lastMsgCountRef.current = 0;
     lastTsRef.current = 0;
+    lastStatusSigRef.current = '';
     fetchMessages(chat.phone);
     fetchClientCard(chat.phone);
     queueProfilePic(chat.phone);
