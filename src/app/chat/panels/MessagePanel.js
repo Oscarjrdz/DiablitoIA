@@ -94,6 +94,8 @@ function MessagePanel({
   const scrollerRef = useRef(null);
   const isAtBottomRef = useRef(true);
   const typingTimerRef = useRef(null);
+  const msgListLengthRef = useRef(0);
+  const scrollTimersRef = useRef([]);
 
   useEffect(() => {
     if (!addOptimisticRef) return;
@@ -149,14 +151,42 @@ function MessagePanel({
     return result;
   }, [allMessages, isTyping]);
 
-  // RAF doble: espera al frame donde Virtuoso ya pintó el nuevo ítem
-  const scrollToBottom = useCallback(() => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (scrollerRef.current) scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight + 9999;
-      });
-    });
+  useEffect(() => {
+    msgListLengthRef.current = msgsWithSeps.length;
+  }, [msgsWithSeps.length]);
+
+  const clearScrollTimers = useCallback(() => {
+    scrollTimersRef.current.forEach(clearTimeout);
+    scrollTimersRef.current = [];
   }, []);
+
+  // RAF doble + reintentos cortos: imagen/preview/input cambian altura después del primer paint.
+  const scrollToBottom = useCallback((withRetries = false) => {
+    const run = () => {
+      const lastIndex = msgListLengthRef.current - 1;
+      if (lastIndex >= 0) {
+        try {
+          virtuosoRef.current?.scrollToIndex?.({ index: lastIndex, align: 'end', behavior: 'auto' });
+        } catch {}
+      }
+      if (scrollerRef.current) scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight + 9999;
+    };
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(run);
+    });
+
+    if (withRetries) {
+      clearScrollTimers();
+      scrollTimersRef.current = [80, 180, 360, 700].map(delay => setTimeout(run, delay));
+    }
+  }, [clearScrollTimers]);
+
+  useEffect(() => clearScrollTimers, [clearScrollTimers]);
+
+  const handleMessageMediaLoad = useCallback(() => {
+    if (isAtBottomRef.current) scrollToBottom(true);
+  }, [scrollToBottom]);
 
   // Al cambiar de chat: scroll al fondo (double RAF es suficiente, sin timeouts extra)
   useEffect(() => {
@@ -168,9 +198,9 @@ function MessagePanel({
   useEffect(() => {
     if (!msgsWithSeps.length) return;
     const el = scrollerRef.current;
-    if (!el) { scrollToBottom(); return; }
+    if (!el) { scrollToBottom(true); return; }
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distFromBottom < 350) scrollToBottom();
+    if (distFromBottom < 350) scrollToBottom(true);
   }, [msgsWithSeps.length, scrollToBottom]);
 
   const autoResize = () => {
@@ -248,7 +278,7 @@ function MessagePanel({
       body: JSON.stringify({ phone, read: true })
     }).catch(() => {});
     setPendingMsgs(prev => [...prev, optimistic]);
-    scrollToBottom();
+    scrollToBottom(true);
     fetch('/api/whatsapp/send', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to: phone, text, attachment: optimistic.attachment, attachmentType: optimistic.attachmentType })
@@ -301,7 +331,7 @@ function MessagePanel({
     };
     setVsOpen(false);
     setPendingMsgs(prev => [...prev, optimistic]);
-    scrollToBottom();
+    scrollToBottom(true);
     setChats(prev => prev.map(c => c.phone === phone
       ? { ...c, lastText: msg.text, lastTs: now, fromMe: true, needsHuman: false, unread: 0 }
       : c));
@@ -473,6 +503,7 @@ function MessagePanel({
               chatPhone={activeChat.phone}
               picUrl={profilePics[activeChat.phone]}
               onForward={setForwardMsg}
+              onMediaLoad={handleMessageMediaLoad}
             />
           );
         }}

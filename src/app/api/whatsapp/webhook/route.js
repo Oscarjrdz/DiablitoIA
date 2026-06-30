@@ -110,6 +110,22 @@ function normalizeAckStatus(rawStatus) {
   return null;
 }
 
+function extractAckStatus(item) {
+  const receipt = item?.__raw?.receipt || item?.receipt || null;
+  if (receipt) {
+    if (receipt.readTimestamp || receipt.readReceiptTimestamp || receipt.playedTimestamp) return 'read';
+    if (receipt.receiptTimestamp || receipt.deliveredTimestamp || receipt.deliveryTimestamp) return 'delivered';
+  }
+
+  return item?.update?.status
+    ?? item?.__raw?.update?.status
+    ?? item?.receipt?.status
+    ?? item?.__raw?.receipt?.status
+    ?? item?.ack
+    ?? item?.status
+    ?? null;
+}
+
 async function updateMessageAckStatus(msgId, newStatus, candidatePhones) {
   if (!msgId || !newStatus) return null;
   const STATUS_ORDER = { sent: 1, delivered: 2, read: 3 };
@@ -285,13 +301,7 @@ export async function POST(req) {
         const msgId = typeof rawId === 'object' ? (rawId?._serialized || null) : rawId;
 
         // ── Extraer statusId (múltiples formatos, normalizar a minúsculas) ──
-        const rawStatus = item?.update?.status
-          ?? item?.__raw?.update?.status
-          ?? item?.receipt?.status
-          ?? item?.__raw?.receipt?.status
-          ?? item?.ack
-          ?? item?.status
-          ?? null;
+        const rawStatus = extractAckStatus(item);
 
         if (!msgId || rawStatus === null) continue;
 
