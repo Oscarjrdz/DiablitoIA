@@ -1839,9 +1839,10 @@ NUNCA omitas el tag.`;
             })
         });
 
-        await redis.set('DEBUG_GEMINI_STATUS', JSON.stringify({ ok: geminiRes.ok, status: geminiRes.status, phone: cleanPhone, ts: Date.now() }));
+        const geminiRawText = await geminiRes.text();
+        await redis.set('DEBUG_GEMINI_STATUS', JSON.stringify({ ok: geminiRes.ok, status: geminiRes.status, phone: cleanPhone, ts: Date.now(), error: geminiRes.ok ? null : geminiRawText.slice(0, 500) }));
         if (geminiRes.ok) {
-            const geminiData = await geminiRes.json();
+            const geminiData = JSON.parse(geminiRawText);
             await redis.set('DEBUG_GEMINI_REPLY', JSON.stringify({ reply: geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.slice(0, 300), phone: cleanPhone, ts: Date.now() }));
             const reply = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
