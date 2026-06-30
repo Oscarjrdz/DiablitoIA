@@ -96,6 +96,7 @@ function normalizeChatPhone(value) {
   if (!value) return null;
   const raw = String(value);
   if (raw.includes('@g.us')) return '52' + raw.replace(/\D/g, '').slice(-10);
+  if (raw.includes('@lid') || raw.includes('hosted.lid')) return null;
   const digits = raw.replace(/\D/g, '');
   if (!digits) return null;
   return digits.startsWith('52') ? digits : '52' + digits.slice(-10);
@@ -103,16 +104,16 @@ function normalizeChatPhone(value) {
 
 function normalizeAckStatus(rawStatus) {
   const statusId = typeof rawStatus === 'string' ? rawStatus.toLowerCase() : rawStatus;
-  if ([0, 1, 2, 'server_ack', 'pending', 'sent'].includes(statusId)) return 'sent';
-  if ([3, 'delivery_ack', 'delivered'].includes(statusId)) return 'delivered';
-  if ([4, 5, 'read', 'read_ack', 'played'].includes(statusId)) return 'read';
+  if ([0, 1, 2, 'server_ack', 'pending', 'sent', 'server', 'device'].includes(statusId)) return 'sent';
+  if ([3, 'delivery_ack', 'delivered', 'delivery'].includes(statusId)) return 'delivered';
+  if ([4, 5, 'read', 'read_ack', 'played', 'viewed'].includes(statusId)) return 'read';
   return null;
 }
 
 async function updateMessageAckStatus(msgId, newStatus, candidatePhones) {
   if (!msgId || !newStatus) return null;
   const STATUS_ORDER = { sent: 1, delivered: 2, read: 3 };
-  const phones = [...new Set(candidatePhones.filter(Boolean))];
+  const phones = [...new Set(candidatePhones.map(normalizeChatPhone).filter(Boolean))];
 
   for (const chatPhone of phones) {
     const hKey = `chat_hist_${chatPhone}@c.us`;
@@ -121,24 +122,30 @@ async function updateMessageAckStatus(msgId, newStatus, candidatePhones) {
       if (!hData) continue;
       const hist = typeof hData === 'string' ? JSON.parse(hData) : hData;
       let updated = false;
+      let found = false;
+      let currentStatus = null;
       for (let i = hist.length - 1; i >= 0; i--) {
         const p = hist[i].parts?.[0];
         if (p?.msgId === msgId) {
+          found = true;
+          currentStatus = p.status || 'sent';
           if ((STATUS_ORDER[newStatus] || 0) > (STATUS_ORDER[p.status] || 0)) {
             p.status = newStatus;
+            currentStatus = newStatus;
             updated = true;
           }
           break;
         }
       }
-      if (!updated) continue;
+      if (!found) continue;
+      await redis.setex(`chat_msg_${msgId}`, 604800, chatPhone);
+      if (!updated) return { chatPhone, updated: false, status: currentStatus };
       const json = JSON.stringify(hist);
       await redis.set(hKey, json);
       await redis.set(`chat_hist_${chatPhone}`, json);
-      await redis.setex(`chat_msg_${msgId}`, 604800, chatPhone);
       const chatMeta = await saveChatMeta(chatPhone, hist);
       await publishChatEvent({ phone: chatPhone, redisPhone: chatPhone, msgId, status: newStatus, chat: chatMeta, reason: 'ack' });
-      return chatPhone;
+      return { chatPhone, updated: true, status: newStatus };
     } catch {}
   }
 
@@ -280,6 +287,8 @@ export async function POST(req) {
         // ── Extraer statusId (múltiples formatos, normalizar a minúsculas) ──
         const rawStatus = item?.update?.status
           ?? item?.__raw?.update?.status
+          ?? item?.receipt?.status
+          ?? item?.__raw?.receipt?.status
           ?? item?.ack
           ?? item?.status
           ?? null;
@@ -291,12 +300,17 @@ export async function POST(req) {
         // ── Actualizar historial ──
         if (newStatus) {
           const mappedPhone = await redis.get(`chat_msg_${msgId}`);
+          // En este gateway, `to` puede ser el numero del bot en eventos Baileys messages.update.
+          // El destino real del chat sale de nuestro indice chat_msg_<msgId>.
           const toPhone = normalizeChatPhone(item?.to || item?.jid || item?.remoteJid || item?.key?.remoteJid);
           const rawPhone = normalizeChatPhone(item?.__raw?.key?.remoteJid);
-          const updatedPhone = await updateMessageAckStatus(msgId, newStatus, [toPhone, mappedPhone, rawPhone]);
-          if (!updatedPhone) {
+          const ackResult = await updateMessageAckStatus(msgId, newStatus, [mappedPhone, toPhone, rawPhone]);
+          if (!ackResult) {
             await redis.lpush('debug_ack_unmatched', JSON.stringify({ ts: Date.now(), msgId, newStatus, toPhone, mappedPhone, rawPhone, item }));
             await redis.ltrim('debug_ack_unmatched', 0, 49);
+          } else if (!ackResult.updated) {
+            await redis.lpush('debug_ack_noop', JSON.stringify({ ts: Date.now(), msgId, newStatus, currentStatus: ackResult.status, chatPhone: ackResult.chatPhone }));
+            await redis.ltrim('debug_ack_noop', 0, 29);
           }
         }
 

@@ -32,6 +32,7 @@ export default function ChatPage() {
   // ── Refs ──
   const activeChatRef = useRef(null);
   const chatsRef = useRef([]);
+  const messagesRef = useRef([]);
   const sseRef = useRef(null);
   const sseConnectedRef = useRef(false);
   const tabVisibleRef = useRef(true);
@@ -59,6 +60,10 @@ export default function ChatPage() {
   useEffect(() => {
     chatsRef.current = chats;
   }, [chats]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     hasMoreChatsRef.current = hasMoreChats;
@@ -343,18 +348,22 @@ export default function ChatPage() {
             ));
           }
           if (isActiveChat && data.msgId && data.status) {
+            const matchedLocalMessage = messagesRef.current.some(m => m.msgId === data.msgId);
             setMessages(prev => {
               let changed = false;
               const next = prev.map(m => {
-                if (m.msgId === data.msgId && (MSG_STATUS_ORDER[data.status] || 0) > (MSG_STATUS_ORDER[m.status] || 0)) {
-                  changed = true;
-                  return { ...m, status: data.status };
+                if (m.msgId === data.msgId) {
+                  if ((MSG_STATUS_ORDER[data.status] || 0) > (MSG_STATUS_ORDER[m.status] || 0)) {
+                    changed = true;
+                    return { ...m, status: data.status };
+                  }
                 }
                 return m;
               });
               if (changed && activePhone) msgCacheRef.current.set(activePhone, next);
               return changed ? next : prev;
             });
+            if (!matchedLocalMessage) fetchMessages(activePhone);
           }
           return;
         }
