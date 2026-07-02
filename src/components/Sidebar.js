@@ -1,33 +1,45 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Settings, TrendingUp, Smartphone, Users, Bot, Megaphone, TicketCheck, Receipt, ShoppingBag, PanelLeftClose, PanelLeftOpen, Copy } from 'lucide-react';
+import { LayoutDashboard, Settings, TrendingUp, Smartphone, Users, Bot, Megaphone, TicketCheck, Receipt, ShoppingBag, PanelLeftClose, PanelLeftOpen, Copy, LogOut } from 'lucide-react';
 
 const EXPANDED_WIDTH = 250;
 const COLLAPSED_WIDTH = 64;
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('sidebarCollapsed') === 'true';
+  });
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem('sidebarCollapsed');
-    const isCollapsed = stored === 'true';
-    setCollapsed(isCollapsed);
-    document.documentElement.style.setProperty('--sidebar-width', isCollapsed ? `${COLLAPSED_WIDTH}px` : `${EXPANDED_WIDTH}px`);
-    setMounted(true);
+    document.documentElement.style.setProperty('--sidebar-width', collapsed ? `${COLLAPSED_WIDTH}px` : `${EXPANDED_WIDTH}px`);
+    localStorage.setItem('sidebarCollapsed', collapsed ? 'true' : 'false');
+  }, [collapsed]);
+
+  useEffect(() => {
+    let active = true;
+
+    fetch('/api/auth/me')
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (active && data?.user) setUser(data.user);
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const toggle = () => {
-    const next = !collapsed;
-    setCollapsed(next);
-    document.documentElement.style.setProperty('--sidebar-width', next ? `${COLLAPSED_WIDTH}px` : `${EXPANDED_WIDTH}px`);
-    localStorage.setItem('sidebarCollapsed', next ? 'true' : 'false');
+    setCollapsed((value) => !value);
   };
 
-  const navItems = [
+  const navItems = useMemo(() => [
     { label: 'Clientes', icon: Users, href: '/clients' },
     { label: 'Chat Web', icon: Smartphone, href: '/chat' },
     { label: 'Promociones', icon: Megaphone, href: '/promociones' },
@@ -39,7 +51,18 @@ export default function Sidebar() {
     { label: 'Bot IA', icon: Bot, href: '/bot' },
     { label: 'Duplicados', icon: Copy, href: '/duplicados' },
     { label: 'Settings', icon: Settings, href: '/settings' },
-  ];
+  ], []);
+
+  const visibleNavItems = useMemo(() => {
+    if (!user) return [];
+    if (user.role === 'order_taker') return navItems.filter((item) => item.href === '/chat');
+    return navItems;
+  }, [navItems, user]);
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    window.location.href = '/login';
+  };
 
   return (
     <>
@@ -63,7 +86,7 @@ export default function Sidebar() {
         </div>
 
         <nav style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
@@ -80,15 +103,22 @@ export default function Sidebar() {
         </nav>
 
         {!collapsed && (
-          <div style={{ padding: '0 8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-            <p>Loyverse Pro v2.0</p>
+          <div className="ios-sidebar-footer">
+            <div>
+              <strong>{user?.name || 'El Diablito'}</strong>
+              <span>{user?.role === 'order_taker' ? 'Tomador de pedidos' : 'Super admin'}</span>
+            </div>
+            <button type="button" onClick={handleLogout} title="Cerrar sesion">
+              <LogOut size={18} />
+              <span>Cerrar</span>
+            </button>
           </div>
         )}
       </aside>
 
       {/* Mobile Bottom Tab Bar */}
       <nav className="ios-bottom-bar">
-        {navItems.slice(0, 5).map((item) => {
+        {visibleNavItems.slice(0, 5).map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link

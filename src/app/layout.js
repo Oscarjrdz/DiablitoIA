@@ -1,6 +1,6 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
+import AppShell from "@/components/AppShell";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,20 +19,19 @@ export const viewport = {
 };
 
 export const metadata = {
-  title: "Diablito Sales",
-  description: "Enterprise sales dashbaord for Loyverse API",
+  title: "El Diablito",
+  description: "Panel interno de El Diablito",
+  icons: {
+    icon: "/favicon.png",
+    apple: "/favicon.png",
+  },
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <div className="app-container">
-          <Sidebar />
-          <main className="main-content">
-            {children}
-          </main>
-        </div>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );
