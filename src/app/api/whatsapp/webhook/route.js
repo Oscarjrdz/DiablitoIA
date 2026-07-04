@@ -1088,19 +1088,14 @@ export async function POST(req) {
         let gHistory = await redis.get(groupHistKey) || await redis.get(`chat_hist_${phoneId}`);
         let gParsed = typeof gHistory === 'string' ? JSON.parse(gHistory) : (gHistory || []);
         
-        let senderName = payload.data.pushName || 'Miembro';
-        
-        // El Gateway puede mandar el número en varios campos dependiendo de si es Evolution, Baileys o un wrapper custom
-        let memberJid = payload.data.participant 
-                     || payload.data.key?.participant 
-                     || payload.data.__raw?.key?.participant 
-                     || payload.data.sender 
+        let memberJid = payload.data.participant
+                     || payload.data.key?.participant
+                     || payload.data.__raw?.key?.participant
+                     || payload.data.sender
                      || payload.data.author
                      || '';
-                     
-        if (memberJid) {
-           senderName += ` (${memberJid.split('@')[0]})`;
-        }
+
+        let senderName = memberJid ? memberJid.split('@')[0] : (payload.data.pushName || 'Miembro');
 
         // TEMP DEBUG: Guardar payload para poder inspeccionarlo
         await redis.lpush('debug_group_payload', JSON.stringify({
