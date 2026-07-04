@@ -125,11 +125,11 @@ export const ChatRow = React.memo(function ChatRow({ chat, isActive, picUrl, onO
 );
 
 // ── Burbuja de mensaje ──
-export const MessageBubble = React.memo(function MessageBubble({ m, chatName, chatPhone, picUrl, onForward, onMediaLoad }) {
+export const MessageBubble = React.memo(function MessageBubble({ m, chatName, chatPhone, picUrl, memberPicUrl, onForward, onMediaLoad }) {
   const isGroupMsg = !m.fromMe && !!m.senderName;
   const displayName = isGroupMsg ? m.senderName : chatName;
   const displayPhone = isGroupMsg ? m.senderPhone : chatPhone;
-  const displayPic = isGroupMsg ? null : picUrl;
+  const displayPic = isGroupMsg ? (memberPicUrl ?? null) : picUrl;
   return (
     <div className={m.fromMe ? styles.rowOut : styles.rowIn}>
       {!m.fromMe && <Avatar name={displayName} phone={displayPhone} size={28} picUrl={displayPic} />}

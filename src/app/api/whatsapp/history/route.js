@@ -44,8 +44,8 @@ export async function GET(req) {
       let text = rawText;
       let senderName = part.senderName || null;
       let senderPhone = part.senderPhone || null;
-      if (isGroup && !m.role !== 'model' && !senderName) {
-        const match = rawText.match(/^(.+?)\s*(?:\((\d{7,})\))?:\s*([\s\S]*)$/);
+      if (isGroup && m.role !== 'model' && !senderName && rawText.includes(':')) {
+        const match = rawText.match(/^(.+?)\s*(?:\((\d{7,})\))?:\s([\s\S]*)$/);
         if (match) {
           senderName = match[1].trim();
           senderPhone = match[2] || '';

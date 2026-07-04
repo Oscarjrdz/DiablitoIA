@@ -472,6 +472,7 @@ export default function ChatPage() {
             setChats={setChats}
             chats={chats}
             profilePics={profilePics}
+            queueProfilePic={queueProfilePic}
             messages={messages}
             isTyping={isTyping}
             botSilent={botSilent}

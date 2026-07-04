@@ -70,6 +70,7 @@ function MessagePanel({
   setChats,
   chats,
   profilePics,
+  queueProfilePic,
   messages,
   isTyping,
   botSilent,
@@ -95,7 +96,6 @@ function MessagePanel({
   const isAtBottomRef = useRef(true);
   const typingTimerRef = useRef(null);
   const msgListLengthRef = useRef(0);
-  const scrollTimersRef = useRef([]);
   const prevChatPhoneRef = useRef(null);
 
   useEffect(() => {
@@ -156,47 +156,28 @@ function MessagePanel({
     msgListLengthRef.current = msgsWithSeps.length;
   }, [msgsWithSeps.length]);
 
-  const clearScrollTimers = useCallback(() => {
-    scrollTimersRef.current.forEach(clearTimeout);
-    scrollTimersRef.current = [];
+  const scrollToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      const idx = msgListLengthRef.current - 1;
+      if (idx >= 0) {
+        try { virtuosoRef.current?.scrollToIndex({ index: idx, align: 'end', behavior: 'auto' }); } catch {}
+      }
+    });
   }, []);
 
-  // RAF doble + reintentos cortos: imagen/preview/input cambian altura después del primer paint.
-  const scrollToBottom = useCallback((withRetries = false) => {
-    const run = () => {
-      const lastIndex = msgListLengthRef.current - 1;
-      if (lastIndex >= 0) {
-        try {
-          virtuosoRef.current?.scrollToIndex?.({ index: lastIndex, align: 'end', behavior: 'auto' });
-        } catch {}
-      }
-    };
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(run);
-    });
-
-    if (withRetries) {
-      clearScrollTimers();
-      scrollTimersRef.current = [150, 400].map(delay => setTimeout(run, delay));
-    }
-  }, [clearScrollTimers]);
-
-  useEffect(() => clearScrollTimers, [clearScrollTimers]);
-
   const handleMessageMediaLoad = useCallback(() => {
-    if (isAtBottomRef.current) scrollToBottom(true);
+    if (isAtBottomRef.current) scrollToBottom();
   }, [scrollToBottom]);
 
-  // Scroll al fondo: en cambio de chat (primera carga) o cuando llega mensaje nuevo estando abajo
+  // Solo al cambiar de chat: scroll al fondo cuando llegan los mensajes de ese chat
   useEffect(() => {
     if (!msgsWithSeps.length) return;
-    const justSwitched = prevChatPhoneRef.current !== activeChat?.phone;
-    if (justSwitched) {
-      prevChatPhoneRef.current = activeChat?.phone;
-      isAtBottomRef.current = true;
-    }
-    if (justSwitched || isAtBottomRef.current) scrollToBottom(justSwitched);
+    if (prevChatPhoneRef.current === activeChat?.phone) return;
+    prevChatPhoneRef.current = activeChat?.phone;
+    isAtBottomRef.current = true;
+    scrollToBottom();
+    const t = setTimeout(scrollToBottom, 250);
+    return () => clearTimeout(t);
   }, [msgsWithSeps.length, activeChat?.phone, scrollToBottom]);
 
   const autoResize = () => {
@@ -471,6 +452,7 @@ function MessagePanel({
         style={{ overflowX: 'hidden' }}
         data={msgsWithSeps}
         overscan={500}
+        followOutput={(isAtBottom) => isAtBottom ? 'auto' : false}
         atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
         atBottomThreshold={120}
         contentContainerStyle={{ paddingTop: 12 }}
@@ -492,12 +474,17 @@ function MessagePanel({
               </div>
             );
           }
+          const memberPhone = item.senderPhone || '';
+          if (memberPhone && profilePics[memberPhone] === undefined) {
+            queueProfilePic?.(memberPhone);
+          }
           return (
             <MessageBubble
               m={item}
               chatName={activeChat.name}
               chatPhone={activeChat.phone}
               picUrl={profilePics[activeChat.phone]}
+              memberPicUrl={memberPhone ? profilePics[memberPhone] : undefined}
               onForward={setForwardMsg}
               onMediaLoad={handleMessageMediaLoad}
             />
