@@ -39,8 +39,11 @@ export async function GET(req) {
     const messages = parsed.map(m => {
       const part = m.parts?.[0] || {};
       const ts = part.ts || null;
+      const rawText = part.text || '';
+      // Limpiar formato antiguo "Nombre (telefono): mensaje" en grupos
+      const text = isGroup ? rawText.replace(/^.+?\s*\(\d{7,}\):\s*/, 'Miembro: ') : rawText;
       return {
-        text: part.text || '',
+        text,
         fromMe: m.role === 'model',
         ts,
         time: ts

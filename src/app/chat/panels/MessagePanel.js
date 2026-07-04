@@ -470,7 +470,7 @@ function MessagePanel({
         className={styles.messages}
         style={{ overflowX: 'hidden' }}
         data={msgsWithSeps}
-        overscan={10}
+        overscan={500}
         atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
         atBottomThreshold={120}
         contentContainerStyle={{ paddingTop: 12 }}
