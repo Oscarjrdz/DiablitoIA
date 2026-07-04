@@ -126,10 +126,17 @@ export const ChatRow = React.memo(function ChatRow({ chat, isActive, picUrl, onO
 
 // ── Burbuja de mensaje ──
 export const MessageBubble = React.memo(function MessageBubble({ m, chatName, chatPhone, picUrl, onForward, onMediaLoad }) {
+  const isGroupMsg = !m.fromMe && !!m.senderName;
+  const displayName = isGroupMsg ? m.senderName : chatName;
+  const displayPhone = isGroupMsg ? m.senderPhone : chatPhone;
+  const displayPic = isGroupMsg ? null : picUrl;
   return (
     <div className={m.fromMe ? styles.rowOut : styles.rowIn}>
-      {!m.fromMe && <Avatar name={chatName} phone={chatPhone} size={28} picUrl={picUrl} />}
+      {!m.fromMe && <Avatar name={displayName} phone={displayPhone} size={28} picUrl={displayPic} />}
       <div className={m.fromMe ? styles.bubbleOut : styles.bubbleIn}>
+        {isGroupMsg && (
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#53bdeb', marginBottom: 2 }}>{m.senderName}</div>
+        )}
         {m.attachment && m.attachmentType === 'image' && (
           <img src={m.attachment} alt="" decoding="async" onLoad={onMediaLoad} style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }} />
         )}

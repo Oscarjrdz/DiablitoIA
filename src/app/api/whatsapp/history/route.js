@@ -40,10 +40,22 @@ export async function GET(req) {
       const part = m.parts?.[0] || {};
       const ts = part.ts || null;
       const rawText = part.text || '';
-      // Limpiar formato antiguo "Nombre (telefono): mensaje" en grupos
-      const text = isGroup ? rawText.replace(/^.+?\s*\(\d{7,}\):\s*/, 'Miembro: ') : rawText;
+      // Para grupos: extraer senderName/senderPhone de formato antiguo si no están como campos separados
+      let text = rawText;
+      let senderName = part.senderName || null;
+      let senderPhone = part.senderPhone || null;
+      if (isGroup && !m.role !== 'model' && !senderName) {
+        const match = rawText.match(/^(.+?)\s*(?:\((\d{7,})\))?:\s*([\s\S]*)$/);
+        if (match) {
+          senderName = match[1].trim();
+          senderPhone = match[2] || '';
+          text = match[3];
+        }
+      }
       return {
         text,
+        senderName,
+        senderPhone,
         fromMe: m.role === 'model',
         ts,
         time: ts

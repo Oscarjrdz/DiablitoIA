@@ -1088,19 +1088,14 @@ export async function POST(req) {
         let gHistory = await redis.get(groupHistKey) || await redis.get(`chat_hist_${phoneId}`);
         let gParsed = typeof gHistory === 'string' ? JSON.parse(gHistory) : (gHistory || []);
         
-        let senderName = 'Miembro';
-
-        // TEMP DEBUG: Guardar payload para poder inspeccionarlo
-        await redis.lpush('debug_group_payload', JSON.stringify({
-           from: payload.data.from,
-           pushName: payload.data.pushName,
-           participant: payload.data.participant,
-           keyPart: payload.data.key?.participant,
-           sender: payload.data.sender,
-           author: payload.data.author,
-           rawKeys: payload.data.__raw ? Object.keys(payload.data.__raw) : null
-        }));
-        await redis.ltrim('debug_group_payload', 0, 10);
+        const memberJid = payload.data.participant
+                     || payload.data.key?.participant
+                     || payload.data.__raw?.key?.participant
+                     || payload.data.sender
+                     || payload.data.author
+                     || '';
+        const senderName = payload.data.pushName || 'Miembro';
+        const senderPhone = memberJid ? memberJid.split('@')[0] : '';
 
         // Prevent duplicates for outgoing messages sent from the Web UI
         const isStickerGroup = payload.data.type === 'sticker' || !!payload.data.__raw?.message?.stickerMessage;
@@ -1132,7 +1127,7 @@ export async function POST(req) {
             }
             gParsed.push({ role: 'model', parts: [{ text: finalBody, ts: Date.now() }] });
         } else {
-            const gPart = { text: `${senderName}: ${finalBody}`, ts: Date.now() };
+            const gPart = { text: finalBody, ts: Date.now(), senderName, senderPhone };
             const resolvedGroupUrl = groupMediaProxyUrl || (groupRawMediaUrl && groupMediaType ? groupRawMediaUrl : null);
             if (resolvedGroupUrl) {
                 gPart.attachmentUrl = resolvedGroupUrl;

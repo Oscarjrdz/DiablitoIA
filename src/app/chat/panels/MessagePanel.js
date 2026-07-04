@@ -96,6 +96,7 @@ function MessagePanel({
   const typingTimerRef = useRef(null);
   const msgListLengthRef = useRef(0);
   const scrollTimersRef = useRef([]);
+  const prevChatPhoneRef = useRef(null);
 
   useEffect(() => {
     if (!addOptimisticRef) return;
@@ -187,17 +188,16 @@ function MessagePanel({
     if (isAtBottomRef.current) scrollToBottom(true);
   }, [scrollToBottom]);
 
-  // Al cambiar de chat: scroll al fondo (double RAF es suficiente, sin timeouts extra)
-  useEffect(() => {
-    isAtBottomRef.current = true;
-    scrollToBottom();
-  }, [activeChat?.phone, scrollToBottom]);
-
-  // Mensajes nuevos: bajar solo si el usuario ya estaba al fondo
+  // Scroll al fondo: en cambio de chat (primera carga) o cuando llega mensaje nuevo estando abajo
   useEffect(() => {
     if (!msgsWithSeps.length) return;
-    if (isAtBottomRef.current) scrollToBottom(true);
-  }, [msgsWithSeps.length, scrollToBottom]);
+    const justSwitched = prevChatPhoneRef.current !== activeChat?.phone;
+    if (justSwitched) {
+      prevChatPhoneRef.current = activeChat?.phone;
+      isAtBottomRef.current = true;
+    }
+    if (justSwitched || isAtBottomRef.current) scrollToBottom(justSwitched);
+  }, [msgsWithSeps.length, activeChat?.phone, scrollToBottom]);
 
   const autoResize = () => {
     const ta = textareaRef.current;
