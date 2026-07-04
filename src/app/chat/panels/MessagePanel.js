@@ -169,7 +169,6 @@ function MessagePanel({
           virtuosoRef.current?.scrollToIndex?.({ index: lastIndex, align: 'end', behavior: 'auto' });
         } catch {}
       }
-      if (scrollerRef.current) scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight + 9999;
     };
 
     requestAnimationFrame(() => {
@@ -178,7 +177,7 @@ function MessagePanel({
 
     if (withRetries) {
       clearScrollTimers();
-      scrollTimersRef.current = [80, 180, 360, 700].map(delay => setTimeout(run, delay));
+      scrollTimersRef.current = [150, 400].map(delay => setTimeout(run, delay));
     }
   }, [clearScrollTimers]);
 
@@ -194,13 +193,10 @@ function MessagePanel({
     scrollToBottom();
   }, [activeChat?.phone, scrollToBottom]);
 
-  // Mensajes nuevos: bajar si estamos cerca del fondo
+  // Mensajes nuevos: bajar solo si el usuario ya estaba al fondo
   useEffect(() => {
     if (!msgsWithSeps.length) return;
-    const el = scrollerRef.current;
-    if (!el) { scrollToBottom(true); return; }
-    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distFromBottom < 350) scrollToBottom(true);
+    if (isAtBottomRef.current) scrollToBottom(true);
   }, [msgsWithSeps.length, scrollToBottom]);
 
   const autoResize = () => {

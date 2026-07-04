@@ -1088,14 +1088,7 @@ export async function POST(req) {
         let gHistory = await redis.get(groupHistKey) || await redis.get(`chat_hist_${phoneId}`);
         let gParsed = typeof gHistory === 'string' ? JSON.parse(gHistory) : (gHistory || []);
         
-        let memberJid = payload.data.participant
-                     || payload.data.key?.participant
-                     || payload.data.__raw?.key?.participant
-                     || payload.data.sender
-                     || payload.data.author
-                     || '';
-
-        let senderName = memberJid ? memberJid.split('@')[0] : (payload.data.pushName || 'Miembro');
+        let senderName = 'Miembro';
 
         // TEMP DEBUG: Guardar payload para poder inspeccionarlo
         await redis.lpush('debug_group_payload', JSON.stringify({
