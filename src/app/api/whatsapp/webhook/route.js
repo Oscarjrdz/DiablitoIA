@@ -2032,6 +2032,11 @@ NUNCA omitas el tag.`;
                     // Tiene nombre, falta dirección — usar solo primer nombre
                     const detectedName = nameMatch[1].trim();
                     const firstName = detectedName.split(' ')[0];
+                    await redis.set(`client_name_${cleanPhone}`, detectedName);
+                    fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/contacts/save`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: cfg.wappToken, number: cleanPhone, fullName: detectedName, firstName })
+                    }).catch(() => {});
                     const needAddrVariants = [
                         `¡Gracias *${firstName}*! 😊 Ahora compárteme tu *Dirección* 📍 (calle, número y colonia) para asignarte la sucursal más cercana 🏪`,
                         `¡Perfecto *${firstName}*! 🙌 Ahora dime tu *Dirección* 📍 para asignarte la tienda más cercana y completar tu registro 🏪`,

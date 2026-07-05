@@ -285,7 +285,20 @@ export async function PATCH(req) {
       if (!cleanPhone.startsWith('52')) cleanPhone = '52' + cleanPhone;
       const phone10 = cleanPhone.slice(-10);
       if (_storeRedis !== undefined) await redis.set(`client_store_${cleanPhone}`, _storeRedis);
-      if (name !== undefined) await redis.set(`client_name_${cleanPhone}`, name);
+      if (name !== undefined) {
+        await redis.set(`client_name_${cleanPhone}`, name);
+        const wappCfgRaw = await redis.get('wapp_config');
+        if (wappCfgRaw) {
+          const wappCfg = typeof wappCfgRaw === 'string' ? JSON.parse(wappCfgRaw) : wappCfgRaw;
+          if (wappCfg.wappInstance && wappCfg.wappToken) {
+            const firstName = name.trim().split(' ')[0];
+            fetch(`https://gatewaywapp-production.up.railway.app/${wappCfg.wappInstance}/contacts/save`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: wappCfg.wappToken, number: cleanPhone, fullName: name.trim(), firstName })
+            }).catch(() => {});
+          }
+        }
+      }
       if (address !== undefined) await redis.set(`client_address_${cleanPhone}`, address);
       await redis.del(`client_card_v2_${phone10}`);
     }
