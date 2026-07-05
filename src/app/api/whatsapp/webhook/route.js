@@ -2024,14 +2024,15 @@ NUNCA omitas el tag.`;
                     ];
                     insistMsg = needColoniaVariants[Math.floor(Math.random() * needColoniaVariants.length)];
                 } else if (nameMatch) {
-                    // Tiene nombre, falta dirección
+                    // Tiene nombre, falta dirección — usar solo primer nombre
                     const detectedName = nameMatch[1].trim();
+                    const firstName = detectedName.split(' ')[0];
                     const needAddrVariants = [
-                        `¡Gracias *${detectedName}*! 😊 Ahora compárteme tu *Dirección* 📍 (calle, número y colonia) para registrarte y asignarte la sucursal más cercana 🏪`,
-                        `¡Perfecto *${detectedName}*! 🙌 Ya tengo tu nombre. Ahora dime tu *Dirección* 📍 para asignarte la tienda más cercana y completar tu registro 🏪`,
-                        `¡Excelente *${detectedName}*! 🔥 Solo falta tu *Dirección* 📍 (calle, número y colonia) para asignarte tu sucursal más cercana y activar tu 🍔 *BURGER GRATIS* 🎁`,
-                        `👋 *${detectedName}*, ¡ya casi! Compárteme tu *Dirección* 📍 para asignarte la tienda más cercana. ¡Tu 🍔 *BURGER GRATIS* te espera! 🎁`,
-                        `✨ *${detectedName}*, un paso más. Mándame tu *Dirección* 📍 y te asignamos la sucursal más cercana con tu 🍔 *BURGER GRATIS* incluida. 🎁`
+                        `¡Gracias *${firstName}*! 😊 Ahora compárteme tu *Dirección* 📍 (calle, número y colonia) para asignarte la sucursal más cercana 🏪`,
+                        `¡Perfecto *${firstName}*! 🙌 Ahora dime tu *Dirección* 📍 para asignarte la tienda más cercana y completar tu registro 🏪`,
+                        `¡Excelente *${firstName}*! 🔥 Solo falta tu *Dirección* 📍 (calle, número y colonia) para asignarte tu sucursal más cercana y activar tu 🍔 *BURGER GRATIS* 🎁`,
+                        `👋 *${firstName}*, ¡ya casi! Compárteme tu *Dirección* 📍 para asignarte la tienda más cercana. ¡Tu 🍔 *BURGER GRATIS* te espera! 🎁`,
+                        `✨ *${firstName}*, un paso más. Mándame tu *Dirección* 📍 y te asignamos la sucursal más cercana con tu 🍔 *BURGER GRATIS* incluida. 🎁`
                     ];
                     insistMsg = needAddrVariants[Math.floor(Math.random() * needAddrVariants.length)];
                 } else if (addrMatch) {
@@ -2045,17 +2046,15 @@ NUNCA omitas el tag.`;
                     ];
                     insistMsg = needNameVariants[Math.floor(Math.random() * needNameVariants.length)];
                 } else {
-                    // No tiene nada
-                    const needBothVariants = [
-                        '😊 Para poder ayudarte primero necesito registrarte. Solo compárteme tu *Nombre Completo* 🙋 y tu *Dirección* 📍 y recibes tu 🍔 *BURGER GRATIS* 🎁',
-                        '🍔 ¡Me encantaría ayudarte! Pero primero necesito tu *Nombre Completo* y *Dirección* para registrarte. ¡Además recibes una *BURGER GRATIS*! 🎁',
-                        '🔥 ¡No te pierdas tu *BURGER GRATIS*! Solo escríbeme tu *Nombre Completo* y *Dirección* y listo. 🎁',
-                        '🙌 Solo necesito dos cositas: tu *Nombre Completo* y tu *Dirección*. ¡Y te llevas una 🍔 *BURGER GRATIS* de regalo!',
-                        '🚀 ¡Regístrate en 1 minuto! Solo dime tu *Nombre* 🙋 y *Dirección* 📍. Tu 🍔 *BURGER GRATIS* está lista.',
-                        '✨ ¡Es súper rápido! Compárteme tu *Nombre* y *Dirección* y te damos de alta con tu 🍔 *BURGER GRATIS* incluida. 🎁',
-                        '😎 ¡Antes de todo, hay que registrarte! Compárteme tu *Nombre* y *Dirección* y recibes una 🍔 *BURGER GRATIS* de bienvenida. 🌶️'
+                    // No detectó nombre — insistir solo en el nombre
+                    const needNameOnlyVariants = [
+                        '😊 Para poder ayudarte primero necesito registrarte. Solo compárteme tu *Nombre Completo* 🙋 y listo.',
+                        '🍔 ¡Me encantaría ayudarte! Primero dime tu *Nombre Completo* 🙋 para registrarte y recibir tu *BURGER GRATIS*. 🎁',
+                        '🔥 ¡No te pierdas tu *BURGER GRATIS*! Solo escríbeme tu *Nombre Completo* 🙋 para empezar. 🎁',
+                        '🙌 Es muy sencillo, solo dime tu *Nombre Completo* 🙋 para darte de alta. ¡Tu 🍔 *BURGER GRATIS* te espera!',
+                        '✨ ¡Un momento! Primero necesito tu *Nombre Completo* 🙋 para registrarte. ¡Después viene tu 🍔 *BURGER GRATIS*! 🎁',
                     ];
-                    insistMsg = needBothVariants[Math.floor(Math.random() * needBothVariants.length)];
+                    insistMsg = needNameOnlyVariants[Math.floor(Math.random() * needNameOnlyVariants.length)];
                 }
 
                 const insistMsgId = await sendWhatsApp(phoneId, insistMsg, cfg);
