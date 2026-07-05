@@ -1773,10 +1773,10 @@ Responde SOLO con una palabra: MENU, PEDIR, DOMICILIO, PASAR, HORARIOS, GRACIAS,
 
     // ── 🔴 CLIENTE NO REGISTRADO: Primer contacto ──
     if (parsed.length === 1) {
-        await sendWhatsApp(phoneId, '¡Hola! Bienvenido a *El Diablito* 😈', cfg);
-        await new Promise(r => setTimeout(r, 1000));
-        await sendWhatsApp(phoneId, 'Veo que en nuestro sistema aún no estás registrado 📋\n\nRegistrarte nos tomará 1 minuto ⏱️, solo compárteme tu *Nombre Completo* 🙋 y tu *Dirección* 📍, esto facilitará tomar tus pedidos.', cfg);
-        const welcomeEntry = { role: 'model', parts: [{ text: '¡Hola! Bienvenido a El Diablito 😈 | Veo que en nuestro sistema aún no estás registrado. Registrarte nos tomará 1 minuto, solo compárteme tu Nombre Completo y tu Dirección, esto facilitará tomar tus pedidos.', ts: Date.now() }] };
+        await sendWhatsApp(phoneId, '¡Hola! Bienvenido a *El Diablito* 😈\n\nVeo que en nuestro sistema aún no estás registrado 📋', cfg);
+        await new Promise(r => setTimeout(r, 1200));
+        await sendWhatsApp(phoneId, 'Registrarte nos tomará 1 minuto ⏱️, solo compárteme tu *Nombre Completo* 🙋', cfg);
+        const welcomeEntry = { role: 'model', parts: [{ text: '¡Hola! Bienvenido a El Diablito 😈 | Veo que en nuestro sistema aún no estás registrado. Registrarte nos tomará 1 minuto, solo compárteme tu Nombre Completo.', ts: Date.now() }] };
         await mergeAndSave(historyKey, cleanPhone, [welcomeEntry]);
         return NextResponse.json({ success: true });
     }
@@ -2027,11 +2027,11 @@ NUNCA omitas el tag.`;
                     // Tiene nombre, falta dirección
                     const detectedName = nameMatch[1].trim();
                     const needAddrVariants = [
-                        `¡Gracias *${detectedName}*! 😊 Solo me falta tu *Dirección* 📍 (calle y número) para completar tu registro y enviarte tu 🍔 *BURGER GRATIS* 🎁`,
-                        `¡Perfecto *${detectedName}*! 🙌 Ya tengo tu nombre. Ahora compárteme tu *Dirección* 📍 (calle y número) y listo, ¡recibes tu 🍔 *BURGER GRATIS*! 🎁`,
-                        `¡Excelente *${detectedName}*! 🔥 Ya casi terminamos. Solo escríbeme tu *Dirección* 📍 para darte de alta y mandarte tu 🍔 *BURGER GRATIS*. 🎁`,
-                        `👋 *${detectedName}*, ¡ya casi! Solo falta tu *Dirección* 📍 (calle y número) para registrarte. ¡Tu 🍔 *BURGER GRATIS* te espera! 🎁`,
-                        `✨ *${detectedName}*, estamos a un paso. Mándame tu *Dirección* 📍 y te registro con tu 🍔 *BURGER GRATIS* incluida. 🎁`
+                        `¡Gracias *${detectedName}*! 😊 Ahora compárteme tu *Dirección* 📍 (calle, número y colonia) para registrarte y asignarte la sucursal más cercana 🏪`,
+                        `¡Perfecto *${detectedName}*! 🙌 Ya tengo tu nombre. Ahora dime tu *Dirección* 📍 para asignarte la tienda más cercana y completar tu registro 🏪`,
+                        `¡Excelente *${detectedName}*! 🔥 Solo falta tu *Dirección* 📍 (calle, número y colonia) para asignarte tu sucursal más cercana y activar tu 🍔 *BURGER GRATIS* 🎁`,
+                        `👋 *${detectedName}*, ¡ya casi! Compárteme tu *Dirección* 📍 para asignarte la tienda más cercana. ¡Tu 🍔 *BURGER GRATIS* te espera! 🎁`,
+                        `✨ *${detectedName}*, un paso más. Mándame tu *Dirección* 📍 y te asignamos la sucursal más cercana con tu 🍔 *BURGER GRATIS* incluida. 🎁`
                     ];
                     insistMsg = needAddrVariants[Math.floor(Math.random() * needAddrVariants.length)];
                 } else if (addrMatch) {
