@@ -110,9 +110,9 @@ function ClientCard({
             {/* Guardar como contacto en WhatsApp */}
             <button
               onClick={async () => {
-                const name = clientCard?.client?.name || activeChat.name;
-                if (!name || name === activeChat.phone.slice(-10)) {
-                  showToast('El cliente no tiene nombre guardado', 'error');
+                const name = clientCard?.client?.name;
+                if (!name || name.length < 2) {
+                  showToast('El cliente no tiene nombre guardado en Loyverse', 'error');
                   return;
                 }
                 setSavingContact(true);
@@ -132,7 +132,7 @@ function ClientCard({
                 } catch { showToast('Error de conexión', 'error'); }
                 setSavingContact(false);
               }}
-              disabled={savingContact}
+              disabled={savingContact || loadingCard || !clientCard?.client?.name}
               title="Guardar como contacto en WhatsApp"
               style={{
                 background: 'none',

@@ -233,7 +233,7 @@ export default function ChatPage() {
   const fetchClientCard = useCallback(async (phone) => {
     const cached = clientCacheRef.current.get(phone);
     if (cached) { setClientCard(cached); setLoadingCard(false); return; }
-    // No limpiar clientCard — mantener layout previo visible mientras carga
+    setClientCard(null);
     setLoadingCard(true);
     try {
       const res = await fetch(`/api/loyverse/client-card?phone=${encodeURIComponent(phone)}`);
