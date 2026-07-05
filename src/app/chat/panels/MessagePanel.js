@@ -475,8 +475,9 @@ function MessagePanel({
             );
           }
           const memberPhone = item.senderPhone || '';
-          if (memberPhone && profilePics[memberPhone] === undefined) {
-            queueProfilePic?.(memberPhone);
+          const memberJid = memberPhone ? `${memberPhone}@c.us` : '';
+          if (memberJid && profilePics[memberJid] === undefined) {
+            queueProfilePic?.(memberJid);
           }
           return (
             <MessageBubble
@@ -484,7 +485,7 @@ function MessagePanel({
               chatName={activeChat.name}
               chatPhone={activeChat.phone}
               picUrl={profilePics[activeChat.phone]}
-              memberPicUrl={memberPhone ? profilePics[memberPhone] : undefined}
+              memberPicUrl={memberJid ? profilePics[memberJid] : undefined}
               onForward={setForwardMsg}
               onMediaLoad={handleMessageMediaLoad}
             />

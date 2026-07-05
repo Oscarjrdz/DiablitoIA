@@ -179,7 +179,7 @@ export const MessageBubble = React.memo(function MessageBubble({ m, chatName, ch
         {onForward && !m._localId && (
           <button className={styles.fwdBubbleBtn} onClick={e => { e.stopPropagation(); onForward(m); }} title="Reenviar">↗</button>
         )}
-        {m.text && (
+        {m.text && m.attachmentType !== 'sticker' && (
           <span className={styles.msgText}>
             {m.text}<span className={styles.msgTimeSpacer} />
           </span>

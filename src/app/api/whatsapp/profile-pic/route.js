@@ -15,7 +15,7 @@ export async function GET(req) {
     fetchTo = rawPhone; // Keep @g.us
   } else {
     redisPhone = rawPhone.replace(/\D/g, '');
-    if (!redisPhone.startsWith('52')) redisPhone = '52' + redisPhone;
+    if (redisPhone.length === 10) redisPhone = '52' + redisPhone;
     fetchTo = `${redisPhone}@c.us`;
   }
 
