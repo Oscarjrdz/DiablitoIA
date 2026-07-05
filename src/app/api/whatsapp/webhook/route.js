@@ -1423,6 +1423,7 @@ export async function POST(req) {
         const hasName = await redis.get(`client_name_${cleanPhone}`);
         if (hasName) {
             console.log(`[Bot] Delivery mode activo para ${cleanPhone} - mensaje guardado, bot silenciado`);
+            await publishChatEvent({ phone: cleanPhone, redisPhone: cleanPhone, deliveryMode: true, reason: 'delivery-active' });
             return NextResponse.json({ success: true, note: 'delivery_mode_silent' });
         }
     }

@@ -206,13 +206,14 @@ export default function ChatPage() {
         found = true;
         return {
           ...c,
-          lastText: data.chat.lastText ?? c.lastText,
-          lastTs: data.chat.lastTs ?? c.lastTs,
-          lastStatus: data.chat.lastStatus ?? c.lastStatus,
-          fromMe: data.chat.fromMe ?? c.fromMe,
-          msgCount: data.chat.msgCount ?? c.msgCount,
+          lastText: data.chat?.lastText ?? c.lastText,
+          lastTs: data.chat?.lastTs ?? c.lastTs,
+          lastStatus: data.chat?.lastStatus ?? c.lastStatus,
+          fromMe: data.chat?.fromMe ?? c.fromMe,
+          msgCount: data.chat?.msgCount ?? c.msgCount,
+          ...(data.deliveryMode !== undefined ? { deliveryMode: data.deliveryMode } : {}),
           ...(data.reason === 'manual-send' ? { unread: 0, needsHuman: false, botSilent: true } : {}),
-          ...((data.reason === 'history' || data.reason === 'group-message') && data.chat.fromMe === false
+          ...((data.reason === 'history' || data.reason === 'group-message') && data.chat?.fromMe === false
             ? { unread: Math.max((c.unread || 0) + 1, 1), needsHuman: true }
             : {}),
         };
