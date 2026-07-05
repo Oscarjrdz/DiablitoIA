@@ -1510,7 +1510,7 @@ export async function POST(req) {
 
     // ── 🟢 CLIENTE REGISTRADO: Respuestas determinísticas con estados ──
     if (isRegistered && clientName) {
-        const menuMsg = `¿En qué te puedo ayudar? 😊\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃\n4️⃣ Conocer nuestros Horarios 📅`;
+        const menuMsg = `¿En qué te puedo ayudar? 😊\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃\n4️⃣ Conocer nuestros Horarios 📅`;
         const userText = bodyStr.trim().toLowerCase();
         const botState = await redis.get(`bot_state_${cleanPhone}`);
         let botReply = '';
@@ -1522,11 +1522,11 @@ export async function POST(req) {
             const isNo = /^(no|nel|nop|nah|2)$/i.test(userText);
 
             if (isNo) {
-                botReply = `Ok 👍 Entonces dime, ¿en qué te puedo ayudar?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃\n4️⃣ Conocer nuestros Horarios 📅`;
+                botReply = `Ok 👍 Entonces dime, ¿en qué te puedo ayudar?\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃\n4️⃣ Conocer nuestros Horarios 📅`;
             } else {
                 // Sí o cualquier otra cosa → enviar imagen del menú
                 const menuImageUrl = 'https://global-sales-prediction.vercel.app/menu-mayo-2025.jpg';
-                const menuCaption = '🍔🌶️ ¡Aquí tienes nuestro menú *El Diablito*! 😈\n\n¿Se te antoja algo?\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃';
+                const menuCaption = '🍔🌶️ ¡Aquí tienes nuestro menú *El Diablito*! 😈\n¿Se te antoja algo?\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃';
                 try {
                     await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/messages/image`, {
                         method: 'POST',
@@ -1541,7 +1541,7 @@ export async function POST(req) {
         }
         // ── Opción 1: Ver Menú → preguntar confirmación ──
         else if (textMsg === '1' || /men[uú]/i.test(userText) || /ver el men/i.test(userText) || /\bcarta\b/i.test(userText) || /quiero ver/i.test(userText)) {
-            botReply = `📋 ¿Quieres que te mande el *Menú*?\n\n👉 Responde *Sí* o *No*`;
+            botReply = `📋 ¿Quieres que te mande el *Menú*?\n👉 Responde *Sí* o *No*`;
             await redis.setex(`bot_state_${cleanPhone}`, 300, 'awaiting_menu_confirm');
         }
         // ── Opción 2 explícita: Pedido a Domicilio ──
@@ -1674,7 +1674,7 @@ Responde SOLO con una palabra: MENU, PEDIR, DOMICILIO, PASAR, HORARIOS, GRACIAS,
             if (orderType === 'menu') {
                 // Enviar imagen del menú directamente
                 const menuImageUrl = 'https://global-sales-prediction.vercel.app/menu-mayo-2025.jpg';
-                const menuCaption = `🍔🌶️ ¡Aquí tienes nuestro menú *El Diablito*! 😈\n\n¿Se te antoja algo?\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
+                const menuCaption = `🍔🌶️ ¡Aquí tienes nuestro menú *El Diablito*! 😈\n¿Se te antoja algo?\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
                 try {
                     await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/messages/image`, {
                         method: 'POST',
@@ -1687,7 +1687,7 @@ Responde SOLO con una palabra: MENU, PEDIR, DOMICILIO, PASAR, HORARIOS, GRACIAS,
                 console.log(`[Bot] Menú enviado para ${cleanPhone} - IA detectó intención MENU`);
                 return NextResponse.json({ success: true });
             } else if (orderType === 'pedir') {
-                botReply = `¡Con gusto *${clientName}*! 😊🍔 ¿Cómo lo quieres?\n\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
+                botReply = `¡Con gusto *${clientName}*! 😊🍔 ¿Cómo lo quieres?\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
                 console.log(`[Bot] Orden de comida detectada para ${cleanPhone} - preguntando domicilio/pasar`);
             } else if (orderType === 'delivery') {
                 botReply = `🛵 Muy bien *${clientName}*, ¿entonces quieres pedir a domicilio verdad? 🍔🔥`;
@@ -1758,7 +1758,7 @@ Responde SOLO con una palabra: MENU, PEDIR, DOMICILIO, PASAR, HORARIOS, GRACIAS,
 ¡Te esperamos para consentirte! 🍔🌶️🔥`;
                 console.log(`[Bot] Horarios respondidos para ${cleanPhone} - IA detectó intención horarios`);
             } else {
-                botReply = `¡Hola *${clientName}*! 🍔 Qué gusto verte de vuelta. 😊\n\n${menuMsg}`;
+                botReply = `¡Hola *${clientName}*! 🍔 Qué gusto verte de vuelta. 😊\n${menuMsg}`;
             }
         }
 
@@ -1773,11 +1773,16 @@ Responde SOLO con una palabra: MENU, PEDIR, DOMICILIO, PASAR, HORARIOS, GRACIAS,
 
     // ── 🔴 CLIENTE NO REGISTRADO: Primer contacto ──
     if (parsed.length === 1) {
-        await sendWhatsApp(phoneId, '¡Hola! Bienvenido a *El Diablito* 😈\n\nVeo que en nuestro sistema aún no estás registrado 📋', cfg);
+        const txt1 = '¡Hola! Bienvenido a *El Diablito* 😈\nVeo que en nuestro sistema aún no estás registrado 📋';
+        const txt2 = 'Registrarte nos tomará 1 minuto ⏱️, solo compárteme tu *Nombre Completo* 🙋';
+        const id1 = await sendWhatsApp(phoneId, txt1, cfg);
         await new Promise(r => setTimeout(r, 1200));
-        await sendWhatsApp(phoneId, 'Registrarte nos tomará 1 minuto ⏱️, solo compárteme tu *Nombre Completo* 🙋', cfg);
-        const welcomeEntry = { role: 'model', parts: [{ text: '¡Hola! Bienvenido a El Diablito 😈 | Veo que en nuestro sistema aún no estás registrado. Registrarte nos tomará 1 minuto, solo compárteme tu Nombre Completo.', ts: Date.now() }] };
-        await mergeAndSave(historyKey, cleanPhone, [welcomeEntry]);
+        const id2 = await sendWhatsApp(phoneId, txt2, cfg);
+        const ts1 = Date.now() - 1300;
+        const ts2 = Date.now();
+        const entry1 = { role: 'model', parts: [{ text: txt1, ts: ts1, ...(id1 ? { msgId: id1, status: 'sent' } : {}) }] };
+        const entry2 = { role: 'model', parts: [{ text: txt2, ts: ts2, ...(id2 ? { msgId: id2, status: 'sent' } : {}) }] };
+        await mergeAndSave(historyKey, cleanPhone, [entry1, entry2]);
         return NextResponse.json({ success: true });
     }
 
@@ -1909,7 +1914,7 @@ NUNCA omitas el tag.`;
             if (regMatch) {
                 // ── ✅ REGISTRO DETECTADO: Mensaje determinístico de confirmación ──
                 const clientData = { name: regMatch[1].trim(), address: regMatch[2].trim(), city: regMatch[3].trim() };
-                const confirmMsg = `¡Perfecto *${clientData.name}*! 🎉🔥\n\n¡Ya estás registrado! 🚀 Tu 🍔 *BURGER GRATIS* de bienvenida te espera.\n\n¿En qué te ayudo hoy?\n\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃\n4️⃣ Conocer nuestros Horarios 📅`;
+                const confirmMsg = `¡Perfecto *${clientData.name}*! 🎉🔥\n¡Ya estás registrado! 🚀 Tu 🍔 *BURGER GRATIS* de bienvenida te espera.\n¿En qué te ayudo hoy?\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃\n4️⃣ Conocer nuestros Horarios 📅`;
                 
                 const confirmMsgId = await sendWhatsApp(phoneId, confirmMsg, cfg);
                 const confirmEntry = { text: confirmMsg, ts: Date.now(), status: 'sent' };
