@@ -1494,9 +1494,13 @@ export async function POST(req) {
     }
 
     // 2️⃣ Si Loyverse falló o no respondió → respaldo en Redis
+    // IMPORTANTE: requiere client_registered_ además del nombre, porque [SOLO_NOMBRE]
+    // guarda el nombre en Redis antes de completar el registro. Sin este check,
+    // el bot trataría al cliente como registrado y perdería la dirección.
     if (!isRegistered) {
         const cachedName = await redis.get(`client_name_${cleanPhone}`);
-        if (cachedName) {
+        const registeredFlag = await redis.get(`client_registered_${cleanPhone}`);
+        if (cachedName && registeredFlag) {
             clientName = cachedName;
             isRegistered = true;
             const cachedPoints = await redis.get(`client_points_${cleanPhone}`);
