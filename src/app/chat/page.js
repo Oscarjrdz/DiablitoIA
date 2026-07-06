@@ -324,6 +324,14 @@ export default function ChatPage() {
           return;
         }
 
+        // client-registered: bot acaba de registrar/actualizar al cliente → refrescar perfil
+        if (data.reason === 'client-registered') {
+          const p = normPhone(data.phone || data.redisPhone);
+          if (p) clearClientCache(normPhone(activeChatRef.current?.phone) === p ? activeChatRef.current.phone : p);
+          if (isActiveChat) fetchClientCard(activeChatRef.current.phone);
+          return;
+        }
+
         // read-state: actualizar chat específico — sin refetch completo de lista
         if (data.reason === 'read-state') {
           const p = normPhone(data.redisPhone || data.phone);

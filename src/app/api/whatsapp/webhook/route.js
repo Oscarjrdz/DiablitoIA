@@ -2017,6 +2017,9 @@ NUNCA omitas el tag.`;
                             }
                         }
                     }
+                    // Invalidar cache y notificar UI para refrescar perfil del cliente
+                    await redis.del(`client_card_v2_${clientPhone10}`);
+                    await publishChatEvent({ phone: cleanPhone, redisPhone: cleanPhone, reason: 'client-registered' });
                 } catch(regErr) { console.error('[Bot] Error en auto-registro:', regErr); }
 
             } else {
