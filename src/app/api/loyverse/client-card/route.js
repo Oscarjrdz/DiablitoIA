@@ -54,11 +54,19 @@ function mergeCustomers(list) {
   return { primary, allIds };
 }
 
-// Extrae dirección del cliente (nota estructurada O campos directos de Loyverse)
+// Extrae dirección del cliente — el campo address de Loyverse tiene prioridad
+// (lo usa el bot de WhatsApp y la edición manual). El note estructurado (Calle/Número)
+// solo se usa como fallback para clientes registrados en tienda física que nunca
+// han actualizado su dirección por otro canal.
 function extractAddress(customer) {
-  let address = '';
+  // Campo directo de Loyverse: bot WhatsApp y edición manual escriben aquí
+  if (customer?.address) {
+    let addr = customer.address;
+    if (customer.city) addr += `, ${customer.city}`;
+    return addr.trim();
+  }
 
-  // Clientes registrados en tienda (web): nota con formato Calle/Número/Colonia/Municipio
+  // Fallback: nota con formato estructurado (clientes de tienda física legacy)
   if (customer?.note) {
     const note = customer.note;
     const parts = [
@@ -67,16 +75,10 @@ function extractAddress(customer) {
       note.match(/Colonia:\s*(.+?)(?:\n|$)/)?.[1],
       note.match(/Municipio:\s*(.+?)(?:\n|$)/)?.[1],
     ].filter(v => v && v.trim());
-    if (parts.length) address = parts.join(', ');
+    if (parts.length) return parts.join(', ');
   }
 
-  // Clientes registrados por WhatsApp: campos address + city del objeto de Loyverse
-  if (!address && customer?.address) {
-    address = customer.address;
-    if (customer.city) address += `, ${customer.city}`;
-  }
-
-  return address.trim();
+  return '';
 }
 
 // Extrae tienda — Loyverse (nota) es fuente de verdad, Redis solo como respaldo

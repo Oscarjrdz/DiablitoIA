@@ -1946,10 +1946,13 @@ NUNCA omitas el tag.`;
 
                             const alreadyRegistered = await redis.get(`client_registered_${cleanPhone}`);
                             if (existingCustomerId) {
-                                const updatePayload = { id: existingCustomerId, name: clientData.name };
+                                const updatePayload = { id: existingCustomerId, name: clientData.name, phone_number: clientPhone10 };
                                 if (clientData.address) updatePayload.address = clientData.address;
                                 if (clientData.city) updatePayload.city = clientData.city;
-                                try { await fetch('https://api.loyverse.com/v1.0/customers', { method: 'POST', headers: { Authorization: `Bearer ${loyverseToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(updatePayload) }); } catch(e) {}
+                                try {
+                                    const updRes = await fetch('https://api.loyverse.com/v1.0/customers', { method: 'POST', headers: { Authorization: `Bearer ${loyverseToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(updatePayload) });
+                                    if (!updRes.ok) console.error('[Bot] Loyverse update error:', updRes.status, (await updRes.text()).slice(0, 200));
+                                } catch(e) { console.error('[Bot] Loyverse update exception:', e.message); }
                                 await redis.set(`client_registered_${cleanPhone}`, '1');
                                 await redis.set(`client_name_${cleanPhone}`, clientData.name);
                                 if (clientData.address) await redis.set(`client_address_${cleanPhone}`, clientData.address + (clientData.city ? ', ' + clientData.city : ''));
