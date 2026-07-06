@@ -28,6 +28,9 @@ function ChatListPanel({
   showToast,
 }) {
   const [search, setSearch] = useState('');
+  const [serverResults, setServerResults] = useState(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchTimerRef = useRef(null);
   const [storeFilter, setStoreFilter] = useState('');
   const [unreadFilter, setUnreadFilter] = useState(
     () => typeof window !== 'undefined' && localStorage.getItem('chat_unread_filter') === '1'
@@ -61,13 +64,33 @@ function ChatListPanel({
     [chats]
   );
 
-  const filtered = useMemo(() => chats.filter(c => {
-    const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
-    const matchStore = !storeFilter || c.store === storeFilter;
-    const matchUnread = !unreadFilter || c.unread > 0 || c.isGroup;
-    const matchGroup = !hideGroups || !c.isGroup;
-    return matchSearch && matchStore && matchUnread && matchGroup;
-  }), [chats, search, storeFilter, unreadFilter, hideGroups]);
+  const filtered = useMemo(() => {
+    const base = serverResults !== null ? serverResults : chats;
+    return base.filter(c => {
+      const matchSearch = !search || serverResults !== null ||
+        c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
+      const matchStore = !storeFilter || c.store === storeFilter;
+      const matchUnread = !unreadFilter || c.unread > 0 || c.isGroup;
+      const matchGroup = !hideGroups || !c.isGroup;
+      return matchSearch && matchStore && matchUnread && matchGroup;
+    });
+  }, [chats, serverResults, search, storeFilter, unreadFilter, hideGroups]);
+
+  // Búsqueda server-side con debounce — busca en TODOS los chats, no solo los cargados
+  useEffect(() => {
+    clearTimeout(searchTimerRef.current);
+    if (!search.trim()) { setServerResults(null); setSearchLoading(false); return; }
+    setSearchLoading(true);
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/whatsapp/chats?search=${encodeURIComponent(search.trim())}&limit=100&offset=0`);
+        const data = await res.json();
+        if (data.success) setServerResults(data.chats || []);
+      } catch {}
+      setSearchLoading(false);
+    }, 350);
+    return () => clearTimeout(searchTimerRef.current);
+  }, [search]);
 
   const toggleHumanRead = useCallback(async (phone, currentlyNeedsHuman) => {
     try {
@@ -209,7 +232,7 @@ function ChatListPanel({
 
         <div className={styles.searchBar}>
           <div className={styles.searchWrap}>
-            <Search size={15} color="#8696a0" />
+            {searchLoading ? <span style={{ fontSize: 11, color: '#8696a0', animation: 'spin 1s linear infinite' }}>⏳</span> : <Search size={15} color="#8696a0" />}
             <input
               className={styles.searchInput}
               placeholder="Buscar o empezar chat"

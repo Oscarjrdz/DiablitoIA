@@ -47,7 +47,8 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const limitParam = parseInt(searchParams.get('limit') || `${CHAT_PAGE_SIZE}`, 10);
     const offsetParam = parseInt(searchParams.get('offset') || '0', 10);
-    const limit = Math.min(Math.max(Number.isFinite(limitParam) ? limitParam : CHAT_PAGE_SIZE, 1), 50);
+    const searchQuery = (searchParams.get('search') || '').toLowerCase().trim();
+    const limit = Math.min(Math.max(Number.isFinite(limitParam) ? limitParam : CHAT_PAGE_SIZE, 1), 200);
     const offset = Math.max(Number.isFinite(offsetParam) ? offsetParam : 0, 0);
 
     // ── Set O(1) primero; fallback a redis.keys si el set está vacío ──
@@ -192,8 +193,15 @@ export async function GET(req) {
       if (!a.isGroup && b.isGroup) return 1;
       return (b.lastTs || 0) - (a.lastTs || 0);
     });
-    const total = liveChats.length;
-    const page = liveChats.slice(offset, offset + limit).map(({ _redisPhone, ...chat }) => chat);
+    const searchFiltered = searchQuery
+      ? liveChats.filter(c =>
+          c.name.toLowerCase().includes(searchQuery) ||
+          c.phone.replace(/\D/g, '').includes(searchQuery.replace(/\D/g, ''))
+        )
+      : liveChats;
+
+    const total = searchFiltered.length;
+    const page = searchFiltered.slice(offset, offset + limit).map(({ _redisPhone, ...chat }) => chat);
     const nextOffset = offset + page.length;
     return NextResponse.json({
       success: true,
