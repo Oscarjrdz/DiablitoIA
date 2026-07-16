@@ -37,19 +37,33 @@ function ClientCard({
     setSavingField(true);
     try {
       if (!clientCard?.client?.customerId) {
-        if (field !== 'name') { setSavingField(false); return; }
+        // Sin customerId: crear cliente en Loyverse primero (con nombre existente o el que se edita)
+        const nameForCreate = field === 'name' ? editName : (clientCard?.client?.name || '');
+        if (!nameForCreate || nameForCreate.length < 2) {
+          showToast('Se necesita un nombre para crear el cliente', 'error');
+          setSavingField(false);
+          return;
+        }
+        const createBody = { name: nameForCreate, phone: clientCard.client.phone };
+        if (field === 'address') createBody.address = editAddress;
         const res = await fetch('/api/loyverse/client-card', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: editName, phone: clientCard.client.phone })
+          body: JSON.stringify(createBody)
         });
         const data = await res.json();
         if (res.ok && data.success) {
+          const newId = data.customer?.id || null;
           setClientCard(prev => ({
             ...prev,
-            client: { ...prev.client, name: editName, customerId: data.customer?.id || prev.client.customerId }
+            client: {
+              ...prev.client,
+              name: nameForCreate,
+              customerId: newId,
+              address: field === 'address' ? editAddress : prev.client.address,
+            }
           }));
-          setChats(prev => prev.map(c => c.phone === activeChat?.phone ? { ...c, name: editName } : c));
+          setChats(prev => prev.map(c => c.phone === activeChat?.phone ? { ...c, name: nameForCreate } : c));
           showToast('Cliente registrado correctamente', 'success');
           setEditingField(null);
         } else {
