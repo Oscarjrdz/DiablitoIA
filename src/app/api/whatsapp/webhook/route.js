@@ -236,6 +236,31 @@ async function mergeAndSave(historyKey, cleanPhone, newEntries) {
   return fresh;
 }
 
+// Extrae el mensaje citado (reply) del contextInfo de Baileys.
+// Devuelve { quotedText, quotedParticipant } o null si el mensaje no es una respuesta.
+function extractQuoted(rawMsg) {
+  const ctx = rawMsg?.extendedTextMessage?.contextInfo
+    || rawMsg?.imageMessage?.contextInfo
+    || rawMsg?.videoMessage?.contextInfo
+    || rawMsg?.stickerMessage?.contextInfo
+    || rawMsg?.audioMessage?.contextInfo
+    || null;
+  const q = ctx?.quotedMessage;
+  if (!q) return null;
+  const text = q.conversation
+    || q.extendedTextMessage?.text
+    || q.imageMessage?.caption
+    || q.videoMessage?.caption
+    || (q.imageMessage ? '📷 Foto' : '')
+    || (q.videoMessage ? '🎬 Video' : '')
+    || (q.stickerMessage ? '🎭 Sticker' : '')
+    || ((q.audioMessage || q.pttMessage) ? '🎙 Audio' : '')
+    || (q.documentMessage ? '📎 Documento' : '')
+    || '';
+  if (!text) return null;
+  return { quotedText: String(text).slice(0, 200), quotedParticipant: ctx.participant || '' };
+}
+
 export async function POST(req) {
   try {
     
@@ -481,6 +506,9 @@ export async function POST(req) {
     let bodyStr = payload.data.body
       || rawMsg.conversation
       || rawMsg.extendedTextMessage?.text
+      // Caption de imagen/video (por si el gateway no lo pone en body)
+      || rawMsg.imageMessage?.caption
+      || rawMsg.videoMessage?.caption
       // Respuestas a botones de template (anuncios de Facebook/Instagram)
       || rawMsg.buttonsResponseMessage?.selectedDisplayText
       || rawMsg.templateButtonReplyMessage?.selectedDisplayText
@@ -1128,6 +1156,8 @@ export async function POST(req) {
             gParsed.push({ role: 'model', parts: [{ text: finalBody, ts: Date.now() }] });
         } else {
             const gPart = { text: finalBody, ts: Date.now(), senderName, senderPhone };
+            const quotedGrp = extractQuoted(payload.data.__raw?.message);
+            if (quotedGrp) gPart.quotedText = quotedGrp.quotedText;
             const resolvedGroupUrl = groupMediaProxyUrl || (groupRawMediaUrl && groupMediaType ? groupRawMediaUrl : null);
             if (resolvedGroupUrl) {
                 gPart.attachmentUrl = resolvedGroupUrl;
@@ -1379,6 +1409,14 @@ export async function POST(req) {
       || !!payload.data.__raw?.message?.audioMessage || !!payload.data.__raw?.message?.pttMessage;
 
     const incomingPart = { text: bodyStr, ts: Date.now() };
+    // Cita (reply): guardar el texto del mensaje citado para mostrarlo en la UI
+    const quotedInd = extractQuoted(rawMsg);
+    if (quotedInd) {
+      incomingPart.quotedText = quotedInd.quotedText;
+      const qp10 = quotedInd.quotedParticipant.replace(/\D/g, '').slice(-10);
+      // Si el autor del mensaje citado NO es el cliente, la cita es de un mensaje nuestro
+      incomingPart.quotedFromMe = qp10 ? qp10 !== cleanPhone.slice(-10) : true;
+    }
     // Cachear imagen/sticker/audio y guardar URL del proxy para mostrar en la UI
     // payload.media es la URL del gateway (campo raíz, no data.media)
     const incomingRawMediaUrl = payload.media

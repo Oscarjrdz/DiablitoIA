@@ -65,7 +65,9 @@ export async function GET(req) {
         status: part.status || (m.role === 'model' ? 'sent' : null),
         attachmentType: part.attachmentType || null,
         hasAttachment: part.hasAttachment || false,
-        attachmentUrl: part.attachmentUrl || null
+        attachmentUrl: part.attachmentUrl || null,
+        quotedText: part.quotedText || null,
+        quotedFromMe: part.quotedFromMe ?? null
       };
     });
 

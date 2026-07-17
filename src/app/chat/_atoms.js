@@ -137,6 +137,28 @@ export const MessageBubble = React.memo(function MessageBubble({ m, chatName, ch
         {isGroupMsg && (
           <div style={{ fontSize: 11, fontWeight: 600, color: '#53bdeb', marginBottom: 2 }}>{m.senderName}</div>
         )}
+        {m.quotedText && (
+          <div style={{
+            borderLeft: `3px solid ${m.quotedFromMe ? '#34c759' : '#53bdeb'}`,
+            background: 'rgba(0,0,0,0.18)',
+            borderRadius: 6,
+            padding: '5px 8px',
+            marginBottom: 4,
+            fontSize: 12,
+            lineHeight: 1.35,
+            color: '#aebac1',
+            overflow: 'hidden',
+            display: '-webkit-box',
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: 'vertical',
+            wordBreak: 'break-word',
+          }}>
+            <span style={{ display: 'block', fontWeight: 600, fontSize: 11, color: m.quotedFromMe ? '#34c759' : '#53bdeb', marginBottom: 1 }}>
+              {m.quotedFromMe ? 'Tú' : (m.senderName || chatName || 'Cliente')}
+            </span>
+            {m.quotedText}
+          </div>
+        )}
         {m.attachment && m.attachmentType === 'image' && (
           <img src={m.attachment} alt="" decoding="async" onLoad={onMediaLoad} style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }} />
         )}
