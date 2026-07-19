@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server';
+import { redis } from '@/lib/redis';
 
 export async function GET(req) {
   try {
-    const token = req.headers.get('Authorization');
-    
+    let token = req.headers.get('Authorization');
+
+    // Fallback: token del servidor en Redis (para llamadas internas del chat web)
+    if (!token) {
+      const stored = await redis.get('loyverse_token');
+      if (stored) token = `Bearer ${stored}`;
+    }
+
     if (!token) {
       return NextResponse.json({ error: 'Authorization token required' }, { status: 401 });
     }
@@ -12,7 +19,7 @@ export async function GET(req) {
 
     const storesRes = await fetch('https://api.loyverse.com/v1.0/stores', { headers });
     if (!storesRes.ok) throw new Error('Failed to fetch stores');
-    
+
     const { stores } = await storesRes.json();
 
     return NextResponse.json({

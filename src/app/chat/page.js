@@ -442,9 +442,20 @@ export default function ChatPage() {
   const addOptimisticMsg = useCallback((msg) => addOptimisticRef.current?.(msg), []);
 
   // stores para ClientCard (selector de sucursal)
+  // Lista completa desde Loyverse; las de los chats como complemento (ej. "WhatsApp")
+  const [loyverseStores, setLoyverseStores] = useState([]);
+  useEffect(() => {
+    fetch('/api/loyverse/stores')
+      .then(r => r.json())
+      .then(d => {
+        const names = (d?.data?.stores || []).map(s => s.name).filter(Boolean);
+        if (names.length) setLoyverseStores(names);
+      })
+      .catch(() => {});
+  }, []);
   const stores = useMemo(
-    () => [...new Set(chats.map(c => c.store).filter(Boolean))].sort(),
-    [chats]
+    () => [...new Set([...loyverseStores, ...chats.map(c => c.store).filter(Boolean)])].sort(),
+    [chats, loyverseStores]
   );
 
   return (
