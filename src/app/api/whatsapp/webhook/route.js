@@ -1803,7 +1803,29 @@ Responde SOLO con una palabra: MENU, PEDIR, DOMICILIO, PASAR, HORARIOS, GRACIAS,
 ¡Te esperamos para consentirte! 🍔🌶️🔥`;
                 console.log(`[Bot] Horarios respondidos para ${cleanPhone} - IA detectó intención horarios`);
             } else {
-                botReply = `¡Hola *${clientName}*! 🍔 Qué gusto verte de vuelta. 😊\n${menuMsg}`;
+                // Menú completo solo si no se mandó hace poco; si ya está en pantalla,
+                // responder con variantes cortas para no repetir el mismo bloque
+                const firstName = String(clientName).split(' ')[0];
+                const menuRecently = parsed.some(e =>
+                    e.role === 'model' &&
+                    (e.parts?.[0]?.text || '').includes('1️⃣ Ver Menú') &&
+                    Date.now() - (e.parts?.[0]?.ts || 0) < 10 * 60 * 1000
+                );
+                if (!menuRecently) {
+                    botReply = `¡Hola *${clientName}*! 🍔 Qué gusto verte de vuelta. 😊\n${menuMsg}`;
+                } else {
+                    const gentleVariants = [
+                        `😊 *${firstName}*, ¿te ayudo con algo más? Escribe *1* y te mando el menú 📋`,
+                        `🍔 *${firstName}*, ¿se te antoja algo? Escribe *2* para domicilio 🛵 o *3* para pasar por tu pedido 🏃`,
+                        `¡Aquí ando *${firstName}*! 😊 Cuando gustes escribe *1* para ver el menú 📋`,
+                        `😈 *${firstName}*, dime qué se te antoja o escribe *1* para ver el menú 🌶️`,
+                        `🔥 *${firstName}*, estoy listo para tomar tu pedido. ¿*Domicilio* (2) o *pasas por él* (3)? 🛵`,
+                    ];
+                    // No repetir la misma variante que la última respuesta
+                    const lastBotText = [...parsed].reverse().find(e => e.role === 'model')?.parts?.[0]?.text || '';
+                    const pool = gentleVariants.filter(v => v !== lastBotText);
+                    botReply = pool[Math.floor(Math.random() * pool.length)];
+                }
             }
         }
 
