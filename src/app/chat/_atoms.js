@@ -125,7 +125,7 @@ export const ChatRow = React.memo(function ChatRow({ chat, isActive, picUrl, onO
 );
 
 // ── Burbuja de mensaje ──
-export const MessageBubble = React.memo(function MessageBubble({ m, chatName, chatPhone, picUrl, memberPicUrl, onForward, onMediaLoad }) {
+export const MessageBubble = React.memo(function MessageBubble({ m, chatName, chatPhone, picUrl, memberPicUrl, onForward }) {
   const isGroupMsg = !m.fromMe && !!m.senderName;
   const displayName = isGroupMsg ? m.senderName : chatName;
   const displayPhone = isGroupMsg ? m.senderPhone : chatPhone;
@@ -160,13 +160,12 @@ export const MessageBubble = React.memo(function MessageBubble({ m, chatName, ch
           </div>
         )}
         {m.attachment && m.attachmentType === 'image' && (
-          <img src={m.attachment} alt="" decoding="async" onLoad={onMediaLoad} style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }} />
+          <img src={m.attachment} alt="" decoding="async" style={{ width: 260, height: 220, objectFit: 'cover', borderRadius: 6, display: 'block', marginBottom: 4, background: 'rgba(255,255,255,0.05)' }} />
         )}
         {!m.attachment && m.attachmentUrl && m.attachmentType === 'image' && (
           <img
             src={m.attachmentUrl} alt="" loading="lazy" decoding="async"
-            style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', marginBottom: 4 }}
-            onLoad={onMediaLoad}
+            style={{ width: 260, height: 220, objectFit: 'cover', borderRadius: 6, display: 'block', marginBottom: 4, background: 'rgba(255,255,255,0.05)' }}
             onError={e => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling && (e.currentTarget.nextSibling.style.display = 'flex'); }}
           />
         )}
@@ -176,7 +175,7 @@ export const MessageBubble = React.memo(function MessageBubble({ m, chatName, ch
           </div>
         )}
         {m.attachmentType === 'sticker' && m.attachmentUrl && (
-          <img src={m.attachmentUrl} alt="Sticker" loading="lazy" decoding="async" onLoad={onMediaLoad} style={{ maxWidth: 160, borderRadius: 4, display: 'block', marginBottom: 2 }} />
+          <img src={m.attachmentUrl} alt="Sticker" loading="lazy" decoding="async" style={{ width: 140, height: 140, objectFit: 'contain', display: 'block', marginBottom: 2 }} />
         )}
         {m.attachmentUrl && m.attachmentType === 'audio' && (
           <audio
@@ -184,7 +183,6 @@ export const MessageBubble = React.memo(function MessageBubble({ m, chatName, ch
             preload="metadata"
             className={styles.audioPlayer}
             src={m.attachmentUrl.startsWith('/') ? m.attachmentUrl : m.attachmentUrl}
-            onLoadedMetadata={onMediaLoad}
           />
         )}
         {m.hasAttachment && !m.attachmentUrl && !m.attachment && m.attachmentType === 'audio' && (
@@ -222,7 +220,7 @@ export const MessageBubble = React.memo(function MessageBubble({ m, chatName, ch
   prev.m.text === next.m.text &&
   prev.m.attachmentUrl === next.m.attachmentUrl &&
   prev.picUrl === next.picUrl &&
-  prev.onMediaLoad === next.onMediaLoad
+  prev.memberPicUrl === next.memberPicUrl
 );
 
 // ── Tarjeta de producto POS ──

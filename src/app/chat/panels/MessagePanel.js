@@ -165,19 +165,15 @@ function MessagePanel({
     });
   }, []);
 
-  const handleMessageMediaLoad = useCallback(() => {
-    if (isAtBottomRef.current) scrollToBottom();
-  }, [scrollToBottom]);
-
-  // Solo al cambiar de chat: scroll al fondo cuando llegan los mensajes de ese chat
+  // Solo al cambiar de chat: scroll al fondo cuando llegan los mensajes de ese chat.
+  // El Virtuoso se remonta por key={phone} e inicia en el último índice; este efecto
+  // cubre el caso donde los mensajes llegan async después del mount (chat sin cache).
   useEffect(() => {
     if (!msgsWithSeps.length) return;
     if (prevChatPhoneRef.current === activeChat?.phone) return;
     prevChatPhoneRef.current = activeChat?.phone;
     isAtBottomRef.current = true;
     scrollToBottom();
-    const t = setTimeout(scrollToBottom, 250);
-    return () => clearTimeout(t);
   }, [msgsWithSeps.length, activeChat?.phone, scrollToBottom]);
 
   const autoResize = () => {
@@ -446,15 +442,18 @@ function MessagePanel({
 
       {/* Lista de mensajes */}
       <Virtuoso
+        key={activeChat.phone}
         ref={virtuosoRef}
         scrollerRef={(el) => { scrollerRef.current = el; }}
         className={styles.messages}
         style={{ overflowX: 'hidden' }}
         data={msgsWithSeps}
-        overscan={500}
+        alignToBottom
+        initialTopMostItemIndex={msgsWithSeps.length > 0 ? { index: msgsWithSeps.length - 1, align: 'end' } : 0}
+        increaseViewportBy={{ top: 800, bottom: 300 }}
         followOutput={(isAtBottom) => isAtBottom ? 'auto' : false}
         atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
-        atBottomThreshold={120}
+        atBottomThreshold={60}
         contentContainerStyle={{ paddingTop: 12 }}
         components={{ Footer: () => <div style={{ height: 20 }} /> }}
         computeItemKey={(index, item) =>
@@ -487,7 +486,6 @@ function MessagePanel({
               picUrl={profilePics[activeChat.phone]}
               memberPicUrl={memberJid ? profilePics[memberJid] : undefined}
               onForward={setForwardMsg}
-              onMediaLoad={handleMessageMediaLoad}
             />
           );
         }}
