@@ -1878,24 +1878,22 @@ Tu objetivo principal es invitarlo a registrarse cordialmente para que reciba el
 Si el cliente te pregunta cualquier otra cosa, te dice piropos, muestra enojo o saca cualquier otro tema, NO VAMOS A AVANZAR. Debes "driblar" ese mensaje, diciéndole algo como "Sí, te entiendo" o "Muchas gracias", pero SIEMPRE insistiendo al final que si no se registra (dando su nombre y dirección) no podemos avanzar con el pedido o proceso. NO respondas dudas de menú ni otras cosas hasta que se registre.
 
 # REGLA DE REGISTRO CRÍTICA:
-Para registrarlo, necesitas que te diga su Nombre y su Dirección COMPLETA (calle, número y colonia).
+Para registrarlo necesitas su Nombre y su Dirección.
+NO SEAS ESTRICTO CON LA DIRECCIÓN: acepta CUALQUIER texto que el cliente dé como dirección, aunque parezca incompleta o vaga (solo colonia, solo sector, sin número, etc.). Un humano la validará después.
 
 SIEMPRE al final de tu respuesta agrega UNO de estos tags según lo que hayas detectado en TODA la conversación:
-- Si tiene NOMBRE Y dirección COMPLETA (calle+número+colonia): [REGISTRO_OK:nombre|dirección completa|ciudad]
-- Si tiene NOMBRE Y dirección PARCIAL (solo calle+número, sin colonia): [FALTA_COLONIA:nombre|calle y número]
+- Si tiene NOMBRE y CUALQUIER dirección: [REGISTRO_OK:nombre|dirección tal como la dio|ciudad si la mencionó]
 - Si SOLO tiene NOMBRE (sin dirección): [SOLO_NOMBRE:nombre]
-- Si SOLO tiene DIRECCIÓN COMPLETA (sin nombre): [SOLO_DIRECCION:dirección]
-- Si SOLO tiene DIRECCIÓN PARCIAL (sin colonia, sin nombre): [NADA]
+- Si SOLO tiene DIRECCIÓN (sin nombre): [SOLO_DIRECCION:dirección]
 - Si NO tiene NADA útil: [NADA]
 
 Ejemplos:
 - Cliente dijo "Me llamo Oscar Rodriguez" → [SOLO_NOMBRE:Oscar Rodriguez]
-- Cliente dijo "Cirris 102" (solo calle y número, sin colonia) → [NADA]
-- Cliente dijo "Cirros 102 Col Las Nubes" (tiene colonia) → [SOLO_DIRECCION:Cirros 102 Col Las Nubes]
-- Nombre ya capturado y cliente dijo "Cirris 102" (sin colonia) → [FALTA_COLONIA:Oscar Rodriguez|Cirris 102]
-- Nombre ya capturado y cliente dijo "Cirros 102 Col Las Nubes" → [REGISTRO_OK:Oscar Rodriguez|Cirros 102 Col Las Nubes|]
+- Nombre ya capturado y cliente dijo "Cirros 102" → [REGISTRO_OK:Oscar Rodriguez|Cirros 102|]
+- Nombre ya capturado y cliente dijo "col los parques García" → [REGISTRO_OK:Oscar Rodriguez|col los parques García|]
+- Nombre ya capturado y cliente dijo "Talio #532 sec 7 Valle de Lincoln" → [REGISTRO_OK:Oscar Rodriguez|Talio #532 sec 7 Valle de Lincoln|]
 - Cliente dijo "Oscar Rodriguez, Cirros 102 Col Las Nubes" → [REGISTRO_OK:Oscar Rodriguez|Cirros 102 Col Las Nubes|]
-- Cliente dijo algo random sin datos → [NADA]
+- Cliente dijo un saludo o pregunta sin datos → [NADA]
 
 IMPORTANTE: Revisa TODA la conversación previa antes de decidir el tag. NO vuelvas a pedir datos que el cliente ya dio.
 
@@ -1905,10 +1903,8 @@ NUNCA omitas el tag.`;
             if (pendingName) {
                 systemContext += `\n\n# DATO YA CAPTURADO (¡MUY IMPORTANTE!):
 El cliente YA dio su nombre: "${pendingName}". NUNCA le vuelvas a pedir el nombre.
-Solo falta su DIRECCIÓN completa (calle, número y colonia). Tags a usar:
-- Da dirección completa → [REGISTRO_OK:${pendingName}|dirección|ciudad]
-- Da calle y número sin colonia → [FALTA_COLONIA:${pendingName}|calle y número]
-- Da colonia o ciudad sin calle/número, o cualquier otra cosa → pídele calle, número y colonia, y agrega [SOLO_NOMBRE:${pendingName}]`;
+Solo falta su DIRECCIÓN. NO SEAS ESTRICTO: CUALQUIER texto que dé como dirección acéptalo tal cual y emite [REGISTRO_OK:${pendingName}|dirección|].
+Solo si el mensaje claramente NO es una dirección (saludo, pregunta, emoji) pídele su dirección y agrega [SOLO_NOMBRE:${pendingName}]`;
             }
         }
 
@@ -1965,12 +1961,20 @@ Solo falta su DIRECCIÓN completa (calle, número y colonia). Tags a usar:
             const regMatch = reply.match(/\[REGISTRO_OK:([^|]+)\|([^|\]]+)\|?([^\]]*)\]/);
             // Si ya teníamos el nombre guardado y la IA solo detectó la dirección, completar el registro
             const soloDirMatch = !regMatch && pendingName ? reply.match(/\[SOLO_DIRECCION:([^\]]+)\]/) : null;
+            // Red de seguridad: ya hay nombre y el mensaje trae un número y no es un pedido de
+            // comida → guardarlo como dirección aunque Gemini no emita tag (el humano valida después)
+            const addressGuess = !regMatch && !soloDirMatch && pendingName
+                && /\d/.test(bodyStr)
+                && !/(kilo|alitas?|boneless|burger|hamburgues|papas|combo|refresco|hotdog|salchipapa|pedir|orden|men[uú]|cu[aá]nto|precio)/i.test(bodyStr)
+                ? bodyStr.trim() : null;
 
-            if (regMatch || soloDirMatch) {
+            if (regMatch || soloDirMatch || addressGuess) {
                 // ── ✅ REGISTRO DETECTADO: Mensaje determinístico de confirmación ──
                 const clientData = regMatch
                     ? { name: regMatch[1].trim(), address: regMatch[2].trim(), city: regMatch[3].trim() }
-                    : { name: pendingName, address: soloDirMatch[1].trim(), city: '' };
+                    : soloDirMatch
+                    ? { name: pendingName, address: soloDirMatch[1].trim(), city: '' }
+                    : { name: pendingName, address: addressGuess, city: '' };
                 const confirmMsg = `¡Perfecto *${clientData.name}*! 🎉🔥\n¡Ya estás registrado! 🚀 Tu 🍔 *BURGER GRATIS* de bienvenida te espera.\n¿En qué te ayudo hoy?\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃\n4️⃣ Conocer nuestros Horarios 📅`;
                 
                 const confirmMsgId = await sendWhatsApp(phoneId, confirmMsg, cfg);
@@ -2080,6 +2084,7 @@ Solo falta su DIRECCIÓN completa (calle, número y colonia). Tags a usar:
                 const addrMatch = reply.match(/\[SOLO_DIRECCION:([^\]]+)\]/);
                 const coloniaMatch = reply.match(/\[FALTA_COLONIA:([^|]+)\|([^\]]+)\]/);
                 let insistMsg = '';
+                let insistType = '';
 
                 if (coloniaMatch) {
                     // Tiene nombre + calle+número pero falta colonia
@@ -2091,6 +2096,7 @@ Solo falta su DIRECCIÓN completa (calle, número y colonia). Tags a usar:
                         `👋 *${detectedName}*, ya casi termina. Solo necesito tu *Colonia* 🏘️ (la de *${partialAddr}*) para registrarte y enviarte tu 🍔 *BURGER GRATIS*. 🎁`,
                     ];
                     insistMsg = needColoniaVariants[Math.floor(Math.random() * needColoniaVariants.length)];
+                    insistType = 'colonia';
                 } else if (nameMatch) {
                     // Tiene nombre, falta dirección — usar solo primer nombre
                     const detectedName = nameMatch[1].trim();
@@ -2108,6 +2114,7 @@ Solo falta su DIRECCIÓN completa (calle, número y colonia). Tags a usar:
                         `✨ *${firstName}*, un paso más. Mándame tu *Dirección* 📍 y te asignamos la sucursal más cercana con tu 🍔 *BURGER GRATIS* incluida. 🎁`
                     ];
                     insistMsg = needAddrVariants[Math.floor(Math.random() * needAddrVariants.length)];
+                    insistType = 'addr';
                 } else if (addrMatch) {
                     // Tiene dirección, falta nombre
                     const needNameVariants = [
@@ -2118,6 +2125,7 @@ Solo falta su DIRECCIÓN completa (calle, número y colonia). Tags a usar:
                         '👋 ¡Ya tengo tu dirección guardada! Solo falta tu *Nombre Completo* 🙋 para completar el registro. 🍔 *BURGER GRATIS* garantizada. 🎁'
                     ];
                     insistMsg = needNameVariants[Math.floor(Math.random() * needNameVariants.length)];
+                    insistType = 'name';
                 } else if (pendingName) {
                     // Sin tag pero el nombre ya está guardado — insistir en la dirección, nunca en el nombre
                     const firstName = pendingName.split(' ')[0];
@@ -2127,6 +2135,7 @@ Solo falta su DIRECCIÓN completa (calle, número y colonia). Tags a usar:
                         `👋 *${firstName}*, ¡ya casi! Mándame tu *Dirección* 📍 con calle, número y colonia, y quedas registrado con tu 🍔 *BURGER GRATIS* 🎁`,
                     ];
                     insistMsg = needAddrFallback[Math.floor(Math.random() * needAddrFallback.length)];
+                    insistType = 'addr';
                 } else {
                     // No detectó nombre — insistir solo en el nombre
                     const needNameOnlyVariants = [
@@ -2137,10 +2146,30 @@ Solo falta su DIRECCIÓN completa (calle, número y colonia). Tags a usar:
                         '✨ ¡Un momento! Primero necesito tu *Nombre Completo* 🙋 para registrarte. ¡Después viene tu 🍔 *BURGER GRATIS*! 🎁',
                     ];
                     insistMsg = needNameOnlyVariants[Math.floor(Math.random() * needNameOnlyVariants.length)];
+                    insistType = 'name';
+                }
+
+                // ── Anti-duplicados: mensajes rápidos del cliente no deben generar la misma insistencia dos veces ──
+                // Lock corto para webhooks procesándose en paralelo
+                const insistLockKey = `insist_lock_${cleanPhone}`;
+                const gotInsistLock = await redis.setnx(insistLockKey, '1');
+                if (!gotInsistLock) {
+                    console.log(`[Bot] Insistencia omitida (lock) para ${cleanPhone}`);
+                    return NextResponse.json({ success: true, note: 'insist_locked' });
+                }
+                await redis.expire(insistLockKey, 8);
+                // Dedup contra historial fresco: misma insistencia enviada hace <90s → no repetir
+                const freshInsistRaw = await redis.get(historyKey);
+                const freshInsist = typeof freshInsistRaw === 'string' ? JSON.parse(freshInsistRaw) : (freshInsistRaw || []);
+                const lastModelEntry = [...freshInsist].reverse().find(e => e.role === 'model');
+                const lastModelPart = lastModelEntry?.parts?.[0];
+                if (lastModelPart?.insistType === insistType && Date.now() - (lastModelPart.ts || 0) < 90000) {
+                    console.log(`[Bot] Insistencia '${insistType}' deduplicada para ${cleanPhone}`);
+                    return NextResponse.json({ success: true, note: 'insist_deduped' });
                 }
 
                 const insistMsgId = await sendWhatsApp(phoneId, insistMsg, cfg);
-                const insistEntry = { text: insistMsg, ts: Date.now(), status: 'sent' };
+                const insistEntry = { text: insistMsg, ts: Date.now(), status: 'sent', insistType };
                 if (insistMsgId) { insistEntry.msgId = insistMsgId; await trackMsgId(insistMsgId, cleanPhone); }
                 await mergeAndSave(historyKey, cleanPhone, [{ role: 'model', parts: [insistEntry] }]);
             }
