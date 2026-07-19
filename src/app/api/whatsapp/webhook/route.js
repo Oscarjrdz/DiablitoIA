@@ -1535,9 +1535,11 @@ export async function POST(req) {
     // IMPORTANTE: requiere client_registered_ además del nombre, porque [SOLO_NOMBRE]
     // guarda el nombre en Redis antes de completar el registro. Sin este check,
     // el bot trataría al cliente como registrado y perdería la dirección.
+    let pendingName = null; // nombre ya capturado por [SOLO_NOMBRE] pero registro aún incompleto
     if (!isRegistered) {
         const cachedName = await redis.get(`client_name_${cleanPhone}`);
         const registeredFlag = await redis.get(`client_registered_${cleanPhone}`);
+        if (cachedName && !registeredFlag) pendingName = cachedName;
         if (cachedName && registeredFlag) {
             clientName = cachedName;
             isRegistered = true;
@@ -1900,6 +1902,14 @@ IMPORTANTE: Revisa TODA la conversación previa antes de decidir el tag. NO vuel
 # FORMATO OBLIGATORIO AL CONFIRMAR REGISTRO:
 Cuando confirmes el registro, responde cualquier cosa y agrega el tag [REGISTRO_OK:nombre|dirección|ciudad].
 NUNCA omitas el tag.`;
+            if (pendingName) {
+                systemContext += `\n\n# DATO YA CAPTURADO (¡MUY IMPORTANTE!):
+El cliente YA dio su nombre: "${pendingName}". NUNCA le vuelvas a pedir el nombre.
+Solo falta su DIRECCIÓN completa (calle, número y colonia). Tags a usar:
+- Da dirección completa → [REGISTRO_OK:${pendingName}|dirección|ciudad]
+- Da calle y número sin colonia → [FALTA_COLONIA:${pendingName}|calle y número]
+- Da colonia o ciudad sin calle/número, o cualquier otra cosa → pídele calle, número y colonia, y agrega [SOLO_NOMBRE:${pendingName}]`;
+            }
         }
 
         // ── 📦 INYECTAR CATÁLOGO DE PRODUCTOS AL CONTEXTO DEL BOT ──
@@ -1953,10 +1963,14 @@ NUNCA omitas el tag.`;
             // ── 📋 Detectar si la IA encontró nombre+dirección ──
             // Ciudad es opcional: acepta [REGISTRO_OK:nombre|dirección|ciudad] y [REGISTRO_OK:nombre|dirección]
             const regMatch = reply.match(/\[REGISTRO_OK:([^|]+)\|([^|\]]+)\|?([^\]]*)\]/);
+            // Si ya teníamos el nombre guardado y la IA solo detectó la dirección, completar el registro
+            const soloDirMatch = !regMatch && pendingName ? reply.match(/\[SOLO_DIRECCION:([^\]]+)\]/) : null;
 
-            if (regMatch) {
+            if (regMatch || soloDirMatch) {
                 // ── ✅ REGISTRO DETECTADO: Mensaje determinístico de confirmación ──
-                const clientData = { name: regMatch[1].trim(), address: regMatch[2].trim(), city: regMatch[3].trim() };
+                const clientData = regMatch
+                    ? { name: regMatch[1].trim(), address: regMatch[2].trim(), city: regMatch[3].trim() }
+                    : { name: pendingName, address: soloDirMatch[1].trim(), city: '' };
                 const confirmMsg = `¡Perfecto *${clientData.name}*! 🎉🔥\n¡Ya estás registrado! 🚀 Tu 🍔 *BURGER GRATIS* de bienvenida te espera.\n¿En qué te ayudo hoy?\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃\n4️⃣ Conocer nuestros Horarios 📅`;
                 
                 const confirmMsgId = await sendWhatsApp(phoneId, confirmMsg, cfg);
@@ -2104,6 +2118,15 @@ NUNCA omitas el tag.`;
                         '👋 ¡Ya tengo tu dirección guardada! Solo falta tu *Nombre Completo* 🙋 para completar el registro. 🍔 *BURGER GRATIS* garantizada. 🎁'
                     ];
                     insistMsg = needNameVariants[Math.floor(Math.random() * needNameVariants.length)];
+                } else if (pendingName) {
+                    // Sin tag pero el nombre ya está guardado — insistir en la dirección, nunca en el nombre
+                    const firstName = pendingName.split(' ')[0];
+                    const needAddrFallback = [
+                        `*${firstName}*, solo me falta tu *Dirección* 📍 (calle, número y colonia) para completar tu registro y enviarte tu 🍔 *BURGER GRATIS* 🎁`,
+                        `¡Gracias *${firstName}*! 😊 Compárteme tu *Dirección* completa 📍 (calle, número y colonia) para asignarte tu sucursal más cercana 🏪`,
+                        `👋 *${firstName}*, ¡ya casi! Mándame tu *Dirección* 📍 con calle, número y colonia, y quedas registrado con tu 🍔 *BURGER GRATIS* 🎁`,
+                    ];
+                    insistMsg = needAddrFallback[Math.floor(Math.random() * needAddrFallback.length)];
                 } else {
                     // No detectó nombre — insistir solo en el nombre
                     const needNameOnlyVariants = [
