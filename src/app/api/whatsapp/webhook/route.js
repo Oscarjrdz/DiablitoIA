@@ -1584,24 +1584,59 @@ export async function POST(req) {
                 return NextResponse.json({ success: true });
             }
         }
+        // ── Sub-flujo: Confirmación de domicilio/pasar → AQUÍ recién se activa la alarma ──
+        else if (botState === 'awaiting_delivery_confirm' || botState === 'awaiting_pickup_confirm') {
+            await redis.del(`bot_state_${cleanPhone}`);
+            const isSi = /^(s[iíì]|si|sí|yes|ok|okay|va|dale|claro|porfa|por favor|sale|correcto|exacto|asi es|así es|simon|sip|👍)$/i.test(userText)
+                || /\b(si|sí|claro|correcto|asi es|así es|dale|va)\b/i.test(userText);
+            const isNo = /^(no|nel|nop|nah|para nada|mejor no|ya no|cancelar|cancela)$/i.test(userText) || /\bno\b/i.test(userText);
+
+            // ¿El cliente ya está dando su pedido? (antojo de comida = confirmación implícita)
+            // Excluir preguntas: "¿tienen refresco?" NO es un pedido
+            const isQuestion = bodyStr.includes('?') || /^(cu[aá]nto|cu[aá]l|qu[eé]|c[oó]mo|d[oó]nde|tienen|hay|manejan|venden|aceptan|puedo|se puede|a que hora|a qu[eé] hora)/i.test(bodyStr.trim());
+            const looksLikeOrder = !isQuestion && /(kilo|alitas?|boneless|bonel|burger|hamburgues|papas|combo|nuggets?|tenders?|hotdog|salchipapa|malteada|quiero (un|una|unos|unas|el|la|dos|tres|medio|\d)|dame|ponme|me das|antoj)/i.test(bodyStr);
+            const retryCount = parseInt(await redis.get(`confirm_retry_${cleanPhone}`) || '0');
+
+            if ((isSi && !isNo) || (looksLikeOrder && !isNo)) {
+                // ✅ Confirmado (dijo "sí" o empezó a dar su pedido) → activar alarma y silenciar bot
+                await redis.del(`confirm_retry_${cleanPhone}`);
+                await redis.set(`delivery_mode_${cleanPhone}`, '1');
+                await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1');
+                await publishChatEvent({ phone: cleanPhone, redisPhone: cleanPhone, deliveryMode: true, reason: 'delivery-active' });
+                console.log(`[Bot] Pedido CONFIRMADO para ${cleanPhone} - alarma activada`);
+                botReply = `🙌 ¡Perfecto *${clientName}*! Enseguida un asesor te atiende para tomar tu pedido. 🍔🔥`;
+            } else if (isNo) {
+                // ❌ No confirmó → cancelar, sin alarma
+                await redis.del(`confirm_retry_${cleanPhone}`);
+                botReply = `👍 Sin problema *${clientName}*, aquí sigo. ¿En qué te puedo ayudar?\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃\n4️⃣ Conocer nuestros Horarios 📅`;
+            } else if (retryCount >= 1) {
+                // Ya re-preguntamos una vez y sigue sin confirmar → soltar el estado, responder normal SIN alarma
+                await redis.del(`confirm_retry_${cleanPhone}`);
+                botReply = `😊 *${clientName}*, cuando quieras hacer tu pedido escribe *2* para domicilio 🛵 o *3* para pasar 🏃. ¿Te ayudo con algo más?`;
+            } else {
+                // Respuesta ambigua (pregunta, evasión) → re-preguntar UNA vez, sin activar alarma
+                await redis.setex(`confirm_retry_${cleanPhone}`, 600, String(retryCount + 1));
+                await redis.setex(`bot_state_${cleanPhone}`, 600, botState);
+                const tipo = botState === 'awaiting_pickup_confirm' ? 'pasar a recoger' : 'pedir a domicilio';
+                botReply = `🤔 *${clientName}*, para confirmar: ¿quieres *${tipo}*? Responde *Sí* o *No* 😊`;
+            }
+        }
         // ── Opción 1: Ver Menú → preguntar confirmación ──
         else if (textMsg === '1' || /men[uú]/i.test(userText) || /ver el men/i.test(userText) || /\bcarta\b/i.test(userText) || /quiero ver/i.test(userText)) {
             botReply = `📋 ¿Quieres que te mande el *Menú*?\n👉 Responde *Sí* o *No*`;
             await redis.setex(`bot_state_${cleanPhone}`, 300, 'awaiting_menu_confirm');
         }
-        // ── Opción 2 explícita: Pedido a Domicilio ──
+        // ── Opción 2 explícita: Pedido a Domicilio (pide confirmación, NO activa alarma aún) ──
         else if (textMsg === '2') {
             botReply = `🛵 Muy bien *${clientName}*, ¿entonces quieres pedir a domicilio verdad? 🍔🔥`;
-            await redis.set(`delivery_mode_${cleanPhone}`, '1');
-            await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1');
-            console.log(`[Bot] Delivery mode activado para ${cleanPhone} - opción 2 explícita`);
+            await redis.setex(`bot_state_${cleanPhone}`, 600, 'awaiting_delivery_confirm');
+            console.log(`[Bot] Esperando confirmación de domicilio para ${cleanPhone} - opción 2`);
         }
-        // ── Opción 3 explícita: Pedir para Pasar ──
+        // ── Opción 3 explícita: Pedir para Pasar (pide confirmación, NO activa alarma aún) ──
         else if (textMsg === '3') {
             botReply = `🏃 Muy bien *${clientName}*, ¿entonces quieres pedir para pasar a recoger verdad? 🍔🔥`;
-            await redis.set(`delivery_mode_${cleanPhone}`, '1');
-            await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1');
-            console.log(`[Bot] Pickup mode activado para ${cleanPhone} - opción 3 explícita`);
+            await redis.setex(`bot_state_${cleanPhone}`, 600, 'awaiting_pickup_confirm');
+            console.log(`[Bot] Esperando confirmación de pickup para ${cleanPhone} - opción 3`);
         }
         // ── Opción 4 explícita: Conocer nuestros horarios ──
         else if (
@@ -1736,14 +1771,12 @@ Responde SOLO con una palabra: MENU, PEDIR, DOMICILIO, PASAR, HORARIOS, GRACIAS,
                 console.log(`[Bot] Orden de comida detectada para ${cleanPhone} - preguntando domicilio/pasar`);
             } else if (orderType === 'delivery') {
                 botReply = `🛵 Muy bien *${clientName}*, ¿entonces quieres pedir a domicilio verdad? 🍔🔥`;
-                await redis.set(`delivery_mode_${cleanPhone}`, '1');
-                await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1');
-                console.log(`[Bot] Delivery mode activado para ${cleanPhone} - IA detectó domicilio`);
+                await redis.setex(`bot_state_${cleanPhone}`, 600, 'awaiting_delivery_confirm');
+                console.log(`[Bot] Esperando confirmación de domicilio para ${cleanPhone} - IA detectó domicilio`);
             } else if (orderType === 'pickup') {
                 botReply = `🏃 Muy bien *${clientName}*, ¿entonces quieres pedir para pasar a recoger verdad? 🍔🔥`;
-                await redis.set(`delivery_mode_${cleanPhone}`, '1');
-                await redis.setex(`delivery_bot_silence_${cleanPhone}`, 3600, '1');
-                console.log(`[Bot] Pickup mode activado para ${cleanPhone} - IA detectó pasar a recoger`);
+                await redis.setex(`bot_state_${cleanPhone}`, 600, 'awaiting_pickup_confirm');
+                console.log(`[Bot] Esperando confirmación de pickup para ${cleanPhone} - IA detectó pasar a recoger`);
             } else if (orderType === 'gracias') {
                 const thankReplies = [
                     `Por nada *${clientName}* 😊`,
