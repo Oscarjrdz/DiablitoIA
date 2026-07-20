@@ -2192,7 +2192,15 @@ Solo si el mensaje claramente NO es una dirección (saludo, pregunta, emoji) pí
                     insistMsg = needAddrFallback[Math.floor(Math.random() * needAddrFallback.length)];
                     insistType = 'addr';
                 } else {
-                    // No detectó nombre — insistir solo en el nombre
+                    // No detectó nombre — insistir en el nombre. Si el cliente muestra intención
+                    // de ordenar/pedir, reconocerlo con contexto antes de pedir el nombre.
+                    const wantsToOrder = /(kilo|alitas?|boneless|bonel|burger|hamburgues|papas|combo|nuggets?|tenders?|hotdog|salchipapa|malteada|shake|refresco|orden|pedir|ordenar|domicilio|quiero|dame|ponme|me da|antoj|men[uú]|carta|servicio|precio|cu[aá]nto)/i.test(bodyStr);
+                    const needNameOrder = [
+                        '¡Claro que sí! 😋🍔 Con mucho gusto te tomo tu pedido, solo dame tu *Nombre Completo* 🙋 primero para registrarte y ¡de paso te regalo una 🍔 *BURGER GRATIS*! 🎁',
+                        '¡Entendido! 🔥 Me encantaría prepararte tu antojo 😋, pero primero necesito tu *Nombre Completo* 🙋 para darte de alta. ¡Y te ganas tu 🍔 *BURGER GRATIS*! 🎁',
+                        '¡Con gusto! 🍔😍 Antes de tomar tu pedido, compárteme tu *Nombre Completo* 🙋 para registrarte rapidito. ¡Además recibes una 🍔 *BURGER GRATIS* de bienvenida! 🎁',
+                        '¡Ya casi! 😄 Para pasar tu pedido a cocina primero dime tu *Nombre Completo* 🙋 y quedas registrado con tu 🍔 *BURGER GRATIS*. 🎁',
+                    ];
                     const needNameOnlyVariants = [
                         '😊 Para poder ayudarte primero necesito registrarte. Solo compárteme tu *Nombre Completo* 🙋 y listo.',
                         '🍔 ¡Me encantaría ayudarte! Primero dime tu *Nombre Completo* 🙋 para registrarte y recibir tu *BURGER GRATIS*. 🎁',
@@ -2200,28 +2208,21 @@ Solo si el mensaje claramente NO es una dirección (saludo, pregunta, emoji) pí
                         '🙌 Es muy sencillo, solo dime tu *Nombre Completo* 🙋 para darte de alta. ¡Tu 🍔 *BURGER GRATIS* te espera!',
                         '✨ ¡Un momento! Primero necesito tu *Nombre Completo* 🙋 para registrarte. ¡Después viene tu 🍔 *BURGER GRATIS*! 🎁',
                     ];
-                    insistMsg = needNameOnlyVariants[Math.floor(Math.random() * needNameOnlyVariants.length)];
+                    const pool = wantsToOrder ? needNameOrder : needNameOnlyVariants;
+                    insistMsg = pool[Math.floor(Math.random() * pool.length)];
                     insistType = 'name';
                 }
 
-                // ── Anti-duplicados: mensajes rápidos del cliente no deben generar la misma insistencia dos veces ──
-                // Lock corto para webhooks procesándose en paralelo
+                // ── Anti-duplicados SOLO para webhooks casi simultáneos (ráfaga/doble entrega) ──
+                // Lock atómico corto (4s): si dos webhooks entran paralelos, solo uno responde.
+                // NO silencia conversación normal: mensajes espaciados >4s siempre reciben respuesta.
                 const insistLockKey = `insist_lock_${cleanPhone}`;
                 const gotInsistLock = await redis.setnx(insistLockKey, '1');
                 if (!gotInsistLock) {
-                    console.log(`[Bot] Insistencia omitida (lock) para ${cleanPhone}`);
+                    console.log(`[Bot] Insistencia omitida (ráfaga concurrente) para ${cleanPhone}`);
                     return NextResponse.json({ success: true, note: 'insist_locked' });
                 }
-                await redis.expire(insistLockKey, 8);
-                // Dedup contra historial fresco: misma insistencia enviada hace <90s → no repetir
-                const freshInsistRaw = await redis.get(historyKey);
-                const freshInsist = typeof freshInsistRaw === 'string' ? JSON.parse(freshInsistRaw) : (freshInsistRaw || []);
-                const lastModelEntry = [...freshInsist].reverse().find(e => e.role === 'model');
-                const lastModelPart = lastModelEntry?.parts?.[0];
-                if (lastModelPart?.insistType === insistType && Date.now() - (lastModelPart.ts || 0) < 90000) {
-                    console.log(`[Bot] Insistencia '${insistType}' deduplicada para ${cleanPhone}`);
-                    return NextResponse.json({ success: true, note: 'insist_deduped' });
-                }
+                await redis.expire(insistLockKey, 4);
 
                 const insistMsgId = await sendWhatsApp(phoneId, insistMsg, cfg);
                 const insistEntry = { text: insistMsg, ts: Date.now(), status: 'sent', insistType };
