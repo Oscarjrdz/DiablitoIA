@@ -2030,7 +2030,7 @@ Solo si el mensaje claramente NO es una dirección (saludo, pregunta, emoji) pí
                     : soloDirMatch
                     ? { name: pendingName, address: soloDirMatch[1].trim(), city: '' }
                     : { name: pendingName, address: addressGuess, city: '' };
-                const confirmMsg = `¡Perfecto *${clientData.name}*! 🎉🔥\n¡Ya estás registrado! 🚀 Tu 🍔 *BURGER GRATIS* de bienvenida te espera.\n¿En qué te ayudo hoy?\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃\n4️⃣ Conocer nuestros Horarios 📅`;
+                const confirmMsg = `¡Felicidades *${clientData.name}*! 🎉🔥\n¡Ya te registré! 🚀 Aquí tienes tu 🍔 *BURGER GRATIS* de bienvenida 🎁👇`;
                 
                 const confirmMsgId = await sendWhatsApp(phoneId, confirmMsg, cfg);
                 const confirmEntry = { text: confirmMsg, ts: Date.now(), status: 'sent' };
@@ -2132,6 +2132,15 @@ Solo si el mensaje claramente NO es una dirección (saludo, pregunta, emoji) pí
                     await redis.del(`client_card_v2_${clientPhone10}`);
                     await publishChatEvent({ phone: cleanPhone, redisPhone: cleanPhone, reason: 'client-registered' });
                 } catch(regErr) { console.error('[Bot] Error en auto-registro:', regErr); }
+
+                // ── 📋 Menú al final: después de felicitación y cupón, invitar a ordenar ──
+                await new Promise(r => setTimeout(r, 1400));
+                const firstName = clientData.name.split(' ')[0];
+                const menuAfterMsg = `Y ahora sí *${firstName}*, ¿en qué te ayudo? 😋\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃\n4️⃣ Conocer nuestros Horarios 📅`;
+                const menuAfterId = await sendWhatsApp(phoneId, menuAfterMsg, cfg);
+                const menuAfterEntry = { text: menuAfterMsg, ts: Date.now(), status: 'sent' };
+                if (menuAfterId) { menuAfterEntry.msgId = menuAfterId; await trackMsgId(menuAfterId, cleanPhone); }
+                await mergeAndSave(historyKey, cleanPhone, [{ role: 'model', parts: [menuAfterEntry] }]);
 
             } else {
                 // ── 🔍 Detectar datos parciales ──
