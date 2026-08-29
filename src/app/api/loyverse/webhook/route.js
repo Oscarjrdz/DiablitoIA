@@ -6,7 +6,6 @@ import { saveBotMessage } from '@/lib/chatHistory';
 export async function POST(req) {
   try {
     const payload = await req.json();
-    await redis.set('DEBUG_WEBHOOK_RAW_' + Date.now(), JSON.stringify(payload));
     console.log('Loyverse Webhook received:', JSON.stringify(payload).substring(0, 500));
     
     // Save the receipt payload to Redis for debugging
