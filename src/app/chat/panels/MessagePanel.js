@@ -95,7 +95,6 @@ function MessagePanel({
   const scrollerRef = useRef(null);
   const isAtBottomRef = useRef(true);
   const typingTimerRef = useRef(null);
-  const msgListLengthRef = useRef(0);
   const prevChatPhoneRef = useRef(null);
 
   useEffect(() => {
@@ -152,16 +151,12 @@ function MessagePanel({
     return result;
   }, [allMessages, isTyping]);
 
-  useEffect(() => {
-    msgListLengthRef.current = msgsWithSeps.length;
-  }, [msgsWithSeps.length]);
-
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = useCallback((behavior = 'auto') => {
+    // 'LAST' lo resuelve Virtuoso contra su conteo real de items en el momento
+    // del scroll, evitando la carrera con msgListLengthRef (que se actualiza en
+    // un efecto posterior y dejaba el último mensaje oculto bajo el fold).
     requestAnimationFrame(() => {
-      const idx = msgListLengthRef.current - 1;
-      if (idx >= 0) {
-        try { virtuosoRef.current?.scrollToIndex({ index: idx, align: 'end', behavior: 'auto' }); } catch {}
-      }
+      try { virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior }); } catch {}
     });
   }, []);
 
@@ -251,7 +246,7 @@ function MessagePanel({
       body: JSON.stringify({ phone, read: true })
     }).catch(() => {});
     setPendingMsgs(prev => [...prev, optimistic]);
-    scrollToBottom(true);
+    scrollToBottom();
     fetch('/api/whatsapp/send', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to: phone, text, attachment: optimistic.attachment, attachmentType: optimistic.attachmentType })
@@ -304,7 +299,7 @@ function MessagePanel({
     };
     setVsOpen(false);
     setPendingMsgs(prev => [...prev, optimistic]);
-    scrollToBottom(true);
+    scrollToBottom();
     setChats(prev => prev.map(c => c.phone === phone
       ? { ...c, lastText: msg.text, lastTs: now, fromMe: true, needsHuman: false, unread: 0 }
       : c));
