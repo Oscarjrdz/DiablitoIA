@@ -96,8 +96,11 @@ function MessagePanel({
   const isAtBottomRef = useRef(true);
   const typingTimerRef = useRef(null);
   const prevChatPhoneRef = useRef(null);
-  const prevLenRef = useRef(0);
-  const stickUntilRef = useRef(0);
+  // Máquina de estado "pegado al fondo": stickyRef = queremos permanecer al
+  // fondo. Solo un scroll DEL USUARIO hacia arriba lo apaga; el crecimiento de
+  // la lista (que dispara atBottom=false transitorio) NO lo apaga.
+  const stickyRef = useRef(true);
+  const contentChangedUntilRef = useRef(0);
 
   useEffect(() => {
     if (!addOptimisticRef) return;
@@ -160,37 +163,30 @@ function MessagePanel({
     try { virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', offset: 20 }); } catch {}
   }, []);
 
+  // Un solo scroll aterriza corto porque el item recién agregado aún no está
+  // medido. Damos unas pasadas rápidas; el ajuste FINO y determinista lo hace
+  // totalListHeightChanged (dispara cuando la medición se estabiliza).
   const stickToBottom = useCallback(() => {
-    // Un solo scroll aterriza corto porque el item recién agregado aún no está
-    // medido. Abrimos una ventana de ~500ms en la que cada cambio de altura
-    // (totalListHeightChanged) re-ancla al fondo real, más unas pasadas por si
-    // la altura no cambia pero hay que reposicionar.
-    stickUntilRef.current = Date.now() + 500;
     requestAnimationFrame(pinBottom);
     requestAnimationFrame(() => requestAnimationFrame(pinBottom));
-    setTimeout(pinBottom, 80);
-    setTimeout(pinBottom, 220);
+    setTimeout(pinBottom, 120);
   }, [pinBottom]);
 
-  // Solo al cambiar de chat: scroll al fondo cuando llegan los mensajes de ese chat.
-  // El Virtuoso se remonta por key={phone} e inicia en el último índice; este efecto
-  // cubre el caso donde los mensajes llegan async después del mount (chat sin cache).
+  // Un ÚNICO efecto sobre el contenido (msgsWithSeps cambia de referencia con
+  // cualquier cambio: nuevo mensaje, swap optimista→real, typing↔mensaje, o
+  // cambio de chat). Marca una ventana de "cambio de contenido" para que el
+  // atBottom=false transitorio del crecimiento no apague el modo pegado, y si
+  // seguimos pegados, re-ancla al fondo.
   useEffect(() => {
     if (!msgsWithSeps.length) return;
-    if (prevChatPhoneRef.current === activeChat?.phone) return;
-    prevChatPhoneRef.current = activeChat?.phone;
-    isAtBottomRef.current = true;
-    prevLenRef.current = msgsWithSeps.length;
-    stickToBottom();
-  }, [msgsWithSeps.length, activeChat?.phone, stickToBottom]);
-
-  // Mensaje entrante (SSE) estando al fondo: seguir al fondo. Si el usuario está
-  // leyendo historial más arriba (no al fondo), NO saltamos (estilo WhatsApp).
-  useEffect(() => {
-    const prev = prevLenRef.current;
-    prevLenRef.current = msgsWithSeps.length;
-    if (msgsWithSeps.length > prev && isAtBottomRef.current) stickToBottom();
-  }, [msgsWithSeps.length, stickToBottom]);
+    if (prevChatPhoneRef.current !== activeChat?.phone) {
+      prevChatPhoneRef.current = activeChat?.phone;
+      stickyRef.current = true;
+      isAtBottomRef.current = true;
+    }
+    contentChangedUntilRef.current = Date.now() + 700;
+    if (stickyRef.current) stickToBottom();
+  }, [msgsWithSeps, activeChat?.phone, stickToBottom]);
 
   const autoResize = () => {
     const ta = textareaRef.current;
@@ -266,6 +262,7 @@ function MessagePanel({
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone, read: true })
     }).catch(() => {});
+    stickyRef.current = true;
     setPendingMsgs(prev => [...prev, optimistic]);
     stickToBottom();
     fetch('/api/whatsapp/send', {
@@ -319,6 +316,7 @@ function MessagePanel({
       fromMe: true, ts: now, time: timeStr, status: 'sent'
     };
     setVsOpen(false);
+    stickyRef.current = true;
     setPendingMsgs(prev => [...prev, optimistic]);
     stickToBottom();
     setChats(prev => prev.map(c => c.phone === phone
@@ -468,13 +466,22 @@ function MessagePanel({
         initialTopMostItemIndex={msgsWithSeps.length > 0 ? { index: msgsWithSeps.length - 1, align: 'end' } : 0}
         increaseViewportBy={{ top: 800, bottom: 0 }}
         followOutput={false}
-        atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
+        atBottomStateChange={(atBottom) => {
+          isAtBottomRef.current = atBottom;
+          if (atBottom) {
+            stickyRef.current = true;
+          } else if (Date.now() >= contentChangedUntilRef.current) {
+            // atBottom=false FUERA de una ventana de cambio de contenido = el
+            // usuario scrolleó hacia arriba a leer historial → soltar el fondo.
+            stickyRef.current = false;
+          }
+        }}
         atBottomThreshold={60}
         totalListHeightChanged={() => {
-          // Cuando la altura total se estabiliza (medición de un mensaje nuevo o
-          // swap optimista→real): si estamos al fondo o dentro de la ventana de
-          // "pegado" tras enviar/recibir, re-anclamos al fondo real exacto.
-          if (isAtBottomRef.current || Date.now() < stickUntilRef.current) pinBottom();
+          // Dispara cuando la altura total se estabiliza (medición del mensaje
+          // nuevo, swap optimista→real, typing↔mensaje). Si seguimos pegados,
+          // re-anclamos al fondo real exacto. Este es el ajuste determinista.
+          if (stickyRef.current) pinBottom();
         }}
         contentContainerStyle={{ paddingTop: 12 }}
         components={{ Footer: () => <div style={{ height: 20 }} /> }}
