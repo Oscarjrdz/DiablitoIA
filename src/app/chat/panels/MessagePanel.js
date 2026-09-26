@@ -156,12 +156,34 @@ function MessagePanel({
     return result;
   }, [allMessages, isTyping]);
 
+  // Log temporal de diagnóstico. Actívalo en la consola con:
+  //   localStorage.chatDebug = '1'   (y recarga). Desactiva con delete.
+  const dbg = useCallback((tag) => {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage?.getItem('chatDebug')) return;
+      const el = scrollerRef.current;
+      if (!el) { console.log(`[chat ${tag}] sin scroller`); return; }
+      const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+      console.log(`[chat ${tag}]`, {
+        scrollTop: Math.round(el.scrollTop),
+        scrollHeight: Math.round(el.scrollHeight),
+        clientHeight: Math.round(el.clientHeight),
+        distFromBottom: Math.round(dist),
+        sticky: stickyRef.current,
+        atBottom: isAtBottomRef.current,
+        items: msgsWithSeps.length,
+      });
+    } catch {}
+  }, [msgsWithSeps.length]);
+
   // scrollToIndex nativo al último item con offset:20 (= alto del Footer):
   // align:'end' deja scrollTop = itemBottom - viewport + offset, es decir el
   // fondo ABSOLUTO con un colchón de 20px sobre la barra de input.
   const pinBottom = useCallback(() => {
+    dbg('pin→');
     try { virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', offset: 20 }); } catch {}
-  }, []);
+    requestAnimationFrame(() => dbg('pin✓'));
+  }, [dbg]);
 
   // Un solo scroll aterriza corto porque el item recién agregado aún no está
   // medido. Damos unas pasadas rápidas; el ajuste FINO y determinista lo hace
@@ -475,12 +497,14 @@ function MessagePanel({
             // usuario scrolleó hacia arriba a leer historial → soltar el fondo.
             stickyRef.current = false;
           }
+          dbg(`atBottom=${atBottom}`);
         }}
         atBottomThreshold={60}
-        totalListHeightChanged={() => {
+        totalListHeightChanged={(h) => {
           // Dispara cuando la altura total se estabiliza (medición del mensaje
           // nuevo, swap optimista→real, typing↔mensaje). Si seguimos pegados,
           // re-anclamos al fondo real exacto. Este es el ajuste determinista.
+          dbg(`heightChanged=${Math.round(h)}`);
           if (stickyRef.current) pinBottom();
         }}
         contentContainerStyle={{ paddingTop: 12 }}
