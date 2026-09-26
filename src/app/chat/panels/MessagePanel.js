@@ -97,6 +97,7 @@ function MessagePanel({
   const typingTimerRef = useRef(null);
   const prevChatPhoneRef = useRef(null);
   const prevLenRef = useRef(0);
+  const stickUntilRef = useRef(0);
 
   useEffect(() => {
     if (!addOptimisticRef) return;
@@ -152,21 +153,24 @@ function MessagePanel({
     return result;
   }, [allMessages, isTyping]);
 
-  const stickToBottom = useCallback(() => {
-    // scrollToIndex nativo al último item con offset:20 (= alto del Footer):
-    // align:'end' deja scrollTop = itemBottom - viewport + offset, es decir el
-    // fondo ABSOLUTO con un colchón de 20px sobre la barra de input.
-    // Varias pasadas: un mensaje recién agregado aún no está medido y un solo
-    // scroll aterriza corto; cada pasada reajusta al fondo real conforme la
-    // altura del item (texto que envuelve, imagen) queda estable.
-    const go = () => {
-      try { virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', offset: 20 }); } catch {}
-    };
-    requestAnimationFrame(go);
-    requestAnimationFrame(() => requestAnimationFrame(go));
-    setTimeout(go, 60);
-    setTimeout(go, 160);
+  // scrollToIndex nativo al último item con offset:20 (= alto del Footer):
+  // align:'end' deja scrollTop = itemBottom - viewport + offset, es decir el
+  // fondo ABSOLUTO con un colchón de 20px sobre la barra de input.
+  const pinBottom = useCallback(() => {
+    try { virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', offset: 20 }); } catch {}
   }, []);
+
+  const stickToBottom = useCallback(() => {
+    // Un solo scroll aterriza corto porque el item recién agregado aún no está
+    // medido. Abrimos una ventana de ~500ms en la que cada cambio de altura
+    // (totalListHeightChanged) re-ancla al fondo real, más unas pasadas por si
+    // la altura no cambia pero hay que reposicionar.
+    stickUntilRef.current = Date.now() + 500;
+    requestAnimationFrame(pinBottom);
+    requestAnimationFrame(() => requestAnimationFrame(pinBottom));
+    setTimeout(pinBottom, 80);
+    setTimeout(pinBottom, 220);
+  }, [pinBottom]);
 
   // Solo al cambiar de chat: scroll al fondo cuando llegan los mensajes de ese chat.
   // El Virtuoso se remonta por key={phone} e inicia en el último índice; este efecto
@@ -466,6 +470,12 @@ function MessagePanel({
         followOutput={false}
         atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
         atBottomThreshold={60}
+        totalListHeightChanged={() => {
+          // Cuando la altura total se estabiliza (medición de un mensaje nuevo o
+          // swap optimista→real): si estamos al fondo o dentro de la ventana de
+          // "pegado" tras enviar/recibir, re-anclamos al fondo real exacto.
+          if (isAtBottomRef.current || Date.now() < stickUntilRef.current) pinBottom();
+        }}
         contentContainerStyle={{ paddingTop: 12 }}
         components={{ Footer: () => <div style={{ height: 20 }} /> }}
         computeItemKey={(index, item) =>
