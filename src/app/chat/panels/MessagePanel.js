@@ -96,7 +96,7 @@ function MessagePanel({
   const isAtBottomRef = useRef(true);
   const typingTimerRef = useRef(null);
   const prevChatPhoneRef = useRef(null);
-  const prevLenRef = useRef(0);
+  const forceFollowRef = useRef(false);
 
   useEffect(() => {
     if (!addOptimisticRef) return;
@@ -171,19 +171,15 @@ function MessagePanel({
     if (prevChatPhoneRef.current === activeChat?.phone) return;
     prevChatPhoneRef.current = activeChat?.phone;
     isAtBottomRef.current = true;
-    prevLenRef.current = msgsWithSeps.length;
     scrollToBottom();
   }, [msgsWithSeps.length, activeChat?.phone, scrollToBottom]);
 
-  // Al crecer la lista en el mismo chat (mensaje entrante por SSE o saliente):
-  // si estábamos al fondo, seguimos al fondo con la misma rutina precisa.
-  // Reemplaza el followOutput interno de Virtuoso, que aterrizaba unos pixeles
-  // corto y dejaba el último mensaje parcialmente oculto.
-  useEffect(() => {
-    const prev = prevLenRef.current;
-    prevLenRef.current = msgsWithSeps.length;
-    if (msgsWithSeps.length > prev && isAtBottomRef.current) scrollToBottom();
-  }, [msgsWithSeps.length, scrollToBottom]);
+  // Fuerza que Virtuoso siga al fondo en la próxima aparición de mensaje
+  // (cuando TÚ envías), aunque estuvieras leyendo historial más arriba.
+  const forceFollow = useCallback(() => {
+    forceFollowRef.current = true;
+    requestAnimationFrame(() => requestAnimationFrame(() => { forceFollowRef.current = false; }));
+  }, []);
 
   const autoResize = () => {
     const ta = textareaRef.current;
@@ -259,8 +255,8 @@ function MessagePanel({
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone, read: true })
     }).catch(() => {});
+    forceFollow();
     setPendingMsgs(prev => [...prev, optimistic]);
-    scrollToBottom();
     fetch('/api/whatsapp/send', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to: phone, text, attachment: optimistic.attachment, attachmentType: optimistic.attachmentType })
@@ -275,7 +271,7 @@ function MessagePanel({
       showToast('Error de conexión', 'error');
       setPendingMsgs(prev => prev.filter(p => p._localId !== _localId));
     });
-  }, [inputText, attachment, activeChat, sendTypingStatus, showToast, setChats, scrollToBottom]);
+  }, [inputText, attachment, activeChat, sendTypingStatus, showToast, setChats, forceFollow]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -312,8 +308,8 @@ function MessagePanel({
       fromMe: true, ts: now, time: timeStr, status: 'sent'
     };
     setVsOpen(false);
+    forceFollow();
     setPendingMsgs(prev => [...prev, optimistic]);
-    scrollToBottom();
     setChats(prev => prev.map(c => c.phone === phone
       ? { ...c, lastText: msg.text, lastTs: now, fromMe: true, needsHuman: false, unread: 0 }
       : c));
@@ -347,7 +343,7 @@ function MessagePanel({
       showToast('Error de conexión', 'error');
     }
     setVsSending(null);
-  }, [activeChat, vsSending, setChats, showToast, scrollToBottom]);
+  }, [activeChat, vsSending, setChats, showToast, forceFollow]);
 
   const vsSaveMsg = useCallback(async () => {
     if (!vsEditing?.name?.trim() || !vsEditing?.text?.trim()) return;
@@ -460,7 +456,7 @@ function MessagePanel({
         alignToBottom
         initialTopMostItemIndex={msgsWithSeps.length > 0 ? { index: msgsWithSeps.length - 1, align: 'end' } : 0}
         increaseViewportBy={{ top: 800, bottom: 300 }}
-        followOutput={false}
+        followOutput={(atBottom) => (atBottom || forceFollowRef.current) ? 'auto' : false}
         atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
         atBottomThreshold={60}
         contentContainerStyle={{ paddingTop: 12 }}
