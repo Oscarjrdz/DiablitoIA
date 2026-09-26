@@ -152,15 +152,16 @@ function MessagePanel({
     return result;
   }, [allMessages, isTyping]);
 
-  const scrollToBottom = useCallback((behavior = 'auto') => {
-    // 'LAST' lo resuelve Virtuoso contra su conteo real de items en el momento
-    // del scroll, evitando la carrera con msgListLengthRef (que se actualiza en
-    // un efecto posterior y dejaba el último mensaje oculto bajo el fold).
-    // Doble rAF: el primer scroll fuerza el render/medición del último item;
-    // como align:'end' aterriza corto si aún no estaba medido, el segundo
-    // frame reajusta a la posición exacta y el mensaje queda completo.
+  const scrollToBottom = useCallback(() => {
+    // Scroll al fondo ABSOLUTO del scroller (scrollHeight): a diferencia de
+    // scrollToIndex align:'end' —que alinea el último item al borde e ignora el
+    // footer— esto incluye el espaciador del Footer como colchón, dejando aire
+    // entre el último mensaje y la barra de input. Doble rAF para que la altura
+    // real del último item ya esté medida antes del ajuste final.
     const go = () => {
-      try { virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior }); } catch {}
+      const el = scrollerRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+      else { try { virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end' }); } catch {} }
     };
     requestAnimationFrame(() => { go(); requestAnimationFrame(go); });
   }, []);
@@ -466,7 +467,7 @@ function MessagePanel({
         atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
         atBottomThreshold={60}
         contentContainerStyle={{ paddingTop: 12 }}
-        components={{ Footer: () => <div style={{ height: 20 }} /> }}
+        components={{ Footer: () => <div style={{ height: 16 }} /> }}
         computeItemKey={(index, item) =>
           item._sep ? `sep-${item.label}` :
           item._typing ? 'typing' :
