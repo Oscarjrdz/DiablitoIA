@@ -153,15 +153,12 @@ function MessagePanel({
   }, [allMessages, isTyping]);
 
   const scrollToBottom = useCallback(() => {
-    // Scroll al fondo ABSOLUTO del scroller (scrollHeight): a diferencia de
-    // scrollToIndex align:'end' —que alinea el último item al borde e ignora el
-    // footer— esto incluye el espaciador del Footer como colchón, dejando aire
-    // entre el último mensaje y la barra de input. Doble rAF para que la altura
-    // real del último item ya esté medida antes del ajuste final.
+    // scrollToIndex nativo de Virtuoso al último item (manipular scrollTop del
+    // scroller a mano peleaba con su virtualización y aterrizaba a mitad/arriba).
+    // Doble rAF: el primer scroll fuerza la medición real del último item y el
+    // segundo reajusta a la posición exacta.
     const go = () => {
-      const el = scrollerRef.current;
-      if (el) el.scrollTop = el.scrollHeight;
-      else { try { virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end' }); } catch {} }
+      try { virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end' }); } catch {}
     };
     requestAnimationFrame(() => { go(); requestAnimationFrame(go); });
   }, []);
@@ -467,7 +464,7 @@ function MessagePanel({
         atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
         atBottomThreshold={60}
         contentContainerStyle={{ paddingTop: 12 }}
-        components={{ Footer: () => <div style={{ height: 16 }} /> }}
+        components={{ Footer: () => <div style={{ height: 20 }} /> }}
         computeItemKey={(index, item) =>
           item._sep ? `sep-${item.label}` :
           item._typing ? 'typing' :
