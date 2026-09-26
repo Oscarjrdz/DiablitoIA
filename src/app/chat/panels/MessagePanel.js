@@ -96,7 +96,7 @@ function MessagePanel({
   const isAtBottomRef = useRef(true);
   const typingTimerRef = useRef(null);
   const prevChatPhoneRef = useRef(null);
-  const forceFollowRef = useRef(false);
+  const prevLenRef = useRef(0);
 
   useEffect(() => {
     if (!addOptimisticRef) return;
@@ -152,15 +152,20 @@ function MessagePanel({
     return result;
   }, [allMessages, isTyping]);
 
-  const scrollToBottom = useCallback(() => {
-    // scrollToIndex nativo de Virtuoso al último item (manipular scrollTop del
-    // scroller a mano peleaba con su virtualización y aterrizaba a mitad/arriba).
-    // Doble rAF: el primer scroll fuerza la medición real del último item y el
-    // segundo reajusta a la posición exacta.
+  const stickToBottom = useCallback(() => {
+    // scrollToIndex nativo al último item con offset:20 (= alto del Footer):
+    // align:'end' deja scrollTop = itemBottom - viewport + offset, es decir el
+    // fondo ABSOLUTO con un colchón de 20px sobre la barra de input.
+    // Varias pasadas: un mensaje recién agregado aún no está medido y un solo
+    // scroll aterriza corto; cada pasada reajusta al fondo real conforme la
+    // altura del item (texto que envuelve, imagen) queda estable.
     const go = () => {
-      try { virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end' }); } catch {}
+      try { virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', offset: 20 }); } catch {}
     };
-    requestAnimationFrame(() => { go(); requestAnimationFrame(go); });
+    requestAnimationFrame(go);
+    requestAnimationFrame(() => requestAnimationFrame(go));
+    setTimeout(go, 60);
+    setTimeout(go, 160);
   }, []);
 
   // Solo al cambiar de chat: scroll al fondo cuando llegan los mensajes de ese chat.
@@ -171,15 +176,17 @@ function MessagePanel({
     if (prevChatPhoneRef.current === activeChat?.phone) return;
     prevChatPhoneRef.current = activeChat?.phone;
     isAtBottomRef.current = true;
-    scrollToBottom();
-  }, [msgsWithSeps.length, activeChat?.phone, scrollToBottom]);
+    prevLenRef.current = msgsWithSeps.length;
+    stickToBottom();
+  }, [msgsWithSeps.length, activeChat?.phone, stickToBottom]);
 
-  // Fuerza que Virtuoso siga al fondo en la próxima aparición de mensaje
-  // (cuando TÚ envías), aunque estuvieras leyendo historial más arriba.
-  const forceFollow = useCallback(() => {
-    forceFollowRef.current = true;
-    requestAnimationFrame(() => requestAnimationFrame(() => { forceFollowRef.current = false; }));
-  }, []);
+  // Mensaje entrante (SSE) estando al fondo: seguir al fondo. Si el usuario está
+  // leyendo historial más arriba (no al fondo), NO saltamos (estilo WhatsApp).
+  useEffect(() => {
+    const prev = prevLenRef.current;
+    prevLenRef.current = msgsWithSeps.length;
+    if (msgsWithSeps.length > prev && isAtBottomRef.current) stickToBottom();
+  }, [msgsWithSeps.length, stickToBottom]);
 
   const autoResize = () => {
     const ta = textareaRef.current;
@@ -255,8 +262,8 @@ function MessagePanel({
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone, read: true })
     }).catch(() => {});
-    forceFollow();
     setPendingMsgs(prev => [...prev, optimistic]);
+    stickToBottom();
     fetch('/api/whatsapp/send', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to: phone, text, attachment: optimistic.attachment, attachmentType: optimistic.attachmentType })
@@ -271,7 +278,7 @@ function MessagePanel({
       showToast('Error de conexión', 'error');
       setPendingMsgs(prev => prev.filter(p => p._localId !== _localId));
     });
-  }, [inputText, attachment, activeChat, sendTypingStatus, showToast, setChats, forceFollow]);
+  }, [inputText, attachment, activeChat, sendTypingStatus, showToast, setChats, stickToBottom]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -308,8 +315,8 @@ function MessagePanel({
       fromMe: true, ts: now, time: timeStr, status: 'sent'
     };
     setVsOpen(false);
-    forceFollow();
     setPendingMsgs(prev => [...prev, optimistic]);
+    stickToBottom();
     setChats(prev => prev.map(c => c.phone === phone
       ? { ...c, lastText: msg.text, lastTs: now, fromMe: true, needsHuman: false, unread: 0 }
       : c));
@@ -343,7 +350,7 @@ function MessagePanel({
       showToast('Error de conexión', 'error');
     }
     setVsSending(null);
-  }, [activeChat, vsSending, setChats, showToast, forceFollow]);
+  }, [activeChat, vsSending, setChats, showToast, stickToBottom]);
 
   const vsSaveMsg = useCallback(async () => {
     if (!vsEditing?.name?.trim() || !vsEditing?.text?.trim()) return;
@@ -455,8 +462,8 @@ function MessagePanel({
         data={msgsWithSeps}
         alignToBottom
         initialTopMostItemIndex={msgsWithSeps.length > 0 ? { index: msgsWithSeps.length - 1, align: 'end' } : 0}
-        increaseViewportBy={{ top: 800, bottom: 300 }}
-        followOutput={(atBottom) => (atBottom || forceFollowRef.current) ? 'auto' : false}
+        increaseViewportBy={{ top: 800, bottom: 0 }}
+        followOutput={false}
         atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
         atBottomThreshold={60}
         contentContainerStyle={{ paddingTop: 12 }}
