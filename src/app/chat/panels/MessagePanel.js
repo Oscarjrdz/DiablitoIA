@@ -96,6 +96,7 @@ function MessagePanel({
   const isAtBottomRef = useRef(true);
   const typingTimerRef = useRef(null);
   const prevChatPhoneRef = useRef(null);
+  const prevLenRef = useRef(0);
 
   useEffect(() => {
     if (!addOptimisticRef) return;
@@ -155,9 +156,13 @@ function MessagePanel({
     // 'LAST' lo resuelve Virtuoso contra su conteo real de items en el momento
     // del scroll, evitando la carrera con msgListLengthRef (que se actualiza en
     // un efecto posterior y dejaba el último mensaje oculto bajo el fold).
-    requestAnimationFrame(() => {
+    // Doble rAF: el primer scroll fuerza el render/medición del último item;
+    // como align:'end' aterriza corto si aún no estaba medido, el segundo
+    // frame reajusta a la posición exacta y el mensaje queda completo.
+    const go = () => {
       try { virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior }); } catch {}
-    });
+    };
+    requestAnimationFrame(() => { go(); requestAnimationFrame(go); });
   }, []);
 
   // Solo al cambiar de chat: scroll al fondo cuando llegan los mensajes de ese chat.
@@ -168,8 +173,19 @@ function MessagePanel({
     if (prevChatPhoneRef.current === activeChat?.phone) return;
     prevChatPhoneRef.current = activeChat?.phone;
     isAtBottomRef.current = true;
+    prevLenRef.current = msgsWithSeps.length;
     scrollToBottom();
   }, [msgsWithSeps.length, activeChat?.phone, scrollToBottom]);
+
+  // Al crecer la lista en el mismo chat (mensaje entrante por SSE o saliente):
+  // si estábamos al fondo, seguimos al fondo con la misma rutina precisa.
+  // Reemplaza el followOutput interno de Virtuoso, que aterrizaba unos pixeles
+  // corto y dejaba el último mensaje parcialmente oculto.
+  useEffect(() => {
+    const prev = prevLenRef.current;
+    prevLenRef.current = msgsWithSeps.length;
+    if (msgsWithSeps.length > prev && isAtBottomRef.current) scrollToBottom();
+  }, [msgsWithSeps.length, scrollToBottom]);
 
   const autoResize = () => {
     const ta = textareaRef.current;
@@ -446,7 +462,7 @@ function MessagePanel({
         alignToBottom
         initialTopMostItemIndex={msgsWithSeps.length > 0 ? { index: msgsWithSeps.length - 1, align: 'end' } : 0}
         increaseViewportBy={{ top: 800, bottom: 300 }}
-        followOutput={(isAtBottom) => isAtBottom ? 'auto' : false}
+        followOutput={false}
         atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
         atBottomThreshold={60}
         contentContainerStyle={{ paddingTop: 12 }}
