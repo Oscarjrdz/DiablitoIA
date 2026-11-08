@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
 import { generateFolio, buildPromoText } from '@/lib/folio';
 import { saveBotMessage } from '@/lib/chatHistory';
+import { saveContactToDevice } from '@/lib/contacts';
 
 export async function POST(req) {
   try {
@@ -360,6 +361,13 @@ export async function POST(req) {
     // Normalización robusta: siempre 52 + últimos 10 dígitos
     // Cubre: 8116038195, 18116038195, 528116038195, 5218116038195
     let cleanPhone = '52' + phone.replace(/\D/g, '').slice(-10);
+
+    // ── Guardar en el aparato cuando el cliente "llega por Loyverse" (creado en POS) ──
+    // skipIfSaved: evita re-llamar al gateway en los customers.update repetidos de Loyverse.
+    if (customerData?.name) {
+      saveContactToDevice({ phone: cleanPhone, fullName: customerData.name, skipIfSaved: true })
+        .catch(e => console.error('[LoyverseWebhook] Error guardando contacto WA:', e.message));
+    }
 
     // Si hay reset_lock activo, NO enviamos cupón (protección post-RESET)
     const resetLock = await redis.get(`reset_lock_${cleanPhone}`);

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
+import { saveContactToDevice } from '@/lib/contacts';
 
 const BASE = 'https://api.loyverse.com/v1.0';
 
@@ -293,17 +294,8 @@ export async function PATCH(req) {
       if (_storeRedis !== undefined) await redis.set(`client_store_${cleanPhone}`, _storeRedis);
       if (name !== undefined) {
         await redis.set(`client_name_${cleanPhone}`, name);
-        const wappCfgRaw = await redis.get('wapp_config');
-        if (wappCfgRaw) {
-          const wappCfg = typeof wappCfgRaw === 'string' ? JSON.parse(wappCfgRaw) : wappCfgRaw;
-          if (wappCfg.wappInstance && wappCfg.wappToken) {
-            const firstName = name.trim().split(' ')[0];
-            fetch(`https://gatewaywapp-production.up.railway.app/${wappCfg.wappInstance}/contacts/save`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ token: wappCfg.wappToken, number: cleanPhone, fullName: name.trim(), firstName })
-            }).catch(() => {});
-          }
-        }
+        // Guardar/actualizar contacto en el aparato (+ record contact_saved_*)
+        saveContactToDevice({ phone: cleanPhone, fullName: name }).catch(() => {});
       }
       if (address !== undefined) await redis.set(`client_address_${cleanPhone}`, address);
       await redis.del(`client_card_v2_${phone10}`);

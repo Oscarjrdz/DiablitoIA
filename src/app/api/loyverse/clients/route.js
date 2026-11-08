@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
 import { generateFolio, buildPromoText } from '@/lib/folio';
 import { saveBotMessage } from '@/lib/chatHistory';
+import { saveContactToDevice } from '@/lib/contacts';
 
 const LOYVERSE_API_URL = 'https://api.loyverse.com/v1.0/customers';
 
@@ -132,6 +133,12 @@ export async function POST(req) {
     
     const data = await res.json();
     const isNew = !existingId;
+
+    // Guardar en el aparato (+ record contact_saved_*) al crear cliente desde el panel
+    if (body.whatsapp && body.nombre) {
+      saveContactToDevice({ phone: body.whatsapp, fullName: body.nombre })
+        .catch(e => console.error('[Clients POST] Error guardando contacto WA:', e.message));
+    }
 
     // Send Welcome WhatsApp only to NEW clients
     if (isNew && body.whatsapp) {

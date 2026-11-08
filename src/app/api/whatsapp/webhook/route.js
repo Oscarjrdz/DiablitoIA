@@ -3,6 +3,7 @@ import { redis } from '@/lib/redis';
 import { generateFolio, buildPromoText } from '@/lib/folio';
 import { publishChatEvent } from '@/lib/realtime';
 import { saveChatMeta } from '@/lib/chatMeta';
+import { saveContactToDevice } from '@/lib/contacts';
 
 // Allow up to 60s for commands that paginate Loyverse (CLIENTES, VENTAS, etc.)
 export const maxDuration = 60;
@@ -2071,11 +2072,9 @@ Solo si el mensaje claramente NO es una dirección (saludo, pregunta, emoji) pí
                                 await redis.set(`client_registered_${cleanPhone}`, '1');
                                 await redis.set(`client_name_${cleanPhone}`, clientData.name);
                                 if (clientData.address) await redis.set(`client_address_${cleanPhone}`, clientData.address + (clientData.city ? ', ' + clientData.city : ''));
-                                // Guardar como contacto en WhatsApp
-                                try {
-                                    const fn = clientData.name.trim().split(' ')[0];
-                                    await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/contacts/save`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.wappToken}` }, body: JSON.stringify({ token: cfg.wappToken, number: cleanPhone, fullName: clientData.name.trim(), firstName: fn }) });
-                                } catch(e) { console.error('[Bot] Error guardando contacto WA (update):', e.message); }
+                                // Guardar como contacto en WhatsApp (+ record contact_saved_*)
+                                saveContactToDevice({ phone: cleanPhone, fullName: clientData.name, cfg })
+                                    .catch(e => console.error('[Bot] Error guardando contacto WA (update):', e.message));
                             } else {
                                 const customerPayload = { name: clientData.name, phone_number: clientPhone10, address: clientData.address || '', city: clientData.city || '', note: 'Tienda: WhatsApp\nRegistrado via WhatsApp Bot' };
                                 const createRes = await fetch('https://api.loyverse.com/v1.0/customers', { method: 'POST', headers: { Authorization: `Bearer ${loyverseToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(customerPayload) });
@@ -2084,11 +2083,9 @@ Solo si el mensaje claramente NO es una dirección (saludo, pregunta, emoji) pí
                                     await redis.set(`client_store_${cleanPhone}`, 'WhatsApp');
                                     await redis.set(`client_name_${cleanPhone}`, clientData.name);
                                     if (clientData.address) await redis.set(`client_address_${cleanPhone}`, clientData.address + (clientData.city ? ', ' + clientData.city : ''));
-                                    // Guardar como contacto en WhatsApp
-                                    try {
-                                        const fn = clientData.name.trim().split(' ')[0];
-                                        await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/contacts/save`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.wappToken}` }, body: JSON.stringify({ token: cfg.wappToken, number: cleanPhone, fullName: clientData.name.trim(), firstName: fn }) });
-                                    } catch(e) { console.error('[Bot] Error guardando contacto WA (create):', e.message); }
+                                    // Guardar como contacto en WhatsApp (+ record contact_saved_*)
+                                    saveContactToDevice({ phone: cleanPhone, fullName: clientData.name, cfg })
+                                        .catch(e => console.error('[Bot] Error guardando contacto WA (create):', e.message));
 
                                     // ── 🎟️ CUPÓN DE BIENVENIDA ──
                                     try {
@@ -2166,10 +2163,7 @@ Solo si el mensaje claramente NO es una dirección (saludo, pregunta, emoji) pí
                     const detectedName = nameMatch[1].trim();
                     const firstName = detectedName.split(' ')[0];
                     await redis.set(`client_name_${cleanPhone}`, detectedName);
-                    fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/contacts/save`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ token: cfg.wappToken, number: cleanPhone, fullName: detectedName, firstName })
-                    }).catch(() => {});
+                    saveContactToDevice({ phone: cleanPhone, fullName: detectedName, firstName, cfg }).catch(() => {});
                     const needAddrVariants = [
                         `¡Gracias *${firstName}*! 😊 Ahora compárteme tu *Dirección* 📍 (calle, número y colonia) para asignarte la sucursal más cercana 🏪`,
                         `¡Perfecto *${firstName}*! 🙌 Ahora dime tu *Dirección* 📍 para asignarte la tienda más cercana y completar tu registro 🏪`,

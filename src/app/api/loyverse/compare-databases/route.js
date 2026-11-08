@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
+import { saveContactToDevice } from '@/lib/contacts';
 
 const BASE = 'https://api.loyverse.com/v1.0';
 
@@ -48,6 +49,9 @@ async function createLoyverseCustomer(headers, { name, phone10, address }) {
   });
   if (!res.ok) throw new Error('Loyverse: ' + (await res.text()).slice(0, 200));
   await redis.set(`client_store_52${phone10}`, 'WhatsApp');
+  // Guardar también en el aparato (+ record contact_saved_*)
+  saveContactToDevice({ phone: phone10, fullName: payload.name })
+    .catch(e => console.error('[compare-databases] Error guardando contacto WA:', e.message));
   return res.json();
 }
 
