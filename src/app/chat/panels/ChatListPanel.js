@@ -108,7 +108,9 @@ function ChatListPanel({
   }, [setChats, showToast]);
 
   const markAllRead = useCallback(async () => {
-    const toRead = chats.filter(c => !c.isGroup && c.unread > 0);
+    // Incluir tanto los con contador (unread) como los que solo tienen el
+    // marcador rojo (needsHuman con unread 0), que antes no se persistían.
+    const toRead = chats.filter(c => !c.isGroup && (c.unread > 0 || c.needsHuman));
     if (!toRead.length) return;
     setChats(prev => prev.map(c => c.isGroup ? c : { ...c, unread: 0, needsHuman: false }));
     await Promise.all(toRead.map(c =>
