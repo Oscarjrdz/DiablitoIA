@@ -32,10 +32,18 @@
       "Bash(python3 -m json.tool)",
       "Bash(grep -n \"key={i}\\\\|key={index}\\\\|\\\\.map\\(\\(.*,.*i\\)\\\\|\\\\.map\\(\\(.*,.*index\\)\" \"/Users/oscar/Diablito IA/src/app/chat/page.js\")",
       "Bash(node -e ' *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(node -e \"import\\('next/server'\\).then\\(m=>console.log\\('next/server OK', typeof m.NextResponse\\)\\).catch\\(e=>console.log\\('ERR', e.message\\)\\)\")",
+      "Bash(node -e \"import\\('next/server.js'\\).then\\(m=>console.log\\('OK', typeof m.NextResponse, typeof m.NextResponse.json\\)\\).catch\\(e=>console.log\\('ERR', e.message\\)\\)\")",
+      "Bash(node run-tests.mjs)",
+      "Bash(node --env-file=.env.local _cleanup_debug.mjs)",
+      "Bash(cd \"/Users/oscar/Diablito IA\" && cp \"/Users/oscar/Downloads/MENU DIABLITO 2026.jpg\" \"public/menu-diablito-2026.jpg\" && ls -la public/menu-diablito-2026.jpg)",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/react-virtuoso/package.json'\\).version\\)\")",
+      "Bash(git ls-remote *)"
     ],
     "additionalDirectories": [
-      "/Users/oscar/Desktop"
+      "/Users/oscar/Desktop",
+      "/Users/oscar/Downloads"
     ]
   }
 }

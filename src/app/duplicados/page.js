@@ -188,6 +188,7 @@ function TabDuplicados() {
 function TabComparar() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
   const [data, setData] = useState(null);
   const [fixing, setFixing] = useState(null);
   const [toast, setToast] = useState(null);
@@ -213,9 +214,11 @@ function TabComparar() {
   const fixOne = async (action, item) => {
     setFixing(item.phone10);
     try {
-      const body = action === 'sync-name'
-        ? { action, key: item.key, newName: item.loyverseName }
-        : { action, key: item.key };
+      let body;
+      if (action === 'sync-name') body = { action, key: item.key, newName: item.loyverseName };
+      else if (action === 'clean-redis') body = { action, key: item.key };
+      else if (action === 'create-redis') body = { action, phone10: item.phone10, name: item.name };
+      else if (action === 'create-loyverse') body = { action, phone10: item.phone10, name: item.name };
       const res = await fetch('/api/loyverse/compare-databases', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -223,21 +226,60 @@ function TabComparar() {
       });
       const d = await res.json();
       if (d.success) {
-        showToast(action === 'sync-name' ? 'Nombre sincronizado ✅' : 'Key eliminada ✅');
-        setData(prev => ({
-          ...prev,
-          nameMismatch: prev.nameMismatch.filter(x => x.phone10 !== item.phone10),
-          onlyRedis: prev.onlyRedis.filter(x => x.phone10 !== item.phone10),
-          stats: {
-            ...prev.stats,
-            nameMismatch: action === 'sync-name' ? prev.stats.nameMismatch - 1 : prev.stats.nameMismatch,
-            onlyRedis: action === 'clean-redis' ? prev.stats.onlyRedis - 1 : prev.stats.onlyRedis,
-            synced: action === 'sync-name' ? prev.stats.synced + 1 : prev.stats.synced
+        const msgMap = {
+          'sync-name': 'Nombre sincronizado ✅',
+          'clean-redis': 'Key eliminada ✅',
+          'create-redis': 'Creado en Redis ✅',
+          'create-loyverse': 'Creado en Loyverse ✅'
+        };
+        showToast(msgMap[action] || 'Listo ✅');
+        setData(prev => {
+          const next = { ...prev, stats: { ...prev.stats } };
+          if (action === 'sync-name') {
+            next.nameMismatch = prev.nameMismatch.filter(x => x.phone10 !== item.phone10);
+            next.stats.nameMismatch -= 1;
+            next.stats.synced += 1;
+          } else if (action === 'clean-redis') {
+            next.onlyRedis = prev.onlyRedis.filter(x => x.phone10 !== item.phone10);
+            next.stats.onlyRedis -= 1;
+          } else if (action === 'create-redis') {
+            next.onlyLoyverse = prev.onlyLoyverse.filter(x => x.phone10 !== item.phone10);
+            next.stats.onlyLoyverse -= 1;
+            next.stats.synced += 1;
+          } else if (action === 'create-loyverse') {
+            next.onlyRedis = prev.onlyRedis.filter(x => x.phone10 !== item.phone10);
+            next.stats.onlyRedis -= 1;
+            next.stats.synced += 1;
           }
-        }));
+          return next;
+        });
       } else showToast(d.error, 'error');
     } catch { showToast('Error de conexión', 'error'); }
     setFixing(null);
+  };
+
+  const reconcileAll = async () => {
+    if (!data) return;
+    const { onlyLoyverse: oL, onlyRedis: oR } = data.stats;
+    if (!confirm(
+      `¿Igualar ambas bases? (no se borra a nadie)\n\n` +
+      `• ${oL} clientes de Loyverse → se crea su nombre en Redis\n` +
+      `• ${oR} clientes de Redis → se crean en Loyverse`
+    )) return;
+    setReconciling(true);
+    try {
+      const res = await fetch('/api/loyverse/compare-databases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reconcileAll: true })
+      });
+      const d = await res.json();
+      if (d.success) {
+        showToast(`✅ ${d.createdRedis} en Redis · ${d.createdLoyverse} en Loyverse${d.errors?.length ? ` · ${d.errors.length} con error` : ''}`);
+        await scan();
+      } else showToast(d.error, 'error');
+    } catch { showToast('Error de conexión', 'error'); }
+    setReconciling(false);
   };
 
   const syncAll = async () => {
@@ -278,6 +320,11 @@ function TabComparar() {
         {data?.stats?.nameMismatch > 0 && (
           <button onClick={syncAll} disabled={syncing} style={btnStyle('#6366f1')}>
             {syncing ? 'Sincronizando...' : `⚡ Sincronizar todos los nombres (${data.stats.nameMismatch})`}
+          </button>
+        )}
+        {data && (data.stats.onlyLoyverse > 0 || data.stats.onlyRedis > 0) && (
+          <button onClick={reconcileAll} disabled={reconciling} style={btnStyle('#0ea5e9')}>
+            {reconciling ? 'Igualando...' : `🔄 Igualar ambas bases (${data.stats.onlyLoyverse + data.stats.onlyRedis})`}
           </button>
         )}
       </div>
@@ -340,6 +387,7 @@ function TabComparar() {
                 {section === 'onlyRedis' && (
                   <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 3 }}>
                     Nombre en Redis: <strong>{item.name || '(vacío)'}</strong>
+                    {item.address && <span> · 📍 {item.address}</span>}
                   </div>
                 )}
                 {section === 'onlyLoyverse' && (
@@ -359,12 +407,30 @@ function TabComparar() {
                 </button>
               )}
               {section === 'onlyRedis' && (
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  <button
+                    onClick={() => fixOne('create-loyverse', item)}
+                    disabled={fixing === item.phone10}
+                    style={btnStyle('#00a884', true)}
+                  >
+                    {fixing === item.phone10 ? '...' : 'Crear en Loyverse'}
+                  </button>
+                  <button
+                    onClick={() => fixOne('clean-redis', item)}
+                    disabled={fixing === item.phone10}
+                    style={btnStyle('#ef4444', true)}
+                  >
+                    Limpiar
+                  </button>
+                </div>
+              )}
+              {section === 'onlyLoyverse' && (
                 <button
-                  onClick={() => fixOne('clean-redis', item)}
+                  onClick={() => fixOne('create-redis', item)}
                   disabled={fixing === item.phone10}
-                  style={btnStyle('#ef4444', true)}
+                  style={btnStyle('#0ea5e9', true)}
                 >
-                  {fixing === item.phone10 ? '...' : 'Limpiar Redis'}
+                  {fixing === item.phone10 ? '...' : 'Crear en Redis'}
                 </button>
               )}
             </div>

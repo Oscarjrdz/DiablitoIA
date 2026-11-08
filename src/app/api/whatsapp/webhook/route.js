@@ -1570,7 +1570,7 @@ export async function POST(req) {
                 botReply = `Ok 👍 Entonces dime, ¿en qué te puedo ayudar?\n1️⃣ Ver Menú 📋\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃\n4️⃣ Conocer nuestros Horarios 📅`;
             } else {
                 // Sí o cualquier otra cosa → enviar imagen del menú
-                const menuImageUrl = 'https://global-sales-prediction.vercel.app/menu-mayo-2025.jpg';
+                const menuImageUrl = 'https://global-sales-prediction.vercel.app/menu-diablito-2026.jpg';
                 const menuCaption = '🍔🌶️ ¡Aquí tienes nuestro menú *El Diablito*! 😈\n¿Se te antoja algo?\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃';
                 try {
                     await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/messages/image`, {
@@ -1753,7 +1753,7 @@ Responde SOLO con una palabra: MENU, PEDIR, DOMICILIO, PASAR, HORARIOS, GRACIAS,
 
             if (orderType === 'menu') {
                 // Enviar imagen del menú directamente
-                const menuImageUrl = 'https://global-sales-prediction.vercel.app/menu-mayo-2025.jpg';
+                const menuImageUrl = 'https://global-sales-prediction.vercel.app/menu-diablito-2026.jpg';
                 const menuCaption = `🍔🌶️ ¡Aquí tienes nuestro menú *El Diablito*! 😈\n¿Se te antoja algo?\n2️⃣ Pedido a Domicilio 🛵\n3️⃣ Pedir para Pasar 🏃`;
                 try {
                     await fetch(`https://gatewaywapp-production.up.railway.app/${cfg.wappInstance}/messages/image`, {
